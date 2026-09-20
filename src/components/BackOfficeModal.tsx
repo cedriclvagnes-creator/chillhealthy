@@ -32,6 +32,8 @@ import {
   Download,
   Search,
   Filter,
+  ArrowLeft,
+  Store,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount } from '../types';
@@ -397,173 +399,236 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
-      <div className="relative bg-white w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-stone-800 text-stone-300 hover:text-white hover:bg-stone-700 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {!isAdminAuthenticated ? (
-          /* Admin Login Gate */
-          <div className="p-8 sm:p-12 text-center max-w-md mx-auto my-auto w-full">
-            <div className="flex justify-center mb-5">
-              <ChillLogo variant="badge" size="xl" />
-            </div>
-            
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-900 text-emerald-400 text-xs font-bold mb-3 border border-stone-800">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Restricted Administration System</span>
+    <div className="fixed inset-0 z-50 w-screen h-screen min-h-screen bg-stone-900 text-stone-900 flex flex-col overflow-hidden animate-in fade-in duration-150">
+      {!isAdminAuthenticated ? (
+        /* Admin Login Gate - Full Screen Experience */
+        <div className="w-full h-full flex flex-col bg-stone-950 overflow-y-auto">
+          {/* Login Gate Top Bar */}
+          <div className="w-full px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-stone-800 bg-stone-950/90 backdrop-blur-xs shrink-0">
+            <div className="flex items-center gap-3">
+              <ChillLogo variant="badge" size="sm" />
+              <div>
+                <h3 className="font-heading font-black text-base text-white">
+                  CHILL<span className="text-[#528c34]">HEALTHY</span> Back Office
+                </h3>
+                <p className="text-[11px] text-stone-400">
+                  Kitchen Operations & Administration Console
+                </p>
+              </div>
             </div>
 
-            <h3 className="font-heading text-2xl font-black text-stone-900 tracking-tight">
-              CHILL<span className="text-[#3b6026]">HEALTHY</span> Back Office
-            </h3>
-            <p className="text-xs text-stone-500 mt-1 mb-6">
-              Exclusive kitchen management and content control console. Unlisted from public website.
-            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white text-xs font-bold flex items-center gap-2 border border-stone-800 transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>{language === 'en' ? 'Return to Public Store' : '返回前台主页'}</span>
+            </button>
+          </div>
 
-            {adminAuthError && (
-              <div className="p-3 mb-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-medium">
-                {adminAuthError}
-              </div>
-            )}
-
-            <form onSubmit={handleAdminLogin} className="space-y-3 text-left">
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Admin Name / Username
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. admin"
-                    value={adminUsernameInput}
-                    onChange={(e) => setAdminUsernameInput(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none bg-stone-50/50"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Admin Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type={showAdminPass ? 'text' : 'password'}
-                    required
-                    placeholder="Enter admin password"
-                    value={adminPassInput}
-                    onChange={(e) => setAdminPassInput(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3 rounded-xl border border-stone-200 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none bg-stone-50/50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPass(!showAdminPass)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400 hover:text-stone-600 cursor-pointer"
-                  >
-                    {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
+          {/* Centered Login Gate Container */}
+          <div className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
+            <div className="p-8 sm:p-10 text-center max-w-lg w-full bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl relative">
               <button
-                type="submit"
-                className="w-full py-3.5 mt-2 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer border border-stone-800"
+                onClick={onClose}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-stone-800 text-stone-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+                title="Close and return to store"
               >
-                <Shield className="w-4 h-4" />
-                <span>Log In to Back Office</span>
+                <X className="w-4 h-4" />
               </button>
-            </form>
 
-            <div className="mt-6 p-3.5 rounded-2xl bg-stone-100 border border-stone-200 text-[11px] text-stone-600 space-y-1 text-left">
-              <div className="font-bold text-stone-800 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Authorized Admin Master Access</span>
+              <div className="flex justify-center mb-5">
+                <ChillLogo variant="badge" size="xl" />
               </div>
-              <p className="text-stone-500">
-                Designated Admin Name: <span className="font-mono font-bold text-stone-800">admin</span>
+              
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-stone-950 text-emerald-400 text-xs font-bold mb-3 border border-stone-800">
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Restricted Administration System</span>
+              </div>
+
+              <h3 className="font-heading text-2xl font-black text-white tracking-tight">
+                CHILL<span className="text-[#528c34]">HEALTHY</span> Back Office
+              </h3>
+              <p className="text-xs text-stone-400 mt-1 mb-6">
+                Exclusive kitchen management and content control console. Unlisted from public website.
               </p>
-              <p className="text-stone-500">
-                Designated Admin Password: <span className="font-mono font-bold text-stone-800">chilladmin2026</span> <span className="text-stone-400">or chill@2026 / 0126189919</span>
-              </p>
-              <p className="text-[10px] text-stone-400 pt-1 border-t border-stone-200">
-                Credentials can be customized anytime in the Back Office Settings tab.
-              </p>
+
+              {adminAuthError && (
+                <div className="p-3 mb-4 rounded-xl bg-red-950/60 border border-red-800/80 text-xs text-red-300 font-medium text-left">
+                  {adminAuthError}
+                </div>
+              )}
+
+              <form onSubmit={handleAdminLogin} className="space-y-3.5 text-left">
+                <div>
+                  <label className="text-xs font-bold text-stone-300 block mb-1">
+                    Admin Name / Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. admin"
+                      value={adminUsernameInput}
+                      onChange={(e) => setAdminUsernameInput(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-stone-700 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none bg-stone-950 text-white placeholder-stone-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-300 block mb-1">
+                    Admin Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showAdminPass ? 'text' : 'password'}
+                      required
+                      placeholder="Enter admin password"
+                      value={adminPassInput}
+                      onChange={(e) => setAdminPassInput(e.target.value)}
+                      className="w-full pl-10 pr-10 py-3 rounded-xl border border-stone-700 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none bg-stone-950 text-white placeholder-stone-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPass(!showAdminPass)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400 hover:text-stone-200 cursor-pointer"
+                    >
+                      {showAdminPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 mt-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-stone-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                >
+                  <Shield className="w-4 h-4 text-stone-950" />
+                  <span>Log In to Back Office</span>
+                </button>
+              </form>
+
+              <div className="mt-6 p-4 rounded-2xl bg-stone-950/80 border border-stone-800 text-[11px] text-stone-400 space-y-1 text-left">
+                <div className="font-bold text-stone-200 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Authorized Admin Master Access</span>
+                </div>
+                <p className="text-stone-400">
+                  Designated Admin Name: <span className="font-mono font-bold text-emerald-400">admin</span>
+                </p>
+                <p className="text-stone-400">
+                  Designated Admin Password: <span className="font-mono font-bold text-emerald-400">chilladmin2026</span> <span className="text-stone-500">or chill@2026 / 0126189919</span>
+                </p>
+                <p className="text-[10px] text-stone-500 pt-1 border-t border-stone-800">
+                  Credentials can be customized anytime in the Back Office Settings tab.
+                </p>
+              </div>
             </div>
           </div>
-        ) : (
-          /* Logged In Back Office Dashboard */
-          <>
-            {/* Top Bar */}
-            <div className="bg-stone-950 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-stone-800">
-              <div className="flex items-center gap-3">
-                <ChillLogo variant="badge" size="sm" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-heading font-black text-lg text-white">
-                      CHILL<span className="text-[#528c34]">HEALTHY</span> Back Office
-                    </h3>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      Logged in: {adminCredentials.username}
-                    </span>
-                  </div>
-                  <p className="text-xs text-stone-400">
-                    Klang Kitchen Central Control · WhatsApp: <span className="text-emerald-400 font-bold">{siteSettings.whatsappDisplay}</span>
-                  </p>
+        </div>
+      ) : (
+        /* Logged In Back Office Dashboard - Full Page */
+        <>
+          {/* Full-Page Admin Top Bar */}
+          <header className="bg-stone-950 text-white px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 border-b border-stone-800 shadow-md shrink-0 z-10">
+            <div className="flex items-center gap-3.5">
+              <ChillLogo variant="badge" size="sm" />
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="font-heading font-black text-lg sm:text-xl text-white tracking-tight">
+                    CHILL<span className="text-[#528c34]">HEALTHY</span> Back Office
+                  </h3>
+                  <span className="hidden sm:inline-flex text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                    Full-Page Console
+                  </span>
+                  <span className="text-[11px] bg-stone-800 text-stone-300 font-mono px-2 py-0.5 rounded-md border border-stone-700">
+                    Logged in: {adminCredentials.username}
+                  </span>
                 </div>
-              </div>
-
-              {/* Action Buttons: Copy Secret Link & Logout */}
-              <div className="flex items-center gap-2">
-                {toastMsg && (
-                  <div className="hidden sm:inline-block px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold animate-pulse">
-                    {toastMsg}
-                  </div>
-                )}
-
-                <button
-                  onClick={handleCopyAdminLink}
-                  className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-700"
-                  title="Copy secret direct back office link"
-                >
-                  {copyLinkSuccess ? (
-                    <>
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Link Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="w-3.5 h-3.5 text-stone-400" />
-                      <span>Copy Admin Link</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleAdminLogout}
-                  className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-red-900/40"
-                  title="Log out"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Log Out</span>
-                </button>
+                <p className="text-xs text-stone-400 flex items-center gap-2 mt-0.5 flex-wrap">
+                  <span>Klang Kitchen Central Control</span>
+                  <span className="hidden sm:inline">·</span>
+                  <span>WhatsApp: <strong className="text-emerald-400 font-bold">{siteSettings.whatsappDisplay}</strong></span>
+                </p>
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex border-b border-stone-200 bg-stone-100 overflow-x-auto px-4">
+            {/* Action Buttons: Return to Store, Copy Link, Export, Logout */}
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+              {toastMsg && (
+                <div className="hidden lg:inline-flex px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold animate-pulse">
+                  {toastMsg}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleExportDaily5pmReport(dailyReportDate)}
+                className="hidden md:flex px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-emerald-300 hover:text-emerald-200 text-xs font-bold items-center gap-1.5 transition-colors cursor-pointer border border-emerald-500/30 shadow-xs"
+                title="Export official daily 5:00 PM cutoff report directly to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span>5PM Report (.xlsx)</span>
+              </button>
+
+              <button
+                onClick={handleCopyAdminLink}
+                className="hidden sm:flex px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white text-xs font-semibold items-center gap-1.5 transition-colors cursor-pointer border border-stone-800"
+                title="Copy secret direct back office link"
+              >
+                {copyLinkSuccess ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">Link Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <LinkIcon className="w-4 h-4 text-stone-400" />
+                    <span>Copy Admin Link</span>
+                  </>
+                )}
+              </button>
+
+              {/* Return to Public Website */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 text-xs font-black flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                title="Exit back office and return to customer ordering website"
+              >
+                <Store className="w-4 h-4 text-stone-950" />
+                <span>{language === 'en' ? 'Return to Public Store' : '返回前台主页'}</span>
+              </button>
+
+              <button
+                onClick={handleAdminLogout}
+                className="px-3.5 py-2 rounded-xl bg-red-950/60 hover:bg-red-900 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-red-800/50"
+                title="Log out from Back Office"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Log Out</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-8 h-8 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Close Back Office"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </header>
+
+          {/* Navigation Tabs */}
+          <nav className="flex border-b border-stone-200 bg-white shadow-2xs overflow-x-auto px-4 sm:px-8 shrink-0 z-10">
               <button
                 onClick={() => setActiveTab('settings')}
                 className={`py-3 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -625,16 +690,17 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 <Users className="w-3.5 h-3.5" />
                 <span>{language === 'en' ? 'Customer Package Orders & Info' : '会员套餐顾客与订单管理'} ({members.length})</span>
               </button>
-            </div>
+            </nav>
 
-            {/* Tab Panes */}
-            <div className="flex-1 overflow-y-auto p-5 sm:p-6 bg-stone-50/50">
-              {/* =========================================================
-                  TAB 1: WHATSAPP & STORE SETTINGS
-                  ========================================================= */}
-              {activeTab === 'settings' && (
-                <>
-                <form onSubmit={handleSaveSettings} className="max-w-2xl mx-auto space-y-5 bg-white p-6 rounded-3xl border border-stone-200 shadow-2xs">
+            {/* Full-Page Tab Panes Viewport */}
+            <main className="flex-1 overflow-y-auto w-full bg-stone-100/70 p-4 sm:p-6 lg:p-8 min-h-0">
+              <div className="w-full max-w-[1700px] mx-auto space-y-6">
+                {/* =========================================================
+                    TAB 1: WHATSAPP & STORE SETTINGS
+                    ========================================================= */}
+                {activeTab === 'settings' && (
+                  <>
+                  <form onSubmit={handleSaveSettings} className="max-w-4xl mx-auto space-y-5 bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs">
                   <div className="border-b border-stone-100 pb-3">
                     <h4 className="font-heading font-extrabold text-base text-stone-900">
                       {language === 'en' ? 'Store Identity & WhatsApp Numbers' : '店铺联系电话与官方客服设置'}
@@ -891,8 +957,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   ========================================================= */}
               {activeTab === 'packages' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Package Selector List (5 cols) */}
-                  <div className="lg:col-span-4 space-y-3">
+                  {/* Package Selector List (3-4 cols) */}
+                  <div className="lg:col-span-4 xl:col-span-3 space-y-3">
                     <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider">
                       Select Package to Edit
                     </h4>
@@ -926,8 +992,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     ))}
                   </div>
 
-                  {/* Package Detail Editor Form (8 cols) */}
-                  <div className="lg:col-span-8">
+                  {/* Package Detail Editor Form (8-9 cols) */}
+                  <div className="lg:col-span-8 xl:col-span-9">
                     {selectedPlanForEdit ? (
                       <form onSubmit={handleSavePackage} className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4 shadow-2xs">
                         <div className="flex justify-between items-center border-b border-stone-100 pb-3">
@@ -1173,8 +1239,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   ========================================================= */}
               {activeTab === 'menu' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Dish List & Search (4 cols) */}
-                  <div className="lg:col-span-4 space-y-3">
+                  {/* Dish List & Search (3-4 cols) */}
+                  <div className="lg:col-span-4 xl:col-span-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider">
                         Menu Bento Boxes ({editableMenu.length})
@@ -1208,7 +1274,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
                     />
 
-                    <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-[68vh] overflow-y-auto pr-1">
                       {editableMenu
                         .filter(
                           (m) =>
@@ -1249,8 +1315,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Dish Editor & Picture Form (8 cols) */}
-                  <div className="lg:col-span-8">
+                  {/* Dish Editor & Picture Form (8-9 cols) */}
+                  <div className="lg:col-span-8 xl:col-span-9">
                     {selectedMealForEdit ? (
                       <form onSubmit={handleSaveMeal} className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4 shadow-2xs">
                         <div className="flex justify-between items-center border-b border-stone-100 pb-3">
@@ -2173,7 +2239,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     </div>
 
                     {/* Customer Member Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
                       {filteredMembers.map((mem) => {
                         const isPassRevealed = revealedMemberPasswords[mem.id] || false;
                         const remaining = mem.activePackage?.remainingMeals || 0;
@@ -2798,10 +2864,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   </div>
                 );
               })()}
-            </div>
+              </div>
+            </main>
           </>
         )}
-      </div>
     </div>
   );
 };
