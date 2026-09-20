@@ -134,6 +134,7 @@ export default function App() {
   const [selectedMealForDetail, setSelectedMealForDetail] = useState<MealItem | null>(null);
   const [isMemberPortalOpen, setIsMemberPortalOpen] = useState(false);
   const [isBackOfficeOpen, setIsBackOfficeOpen] = useState(false);
+  const [backOfficeTab, setBackOfficeTab] = useState<'settings' | 'packages' | 'menu' | 'redemptions' | 'members'>('settings');
 
   // Persistence Effects
   useEffect(() => {
@@ -192,14 +193,38 @@ export default function App() {
     }
   }, [cart]);
 
-  // Private Admin Route & Back Office Detection
+  // Private Admin Route & Back Office / Kitchen / Portal Detection
   useEffect(() => {
     const checkAdminRoute = () => {
       const search = window.location.search.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const pathname = window.location.pathname.toLowerCase();
 
+      // Member portal & order portal sublink
       if (
+        hash === '#portal' ||
+        hash === '#member' ||
+        hash === '#order' ||
+        search.includes('portal=true') ||
+        search.includes('page=portal') ||
+        pathname.endsWith('/portal')
+      ) {
+        setIsMemberPortalOpen(true);
+      }
+
+      // Kitchen preparation and order report sublink
+      if (
+        hash === '#kitchen' ||
+        hash === '#kitchen-report' ||
+        hash === '#report' ||
+        hash === '#orders' ||
+        search.includes('kitchen=true') ||
+        search.includes('page=kitchen') ||
+        pathname.endsWith('/kitchen')
+      ) {
+        setBackOfficeTab('redemptions');
+        setIsBackOfficeOpen(true);
+      } else if (
         search.includes('admin=true') ||
         search.includes('admin=1') ||
         search.includes('page=admin') ||
@@ -208,6 +233,7 @@ export default function App() {
         hash === '#backoffice' ||
         pathname.endsWith('/admin')
       ) {
+        setBackOfficeTab('settings');
         setIsBackOfficeOpen(true);
       }
     };
@@ -577,6 +603,16 @@ export default function App() {
     );
   };
 
+  const handleUpdateRedemptionOrder = (updatedOrder: MealRedemption) => {
+    setRedemptions((prev) => {
+      const next = prev.map((r) => (r.id === updatedOrder.id ? updatedOrder : r));
+      try {
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const handleUpdateMemberCredits = (memberId: string, deltaMeals: number) => {
     setMembers((prev) =>
       prev.map((m) => {
@@ -852,8 +888,10 @@ export default function App() {
           onUpdateMenuItems={handleUpdateMenuItems}
           redemptions={redemptions}
           onUpdateRedemptionStatus={handleUpdateRedemptionStatus}
+          onUpdateRedemptionOrder={handleUpdateRedemptionOrder}
           members={members}
           onUpdateMemberCredits={handleUpdateMemberCredits}
+          initialTab={backOfficeTab}
         />
       )}
     </div>

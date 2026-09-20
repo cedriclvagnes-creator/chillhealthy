@@ -196,4 +196,5 @@ export interface MealRedemption {
   status: 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered';
   dietaryNotes?: string;
   createdAt: string;
+  redeemedAt?: string;
 }

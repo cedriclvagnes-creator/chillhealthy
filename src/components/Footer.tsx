@@ -116,7 +116,7 @@ export const Footer: React.FC<FooterProps> = ({
                   {language === 'en' ? 'Calorie & TDEE Matcher' : '热量与宏量营养计算器'}
                 </button>
               </li>
-              <li className="pt-2 border-t border-stone-800">
+              <li className="pt-2 border-t border-stone-800 flex flex-col gap-2">
                 <button
                   onClick={onOpenMemberPortal}
                   className="hover:text-white transition-colors text-left text-emerald-400 font-bold flex items-center gap-1.5 cursor-pointer"
@@ -124,6 +124,28 @@ export const Footer: React.FC<FooterProps> = ({
                   <User className="w-3.5 h-3.5" />
                   <span>{language === 'en' ? 'Member Portal · Redeem Meals' : '会员中心 · 兑换每日餐盒'}</span>
                 </button>
+
+                <a
+                  href="#kitchen"
+                  onClick={() => {
+                    window.location.hash = '#kitchen';
+                    if (onOpenBackOffice) onOpenBackOffice();
+                  }}
+                  className="hover:text-amber-400 text-stone-400 transition-colors text-left text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{language === 'en' ? 'Kitchen Orders & Excel Report' : '后厨调度与Excel报表 (#kitchen)'}</span>
+                </a>
+
+                {onOpenBackOffice && (
+                  <button
+                    onClick={onOpenBackOffice}
+                    className="hover:text-stone-300 text-stone-500 transition-colors text-left text-[11px] flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Shield className="w-3 h-3 text-stone-500" />
+                    <span>{language === 'en' ? 'Owner Admin (#admin)' : '店主后台 (#admin)'}</span>
+                  </button>
+                )}
               </li>
             </ul>
           </div>

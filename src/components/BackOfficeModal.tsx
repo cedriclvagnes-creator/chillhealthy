@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Shield,
@@ -28,7 +28,12 @@ import {
   Copy,
   KeyRound,
   RefreshCw,
+  FileSpreadsheet,
+  Download,
+  Search,
+  Filter,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
@@ -47,6 +52,8 @@ interface BackOfficeModalProps {
   onUpdateRedemptionStatus: (id: string, newStatus: MealRedemption['status']) => void;
   members: MemberAccount[];
   onUpdateMemberCredits: (memberId: string, deltaMeals: number) => void;
+  initialTab?: 'settings' | 'packages' | 'menu' | 'redemptions' | 'members';
+  onUpdateRedemptionOrder?: (order: MealRedemption) => void;
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -63,6 +70,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateRedemptionStatus,
   members,
   onUpdateMemberCredits,
+  initialTab = 'settings',
+  onUpdateRedemptionOrder,
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -94,7 +103,19 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [newAdminPass, setNewAdminPass] = useState(adminCredentials.password);
 
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'settings' | 'packages' | 'menu' | 'redemptions' | 'members'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'packages' | 'menu' | 'redemptions' | 'members'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  // Kitchen Preparation Orders & Report State
+  const [kitchenSearch, setKitchenSearch] = useState('');
+  const [kitchenDateFilter, setKitchenDateFilter] = useState('all');
+  const [kitchenSlotFilter, setKitchenSlotFilter] = useState<'all' | 'lunch' | 'dinner'>('all');
+  const [editingOrder, setEditingOrder] = useState<MealRedemption | null>(null);
 
   // Local editable copy of Site Settings
   const [formSettings, setFormSettings] = useState<SiteSettings>({ ...siteSettings });
@@ -1292,109 +1313,516 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               )}
 
               {/* =========================================================
-                  TAB 4: KITCHEN REDEMPTIONS QUEUE
+                  TAB 4: KITCHEN PREPARATION & CUSTOMER ORDER REPORT
                   ========================================================= */}
-              {activeTab === 'redemptions' && (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h4 className="font-heading font-extrabold text-base text-stone-900">
-                        Today & Tomorrow Daily Meal Redemptions
-                      </h4>
-                      <p className="text-xs text-stone-500">
-                        Kitchen orders placed by package members
-                      </p>
-                    </div>
-                  </div>
+              {activeTab === 'redemptions' && (() => {
+                const filteredRedemptions = redemptions.filter((red) => {
+                  const matchSearch =
+                    !kitchenSearch ||
+                    red.memberName.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
+                    red.memberPhone.includes(kitchenSearch) ||
+                    red.mealName.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
+                    red.deliveryAddress.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
+                    red.area.toLowerCase().includes(kitchenSearch.toLowerCase());
 
-                  <div className="space-y-3">
-                    {redemptions.length === 0 ? (
-                      <div className="text-center py-12 text-stone-400 bg-white rounded-2xl border border-stone-200">
-                        <Clock className="w-8 h-8 mx-auto mb-2 text-stone-300" />
-                        <p className="text-xs">No pending redemptions in queue.</p>
+                  const matchSlot =
+                    kitchenSlotFilter === 'all' ||
+                    (kitchenSlotFilter === 'lunch' && red.deliverySlot.toLowerCase().includes('lunch')) ||
+                    (kitchenSlotFilter === 'dinner' && red.deliverySlot.toLowerCase().includes('dinner'));
+
+                  const matchDate =
+                    kitchenDateFilter === 'all' ||
+                    red.deliveryDate === kitchenDateFilter;
+
+                  return matchSearch && matchSlot && matchDate;
+                });
+
+                const uniqueDates = Array.from(new Set(redemptions.map((r) => r.deliveryDate))).sort();
+
+                const handleExportExcel = () => {
+                  try {
+                    const dataToExport = filteredRedemptions.map((r, index) => ({
+                      'No.': index + 1,
+                      'Order ID': r.id,
+                      'Delivery Date': r.deliveryDate,
+                      'Delivery Slot': r.deliverySlot,
+                      'Customer Name': r.memberName,
+                      'Phone Number': r.memberPhone,
+                      'Meal Name (EN)': r.mealName,
+                      'Meal Name (ZH)': r.mealNameZh,
+                      'Delivery Address': r.deliveryAddress,
+                      'Area': r.area,
+                      'Postal Code': r.postalCode,
+                      'Dietary / Prep Notes': r.dietaryNotes || 'None',
+                      'Order Status': r.status,
+                      'Order Timestamp': r.createdAt || r.redeemedAt || '',
+                    }));
+
+                    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Kitchen Orders');
+                    const fileName = `CHILL_Kitchen_Prep_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+                    XLSX.writeFile(workbook, fileName);
+                    triggerToast(`✓ Exported ${filteredRedemptions.length} orders to ${fileName}`);
+                  } catch (err) {
+                    console.error('Excel export error:', err);
+                    triggerToast('Excel export failed, generating CSV fallback.');
+                    handleExportCSV();
+                  }
+                };
+
+                const handleExportCSV = () => {
+                  const headers = ['No,Order ID,Date,Slot,Customer,Phone,Meal EN,Meal ZH,Address,Area,Postal Code,Notes,Status,Timestamp'];
+                  const rows = filteredRedemptions.map((r, i) =>
+                    [
+                      i + 1,
+                      `"${r.id}"`,
+                      `"${r.deliveryDate}"`,
+                      `"${r.deliverySlot}"`,
+                      `"${r.memberName}"`,
+                      `"${r.memberPhone}"`,
+                      `"${r.mealName}"`,
+                      `"${r.mealNameZh}"`,
+                      `"${(r.deliveryAddress || '').replace(/"/g, '""')}"`,
+                      `"${r.area || ''}"`,
+                      `"${r.postalCode || ''}"`,
+                      `"${(r.dietaryNotes || '').replace(/"/g, '""')}"`,
+                      `"${r.status}"`,
+                      `"${r.createdAt || r.redeemedAt || ''}"`,
+                    ].join(',')
+                  );
+                  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers, ...rows].join('\n');
+                  const encodedUri = encodeURI(csvContent);
+                  const link = document.createElement('a');
+                  link.setAttribute('href', encodedUri);
+                  link.setAttribute('download', `CHILL_Kitchen_Prep_Report_${new Date().toISOString().split('T')[0]}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  triggerToast(`✓ Exported CSV for ${filteredRedemptions.length} orders`);
+                };
+
+                const handleSaveEditedOrder = (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!editingOrder) return;
+
+                  if (onUpdateRedemptionOrder) {
+                    onUpdateRedemptionOrder(editingOrder);
+                  }
+                  triggerToast(`✓ Order for ${editingOrder.memberName} updated successfully!`);
+                  setEditingOrder(null);
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {/* Header & Export Controls */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-heading font-extrabold text-base text-stone-900">
+                            {language === 'en' ? 'Kitchen Preparation & Customer Orders' : '后厨餐备与顾客订单调度'}
+                          </h4>
+                          <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                            {filteredRedemptions.length} {language === 'en' ? 'Orders' : '笔订单'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {language === 'en'
+                            ? 'Edit delivery location, date, or meal selection, and export preparation sheets for kitchen staff.'
+                            : '可修改订单送餐地址、配送日期与餐品选择，并一键生成后厨备餐Excel报表。'}
+                        </p>
                       </div>
-                    ) : (
-                      redemptions.map((red) => (
-                        <div
-                          key={red.id}
-                          className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+
+                      {/* Export Buttons */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportExcel}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                          title="Generate Excel (.xlsx) form with all order details"
                         >
-                          <div className="flex items-start gap-3">
-                            <img
-                              src={red.mealImage}
-                              alt={red.mealName}
-                              className="w-14 h-14 rounded-xl object-cover shrink-0 border border-stone-200"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h5 className="font-bold text-sm text-stone-900">{red.mealName}</h5>
-                                <span className="text-xs text-stone-400">({red.mealNameZh})</span>
-                              </div>
+                          <FileSpreadsheet className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Export Excel Report (.xlsx)' : '生成后厨Excel备餐表'}</span>
+                        </button>
 
-                              <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                                Customer: <span className="font-bold text-stone-900">{red.memberName}</span> · {red.memberPhone}
-                              </p>
+                        <button
+                          type="button"
+                          onClick={handleExportCSV}
+                          className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>CSV</span>
+                        </button>
+                      </div>
+                    </div>
 
-                              <p className="text-xs text-stone-500 flex items-center gap-1 mt-0.5">
-                                <MapPin className="w-3 h-3 text-stone-400 shrink-0" />
-                                <span>{red.deliveryAddress}, {red.area} ({red.postalCode})</span>
-                              </p>
+                    {/* Filter & Search Toolbar */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder={language === 'en' ? 'Search customer, phone, meal, address...' : '搜索姓名、手机、餐品或地址...'}
+                          value={kitchenSearch}
+                          onChange={(e) => setKitchenSearch(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        />
+                      </div>
 
-                              <div className="flex items-center gap-2 text-[11px] text-stone-400 mt-1">
-                                <span>📅 Date: {red.deliveryDate}</span>
-                                <span>·</span>
-                                <span>Slot: {red.deliverySlot}</span>
-                                {red.dietaryNotes && (
-                                  <>
-                                    <span>·</span>
-                                    <span className="text-amber-700 font-semibold">Note: {red.dietaryNotes}</span>
-                                  </>
-                                )}
+                      {/* Date Filter */}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={kitchenDateFilter}
+                          onChange={(e) => setKitchenDateFilter(e.target.value)}
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50"
+                        >
+                          <option value="all">{language === 'en' ? 'All Delivery Dates' : '所有配送日期'}</option>
+                          {uniqueDates.map((d) => (
+                            <option key={d} value={d}>
+                              📅 {d}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Slot Filter */}
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={kitchenSlotFilter}
+                          onChange={(e) => setKitchenSlotFilter(e.target.value as 'all' | 'lunch' | 'dinner')}
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50"
+                        >
+                          <option value="all">{language === 'en' ? 'All Slots (Lunch & Dinner)' : '全部餐段 (午餐 & 晚餐)'}</option>
+                          <option value="lunch">{language === 'en' ? 'Lunch Only (11:30 AM – 1:30 PM)' : '仅午餐 (11:30 AM – 1:30 PM)'}</option>
+                          <option value="dinner">{language === 'en' ? 'Dinner Only (5:00 PM – 7:00 PM)' : '仅晚餐 (5:00 PM – 7:00 PM)'}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Orders List */}
+                    <div className="space-y-3">
+                      {filteredRedemptions.length === 0 ? (
+                        <div className="text-center py-12 text-stone-400 bg-white rounded-2xl border border-stone-200">
+                          <Clock className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+                          <p className="text-xs">{language === 'en' ? 'No matching orders found.' : '没有找到符合条件的订单。'}</p>
+                        </div>
+                      ) : (
+                        filteredRedemptions.map((red) => (
+                          <div
+                            key={red.id}
+                            className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-emerald-300"
+                          >
+                            <div className="flex items-start gap-3">
+                              <img
+                                src={red.mealImage}
+                                alt={red.mealName}
+                                className="w-14 h-14 rounded-xl object-cover shrink-0 border border-stone-200 shadow-2xs"
+                              />
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h5 className="font-bold text-sm text-stone-900">{red.mealName}</h5>
+                                  <span className="text-xs text-stone-400">({red.mealNameZh})</span>
+                                  <span className="text-[10px] bg-stone-100 text-stone-600 font-mono px-2 py-0.5 rounded">
+                                    #{red.id.slice(-6)}
+                                  </span>
+                                </div>
+
+                                <p className="text-xs font-medium text-emerald-800 mt-0.5">
+                                  {language === 'en' ? 'Customer:' : '客户：'} <span className="font-bold text-stone-900">{red.memberName}</span> ·{' '}
+                                  <a href={`tel:${red.memberPhone}`} className="hover:underline text-emerald-700 font-semibold">
+                                    {red.memberPhone}
+                                  </a>
+                                </p>
+
+                                <p className="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                                  <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                  <span>
+                                    {red.deliveryAddress}, {red.area} ({red.postalCode})
+                                  </span>
+                                </p>
+
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 mt-1">
+                                  <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200">
+                                    📅 {red.deliveryDate}
+                                  </span>
+                                  <span className="bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-md border border-amber-200">
+                                    ⏰ {red.deliverySlot}
+                                  </span>
+                                  {red.dietaryNotes && (
+                                    <span className="text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-medium">
+                                      ⚠️ Note: {red.dietaryNotes}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
+
+                            {/* Status and Action Buttons */}
+                            <div className="flex flex-wrap items-center gap-2 justify-end shrink-0">
+                              {/* Edit Order Button */}
+                              <button
+                                type="button"
+                                onClick={() => setEditingOrder({ ...red })}
+                                className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                                title="Edit customer delivery location, date, or meal selection"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>{language === 'en' ? 'Edit Order' : '修改订单/餐品'}</span>
+                              </button>
+
+                              {/* Status dropdown */}
+                              <select
+                                value={red.status}
+                                onChange={(e) =>
+                                  onUpdateRedemptionStatus(red.id, e.target.value as MealRedemption['status'])
+                                }
+                                className={`text-xs font-bold px-3 py-2 rounded-xl border cursor-pointer ${
+                                  red.status === 'Delivered'
+                                    ? 'bg-stone-100 text-stone-800 border-stone-300'
+                                    : red.status === 'Out for Delivery'
+                                    ? 'bg-sky-50 text-sky-800 border-sky-300'
+                                    : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                }`}
+                              >
+                                <option value="Pending">Pending Review</option>
+                                <option value="Prepping in Kitchen">Prepping in Kitchen</option>
+                                <option value="Out for Delivery">Out for Delivery</option>
+                                <option value="Delivered">Delivered ✓</option>
+                              </select>
+
+                              {/* WhatsApp Direct Link */}
+                              <a
+                                href={`https://wa.me/60${red.memberPhone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(
+                                  red.memberName
+                                )},%20CHILL%20Healthy%20kitchen%20update%20for%20your%20meal%20${encodeURIComponent(
+                                  red.mealName
+                                )}:%20Status%20is%20${encodeURIComponent(red.status)}!`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span>WhatsApp</span>
+                              </a>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* =========================================================
+                        SUB-MODAL: EDIT CUSTOMER ORDER (Location & Meal Selection)
+                        ========================================================= */}
+                    {editingOrder && (
+                      <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-xl rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 space-y-4 max-h-[90vh] overflow-y-auto">
+                          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                            <div>
+                              <h5 className="font-heading font-extrabold text-base text-stone-900">
+                                {language === 'en' ? 'Edit Customer Order & Kitchen Prep' : '修改顾客订单与备餐内容'}
+                              </h5>
+                              <p className="text-xs text-stone-500">
+                                Customer: <span className="font-bold text-stone-800">{editingOrder.memberName}</span> ({editingOrder.memberPhone})
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditingOrder(null)}
+                              className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
                           </div>
 
-                          {/* Status and Action */}
-                          <div className="flex flex-wrap items-center gap-2 justify-end shrink-0">
-                            <select
-                              value={red.status}
-                              onChange={(e) =>
-                                onUpdateRedemptionStatus(red.id, e.target.value as MealRedemption['status'])
-                              }
-                              className={`text-xs font-bold px-3 py-2 rounded-xl border cursor-pointer ${
-                                red.status === 'Delivered'
-                                  ? 'bg-stone-100 text-stone-800 border-stone-300'
-                                  : red.status === 'Out for Delivery'
-                                  ? 'bg-sky-50 text-sky-800 border-sky-300'
-                                  : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                              }`}
-                            >
-                              <option value="Pending">Pending Review</option>
-                              <option value="Prepping in Kitchen">Prepping in Kitchen</option>
-                              <option value="Out for Delivery">Out for Delivery</option>
-                              <option value="Delivered">Delivered ✓</option>
-                            </select>
+                          <form onSubmit={handleSaveEditedOrder} className="space-y-4">
+                            {/* Meal Selection (Change Dish) */}
+                            <div>
+                              <label className="text-xs font-bold text-stone-700 block mb-1">
+                                {language === 'en' ? 'Meal Selection (Change Dish)' : '餐品选择（可随时更换）'} *
+                              </label>
+                              <select
+                                value={editingOrder.mealId}
+                                onChange={(e) => {
+                                  const selectedDish = menuItems.find((m) => m.id === e.target.value);
+                                  if (selectedDish) {
+                                    setEditingOrder({
+                                      ...editingOrder,
+                                      mealId: selectedDish.id,
+                                      mealName: selectedDish.name,
+                                      mealNameZh: selectedDish.nameZh,
+                                      mealImage: selectedDish.image,
+                                    });
+                                  }
+                                }}
+                                className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none bg-stone-50 font-medium"
+                              >
+                                {menuItems.map((dish) => (
+                                  <option key={dish.id} value={dish.id}>
+                                    {dish.name} ({dish.nameZh}) · {dish.protein}g Protein
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                            <a
-                              href={`https://wa.me/60${red.memberPhone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(
-                                red.memberName
-                              )},%20CHILL%20Healthy%20kitchen%20update%20for%20your%20meal%20${encodeURIComponent(
-                                red.mealName
-                              )}:%20Status%20is%20${encodeURIComponent(red.status)}!`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              <span>WhatsApp</span>
-                            </a>
-                          </div>
+                            {/* Dish Preview */}
+                            <div className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/60 border border-emerald-200">
+                              <img
+                                src={editingOrder.mealImage}
+                                alt={editingOrder.mealName}
+                                className="w-12 h-12 rounded-xl object-cover border border-emerald-300 shadow-2xs"
+                              />
+                              <div>
+                                <h6 className="font-bold text-xs text-emerald-950">{editingOrder.mealName}</h6>
+                                <p className="text-[11px] text-emerald-700">{editingOrder.mealNameZh}</p>
+                              </div>
+                            </div>
+
+                            {/* Delivery Date & Time Slot */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  {language === 'en' ? 'Delivery Date' : '配送日期'} *
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={editingOrder.deliveryDate}
+                                  onChange={(e) =>
+                                    setEditingOrder({ ...editingOrder, deliveryDate: e.target.value })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  {language === 'en' ? 'Delivery Slot (Lunch / Dinner)' : '送餐时间段（午餐/晚餐）'} *
+                                </label>
+                                <select
+                                  value={editingOrder.deliverySlot}
+                                  onChange={(e) =>
+                                    setEditingOrder({ ...editingOrder, deliverySlot: e.target.value })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                >
+                                  <option value="Lunch (11:30 AM – 1:30 PM)">Lunch (11:30 AM – 1:30 PM)</option>
+                                  <option value="Dinner (5:00 PM – 7:00 PM)">Dinner (5:00 PM – 7:00 PM)</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Change Location: Delivery Address, Area, Postal Code */}
+                            <div>
+                              <label className="text-xs font-bold text-stone-700 block mb-1">
+                                {language === 'en' ? 'Delivery Address (Location)' : '配送详细地址'} *
+                              </label>
+                              <textarea
+                                rows={2}
+                                required
+                                value={editingOrder.deliveryAddress}
+                                onChange={(e) =>
+                                  setEditingOrder({ ...editingOrder, deliveryAddress: e.target.value })
+                                }
+                                className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  {language === 'en' ? 'Area / Region' : '区域'} *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={editingOrder.area}
+                                  onChange={(e) =>
+                                    setEditingOrder({ ...editingOrder, area: e.target.value })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  {language === 'en' ? 'Postal Code' : '邮编'}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingOrder.postalCode}
+                                  onChange={(e) =>
+                                    setEditingOrder({ ...editingOrder, postalCode: e.target.value })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Dietary / Special Notes */}
+                            <div>
+                              <label className="text-xs font-bold text-stone-700 block mb-1">
+                                {language === 'en' ? 'Dietary Notes / Prep Request' : '特殊饮食要求/后厨备注'}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. No chili, dressing on side, less rice"
+                                value={editingOrder.dietaryNotes || ''}
+                                onChange={(e) =>
+                                  setEditingOrder({ ...editingOrder, dietaryNotes: e.target.value })
+                                }
+                                className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Status */}
+                            <div>
+                              <label className="text-xs font-bold text-stone-700 block mb-1">
+                                {language === 'en' ? 'Kitchen Order Status' : '订单备餐状态'}
+                              </label>
+                              <select
+                                value={editingOrder.status}
+                                onChange={(e) =>
+                                  setEditingOrder({
+                                    ...editingOrder,
+                                    status: e.target.value as MealRedemption['status'],
+                                  })
+                                }
+                                className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none font-bold text-stone-800"
+                              >
+                                <option value="Pending">Pending Review</option>
+                                <option value="Prepping in Kitchen">Prepping in Kitchen</option>
+                                <option value="Out for Delivery">Out for Delivery</option>
+                                <option value="Delivered">Delivered ✓</option>
+                              </select>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-3 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingOrder(null)}
+                                className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-100 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                {language === 'en' ? 'Cancel' : '取消'}
+                              </button>
+                              <button
+                                type="submit"
+                                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                              >
+                                <Save className="w-4 h-4" />
+                                <span>{language === 'en' ? 'Save Changes' : '保存修改'}</span>
+                              </button>
+                            </div>
+                          </form>
                         </div>
-                      ))
+                      </div>
                     )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* =========================================================
                   TAB 5: MEMBER CREDITS & USERS
