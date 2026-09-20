@@ -29,6 +29,7 @@ export interface MealItem {
   spiceLevel?: number; // 0 to 3
   prepMethod?: string;
   prepMethodZh?: string;
+  isOutOfStock?: boolean;
 }
 
 export interface MealPlan {

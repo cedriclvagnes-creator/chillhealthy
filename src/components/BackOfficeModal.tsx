@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Shield,
@@ -12,6 +12,9 @@ import {
   Plus,
   Trash2,
   Edit2,
+  Edit3,
+  Upload,
+  AlertTriangle,
   Users,
   Clock,
   MapPin,
@@ -60,6 +63,8 @@ interface BackOfficeModalProps {
   onUpdateMemberAccount?: (member: MemberAccount) => void;
   onAddMemberAccount?: (member: MemberAccount) => void;
   onDeleteMemberAccount?: (memberId: string) => void;
+  onEnterLiveEditMode?: () => void;
+  onAdminAuthChange?: (isAuthenticated: boolean) => void;
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -81,6 +86,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateMemberAccount,
   onAddMemberAccount,
   onDeleteMemberAccount,
+  onEnterLiveEditMode,
+  onAdminAuthChange,
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -137,6 +144,19 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [editableMenu, setEditableMenu] = useState<MealItem[]>(JSON.parse(JSON.stringify(menuItems)));
   const [selectedMealForEdit, setSelectedMealForEdit] = useState<MealItem | null>(editableMenu[0] || null);
   const [menuSearch, setMenuSearch] = useState('');
+  const [menuStockFilter, setMenuStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+  const dishImageFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Keep local editableMenu synchronized with external menuItems
+  useEffect(() => {
+    setEditableMenu(menuItems);
+    if (selectedMealForEdit) {
+      const refreshed = menuItems.find((m) => m.id === selectedMealForEdit.id);
+      if (refreshed) {
+        setSelectedMealForEdit(refreshed);
+      }
+    }
+  }, [menuItems]);
 
   // Success toast
   const [toastMsg, setToastMsg] = useState('');
@@ -358,6 +378,79 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     setEditableMenu(updated);
     onUpdateMenuItems(updated);
     triggerToast(language === 'en' ? `✓ Dish "${selectedMealForEdit.name}" updated!` : `✓ 餐品 "${selectedMealForEdit.nameZh}" 修改已保存！`);
+  };
+
+  // Upload dish image from device as DataURL
+  const handleDishImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      triggerToast(language === 'en' ? 'Please select a valid image file' : '请选择有效的图片文件');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      triggerToast(language === 'en' ? 'Image file size is too large (max 5MB)' : '图片大小超过限制（最大5MB）');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result && selectedMealForEdit) {
+        setSelectedMealForEdit({
+          ...selectedMealForEdit,
+          image: result,
+        });
+        triggerToast(language === 'en' ? '✓ Image loaded from device. Click "Save Dish" to apply.' : '✓ 本地图片已载入，点击“保存修改”即可生效。');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Toggle stock status for a meal (In Stock vs Out of Stock)
+  const handleToggleStock = (mealId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const updated = editableMenu.map((m) => {
+      if (m.id === mealId) {
+        return { ...m, isOutOfStock: !m.isOutOfStock };
+      }
+      return m;
+    });
+    setEditableMenu(updated);
+    onUpdateMenuItems(updated);
+    if (selectedMealForEdit && selectedMealForEdit.id === mealId) {
+      setSelectedMealForEdit({
+        ...selectedMealForEdit,
+        isOutOfStock: !selectedMealForEdit.isOutOfStock,
+      });
+    }
+    const target = updated.find((m) => m.id === mealId);
+    const isNowOut = target?.isOutOfStock;
+    triggerToast(
+      language === 'en'
+        ? `✓ "${target?.name}" marked as ${isNowOut ? '🔴 OUT OF STOCK' : '🟢 IN STOCK'}`
+        : `✓ "${target?.nameZh}" 已设置为【${isNowOut ? '🔴 已售罄/缺货' : '🟢 正常供应'}】`
+    );
+  };
+
+  // Mark all dishes in or out of stock in batch
+  const handleMarkAllStock = (inStock: boolean) => {
+    const updated = editableMenu.map((m) => ({ ...m, isOutOfStock: !inStock }));
+    setEditableMenu(updated);
+    onUpdateMenuItems(updated);
+    if (selectedMealForEdit) {
+      setSelectedMealForEdit({
+        ...selectedMealForEdit,
+        isOutOfStock: !inStock,
+      });
+    }
+    triggerToast(
+      inStock
+        ? (language === 'en' ? '✓ All items marked IN STOCK' : '✓ 全部菜品已设为【正常供应有货】')
+        : (language === 'en' ? '✓ All items marked OUT OF STOCK' : '✓ 全部菜品已设为【已售罄/缺货】')
+    );
   };
 
   // Add new dish
@@ -594,6 +687,22 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     <span>Copy Admin Link</span>
                   </>
                 )}
+              </button>
+
+              {/* Edit Homepage Button (Direct live visual editing) */}
+              <button
+                type="button"
+                id="admin-btn-edit-homepage"
+                onClick={() => {
+                  if (onEnterLiveEditMode) {
+                    onEnterLiveEditMode();
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-stone-950 text-xs font-black flex items-center gap-2 shadow-md hover:shadow-amber-400/20 active:scale-95 transition-all cursor-pointer ring-2 ring-amber-300/60"
+                title={language === 'en' ? 'Open Homepage to edit dish photos, descriptions and stock directly' : '前往主页实景编辑菜品照片、描述与缺货状态'}
+              >
+                <Edit3 className="w-4 h-4 text-stone-950" />
+                <span>{language === 'en' ? 'Edit Homepage (Live Mode)' : '编辑主页 (实景模式)'}</span>
               </button>
 
               {/* Return to Public Website */}
@@ -1274,266 +1383,600 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               )}
 
               {/* =========================================================
-                  TAB 3: MENU & PICTURE EDITOR
+                  TAB 3: MENU & PICTURE EDITOR & STOCK CONTROL
                   ========================================================= */}
-              {activeTab === 'menu' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Dish List & Search (3-4 cols) */}
-                  <div className="lg:col-span-4 xl:col-span-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-                        Menu Bento Boxes ({editableMenu.length})
-                      </h4>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={handleResetToOfficialMenu}
-                          title="Sync with official chillhealthy.com 24 Ala Carte items"
-                          className="flex items-center gap-1 text-[11px] bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2 py-1 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3 text-emerald-700" />
-                          <span>Sync Live</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAddNewDish}
-                          className="flex items-center gap-1 text-[11px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>Add</span>
-                        </button>
-                      </div>
-                    </div>
+              {activeTab === 'menu' && (() => {
+                const totalDishesCount = editableMenu.length;
+                const outOfStockCount = editableMenu.filter((m) => m.isOutOfStock).length;
+                const inStockCount = totalDishesCount - outOfStockCount;
 
-                    <input
-                      type="text"
-                      placeholder="Search dish name..."
-                      value={menuSearch}
-                      onChange={(e) => setMenuSearch(e.target.value)}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                    />
+                const filteredMenu = editableMenu.filter((m) => {
+                  const matchesSearch =
+                    !menuSearch ||
+                    m.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+                    m.nameZh.includes(menuSearch) ||
+                    (m.subtitle && m.subtitle.toLowerCase().includes(menuSearch.toLowerCase())) ||
+                    (m.subtitleZh && m.subtitleZh.includes(menuSearch));
+                  if (!matchesSearch) return false;
+                  if (menuStockFilter === 'in_stock') return !m.isOutOfStock;
+                  if (menuStockFilter === 'out_of_stock') return m.isOutOfStock === true;
+                  return true;
+                });
 
-                    <div className="space-y-2 max-h-[68vh] overflow-y-auto pr-1">
-                      {editableMenu
-                        .filter(
-                          (m) =>
-                            m.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-                            m.nameZh.includes(menuSearch)
-                        )
-                        .map((meal) => (
-                          <div
-                            key={meal.id}
-                            onClick={() => setSelectedMealForEdit(meal)}
-                            className={`p-2.5 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
-                              selectedMealForEdit?.id === meal.id
-                                ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-600/30'
-                                : 'border-stone-200 bg-white hover:bg-stone-50'
-                            }`}
-                          >
-                            <img
-                              src={meal.image}
-                              alt={meal.name}
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
-                              }}
-                              className="w-12 h-12 rounded-lg object-cover shrink-0 border border-stone-200"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <h5 className="text-xs font-bold text-stone-900 truncate">
-                                {meal.name}
-                              </h5>
-                              <p className="text-[10px] text-stone-500 truncate">{meal.nameZh}</p>
-                              <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-800 mt-0.5">
-                                <span>RM {meal.price.toFixed(2)}</span>
-                                <span className="text-[10px] text-stone-400">{meal.calories} kcal</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* Dish Editor & Picture Form (8-9 cols) */}
-                  <div className="lg:col-span-8 xl:col-span-9">
-                    {selectedMealForEdit ? (
-                      <form onSubmit={handleSaveMeal} className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4 shadow-2xs">
-                        <div className="flex justify-between items-center border-b border-stone-100 pb-3">
-                          <div>
-                            <h4 className="font-heading font-extrabold text-base text-stone-900">
-                              Edit Dish & Picture
-                            </h4>
-                            <p className="text-xs text-stone-500">ID: {selectedMealForEdit.id}</p>
-                          </div>
-                          <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl">
-                            RM {selectedMealForEdit.price.toFixed(2)}
-                          </span>
+                return (
+                  <div className="space-y-6">
+                    {/* Live Homepage Editor Callout Banner */}
+                    <div className="bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-teal-500/10 border border-amber-300/50 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-400 text-stone-950 flex items-center justify-center font-bold shadow-xs shrink-0">
+                          <Edit3 className="w-5 h-5" />
                         </div>
-
-                        {/* Image Preview & URL Editor */}
-                        <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row items-center gap-4">
-                          <img
-                            src={selectedMealForEdit.image}
-                            alt="Preview"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
-                            }}
-                            className="w-24 h-24 rounded-2xl object-cover shadow-sm border-2 border-white shrink-0"
-                          />
-                          <div className="flex-1 w-full">
-                            <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
-                              <ImageIcon className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>Dish Picture URL (Image Link) *</span>
-                            </label>
-                            <input
-                              type="url"
-                              required
-                              value={selectedMealForEdit.image}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  image: e.target.value,
-                                })
-                              }
-                              placeholder="https://images.unsplash.com/..."
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                            />
-                            <span className="text-[10px] text-stone-400 block mt-1">
-                              Paste any direct web photo link (Unsplash, CDN, or uploaded image).
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-stone-900 text-sm">
+                              {language === 'en' ? 'Live Homepage Visual Editor Mode' : '主页实景编辑模式'}
+                            </h4>
+                            <span className="text-[10px] bg-amber-200/80 text-amber-900 font-extrabold px-2 py-0.5 rounded-full border border-amber-300">
+                              {language === 'en' ? 'Live on Store' : '前台实景即时修改'}
                             </span>
                           </div>
+                          <p className="text-xs text-stone-600 mt-0.5">
+                            {language === 'en'
+                              ? 'Admin can also browse the actual homepage directly to edit photos, descriptions and stock status in real-time!'
+                              : '管理员也可直接前往前台主页，在真实网页上即时点击编辑每道餐盒照片、中英文描述与售罄/有货状态！'}
+                          </p>
                         </div>
+                      </div>
+                      <button
+                        type="button"
+                        id="btn-open-live-homepage-editor"
+                        onClick={() => {
+                          if (onEnterLiveEditMode) onEnterLiveEditMode();
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-xs flex items-center gap-2 shrink-0 shadow-md hover:shadow-amber-400/20 active:scale-95 transition-all cursor-pointer ring-2 ring-amber-300/60"
+                      >
+                        <Edit3 className="w-4 h-4 text-stone-950" />
+                        <span>{language === 'en' ? 'Launch Homepage Editor' : '前往主页实景编辑'}</span>
+                      </button>
+                    </div>
 
-                        {/* Names */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Dish List & Stock Controls (3-4 cols) */}
+                      <div className="lg:col-span-4 xl:col-span-4 space-y-3">
+                        <div className="flex items-center justify-between">
                           <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">
-                              Dish Name (English) *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={selectedMealForEdit.name}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  name: e.target.value,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                            />
+                            <h4 className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+                              <Utensils className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Menu & Stock Control ({editableMenu.length})</span>
+                            </h4>
+                            <p className="text-[11px] text-stone-500">
+                              {inStockCount} In Stock · <strong className="text-rose-600">{outOfStockCount} Out of Stock</strong>
+                            </p>
                           </div>
-
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">
-                              Dish Name (华语中文) *
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={selectedMealForEdit.nameZh}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  nameZh: e.target.value,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Price & Nutritional Macros */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">Price (RM) *</label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              required
-                              value={selectedMealForEdit.price}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  price: parseFloat(e.target.value) || 0,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 font-bold"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">Calories (kcal)</label>
-                            <input
-                              type="number"
-                              value={selectedMealForEdit.calories}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  calories: parseInt(e.target.value, 10) || 0,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">Protein (g)</label>
-                            <input
-                              type="number"
-                              value={selectedMealForEdit.protein}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  protein: parseInt(e.target.value, 10) || 0,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">Carbs (g)</label>
-                            <input
-                              type="number"
-                              value={selectedMealForEdit.carbs}
-                              onChange={(e) =>
-                                setSelectedMealForEdit({
-                                  ...selectedMealForEdit,
-                                  carbs: parseInt(e.target.value, 10) || 0,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                            />
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleResetToOfficialMenu}
+                              title="Sync with official chillhealthy.com 24 Ala Carte items"
+                              className="flex items-center gap-1 text-[11px] bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className="w-3 h-3 text-emerald-700" />
+                              <span>Sync</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAddNewDish}
+                              className="flex items-center gap-1 text-[11px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Add</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* Description */}
-                        <div>
-                          <label className="text-xs font-bold text-stone-700 block mb-1">Description</label>
-                          <textarea
-                            rows={2}
-                            value={selectedMealForEdit.description}
-                            onChange={(e) =>
-                              setSelectedMealForEdit({
-                                ...selectedMealForEdit,
-                                description: e.target.value,
-                              })
-                            }
-                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
-                          />
+                        {/* Stock Filter Tabs */}
+                        <div className="flex items-center gap-1.5 p-1 bg-stone-100 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setMenuStockFilter('all')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                              menuStockFilter === 'all'
+                                ? 'bg-white text-stone-900 shadow-xs'
+                                : 'text-stone-600 hover:text-stone-900'
+                            }`}
+                          >
+                            All ({totalDishesCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMenuStockFilter('in_stock')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                              menuStockFilter === 'in_stock'
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'text-stone-600 hover:text-emerald-700'
+                            }`}
+                          >
+                            <span>🟢 In Stock</span>
+                            <span>({inStockCount})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMenuStockFilter('out_of_stock')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                              menuStockFilter === 'out_of_stock'
+                                ? 'bg-rose-600 text-white shadow-xs'
+                                : 'text-stone-600 hover:text-rose-700'
+                            }`}
+                          >
+                            <span>🔴 Sold Out</span>
+                            <span>({outOfStockCount})</span>
+                          </button>
                         </div>
 
-                        <button
-                          type="submit"
-                          className="w-full py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md"
-                        >
-                          <Save className="w-4 h-4" />
-                          <span>Save Dish & Picture to Live Menu</span>
-                        </button>
-                      </form>
-                    ) : null}
+                        {/* Quick Batch Actions */}
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <span className="text-[11px] text-stone-500 font-medium">Batch Stock:</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAllStock(true)}
+                              className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 transition-colors cursor-pointer"
+                              title="Mark all items as In Stock"
+                            >
+                              All In Stock (全设为有货)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAllStock(false)}
+                              className="text-[10px] px-2 py-0.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold border border-rose-200 transition-colors cursor-pointer"
+                              title="Mark all items as Out of Stock"
+                            >
+                              All Out of Stock (全设为售罄)
+                            </button>
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          placeholder="Search dish by name / 中文名 / ingredient..."
+                          value={menuSearch}
+                          onChange={(e) => setMenuSearch(e.target.value)}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white shadow-2xs"
+                        />
+
+                        <div className="space-y-2 max-h-[62vh] overflow-y-auto pr-1">
+                          {filteredMenu.length === 0 ? (
+                            <div className="text-center py-10 text-stone-400 text-xs bg-stone-50 rounded-2xl border border-dashed border-stone-200">
+                              No dishes found matching your filter.
+                            </div>
+                          ) : (
+                            filteredMenu.map((meal) => (
+                              <div
+                                key={meal.id}
+                                onClick={() => setSelectedMealForEdit(meal)}
+                                className={`p-2.5 rounded-2xl border flex items-center gap-2.5 cursor-pointer transition-all ${
+                                  selectedMealForEdit?.id === meal.id
+                                    ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-600/30 shadow-xs'
+                                    : meal.isOutOfStock
+                                    ? 'border-rose-200 bg-rose-50/30 hover:bg-rose-50/60'
+                                    : 'border-stone-200 bg-white hover:bg-stone-50 shadow-2xs'
+                                }`}
+                              >
+                                <div className="relative shrink-0">
+                                  <img
+                                    src={meal.image}
+                                    alt={meal.name}
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                                    }}
+                                    className={`w-14 h-14 rounded-xl object-cover border border-stone-200 ${
+                                      meal.isOutOfStock ? 'grayscale-[50%] opacity-80' : ''
+                                    }`}
+                                  />
+                                  {meal.isOutOfStock && (
+                                    <span className="absolute inset-x-0 bottom-0 bg-rose-600/90 text-white text-[8px] font-black uppercase text-center py-0.5 rounded-b-xl">
+                                      OUT
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <h5 className="text-xs font-bold text-stone-900 truncate">
+                                      {meal.name}
+                                    </h5>
+                                    <span className="text-[11px] font-black text-stone-900 shrink-0">
+                                      RM {meal.price.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-stone-500 truncate">{meal.nameZh}</p>
+
+                                  <div className="flex items-center justify-between gap-1.5 mt-1.5 pt-1 border-t border-stone-100">
+                                    {meal.isOutOfStock ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                                        <span>已售罄 / Out</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                        <span>供应中 / In Stock</span>
+                                      </span>
+                                    )}
+
+                                    {/* Quick 1-Click Stock Toggle */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleToggleStock(meal.id, e)}
+                                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer border ${
+                                        meal.isOutOfStock
+                                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-700'
+                                          : 'bg-stone-100 hover:bg-rose-100 text-stone-700 hover:text-rose-800 border-stone-200'
+                                      }`}
+                                      title={meal.isOutOfStock ? 'Click to mark In Stock' : 'Click to mark Out of Stock'}
+                                    >
+                                      {meal.isOutOfStock ? '设为有货' : '设为缺货'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dish Editor & Picture Form (8 cols) */}
+                      <div className="lg:col-span-8 xl:col-span-8">
+                        {selectedMealForEdit ? (
+                          <form onSubmit={handleSaveMeal} className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5 shadow-2xs">
+                            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-stone-100 pb-3">
+                              <div>
+                                <h4 className="font-heading font-extrabold text-base text-stone-900 flex items-center gap-2">
+                                  <span>Edit Dish & Stock Control</span>
+                                  {selectedMealForEdit.isOutOfStock ? (
+                                    <span className="text-xs bg-rose-100 text-rose-800 font-extrabold px-2.5 py-0.5 rounded-full border border-rose-200">
+                                      🔴 Out of Stock
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                                      🟢 In Stock
+                                    </span>
+                                  )}
+                                </h4>
+                                <p className="text-xs text-stone-500">Dish ID: {selectedMealForEdit.id}</p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                                  RM {selectedMealForEdit.price.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Prominent Stock Control Toggle */}
+                            <div className={`p-4 rounded-2xl border transition-all ${
+                              selectedMealForEdit.isOutOfStock
+                                ? 'bg-rose-50/70 border-rose-200'
+                                : 'bg-emerald-50/70 border-emerald-200'
+                            }`}>
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <label className="text-xs font-black text-stone-900 block flex items-center gap-1.5">
+                                    <AlertCircle className={`w-4 h-4 ${selectedMealForEdit.isOutOfStock ? 'text-rose-600' : 'text-emerald-700'}`} />
+                                    <span>Stock Availability / 菜品供应与售罄控制</span>
+                                  </label>
+                                  <p className="text-xs text-stone-600 mt-0.5">
+                                    {selectedMealForEdit.isOutOfStock
+                                      ? '⚠️ Currently marked as OUT OF STOCK. Customers will see "SOLD OUT" badge and cannot order.'
+                                      : '✓ Currently IN STOCK. Customers can view, select, and add this dish to cart.'}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedMealForEdit({ ...selectedMealForEdit, isOutOfStock: false })}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                      !selectedMealForEdit.isOutOfStock
+                                        ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30 font-black'
+                                        : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
+                                    }`}
+                                  >
+                                    <span>🟢 In Stock (正常供应)</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedMealForEdit({ ...selectedMealForEdit, isOutOfStock: true })}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                      selectedMealForEdit.isOutOfStock
+                                        ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-500/30 font-black'
+                                        : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'
+                                    }`}
+                                  >
+                                    <span>🔴 Out of Stock (已售罄)</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Image Preview & Upload / Link Editor */}
+                            <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row items-center gap-4">
+                              <div className="relative shrink-0">
+                                <img
+                                  src={selectedMealForEdit.image}
+                                  alt="Preview"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                                  }}
+                                  className={`w-28 h-28 rounded-2xl object-cover shadow-sm border-2 border-white shrink-0 ${
+                                    selectedMealForEdit.isOutOfStock ? 'grayscale-[50%]' : ''
+                                  }`}
+                                />
+                                {selectedMealForEdit.isOutOfStock && (
+                                  <span className="absolute inset-0 bg-stone-950/60 rounded-2xl flex items-center justify-center text-white text-xs font-black uppercase text-center px-1">
+                                    SOLD OUT
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex-1 w-full space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                                    <ImageIcon className="w-3.5 h-3.5 text-emerald-700" />
+                                    <span>Dish Photo / 菜品图片 *</span>
+                                  </label>
+                                  <div className="flex items-center gap-2">
+                                    {/* Hidden file input for device photo upload */}
+                                    <input
+                                      type="file"
+                                      ref={dishImageFileInputRef}
+                                      onChange={handleDishImageFileUpload}
+                                      accept="image/*"
+                                      className="hidden"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => dishImageFileInputRef.current?.click()}
+                                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                                      title="Select photo from computer or phone"
+                                    >
+                                      <Upload className="w-3.5 h-3.5" />
+                                      <span>Upload from Device (本地上传)</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <input
+                                  type="url"
+                                  required
+                                  value={selectedMealForEdit.image}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      image: e.target.value,
+                                    })
+                                  }
+                                  placeholder="https://images.unsplash.com/... or paste image URL"
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                                />
+                                <span className="text-[10px] text-stone-500 block">
+                                  You can either upload directly from your device or paste any image URL.
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Names */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Dish Name (English) *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={selectedMealForEdit.name}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      name: e.target.value,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Dish Name (华语中文) *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={selectedMealForEdit.nameZh}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      nameZh: e.target.value,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Subtitle / Tagline */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Subtitle / Tagline (English)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={selectedMealForEdit.subtitle || ''}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      subtitle: e.target.value,
+                                    })
+                                  }
+                                  placeholder="e.g. High Protein · Organic Greens"
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Subtitle / 特色副标 (华语中文)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={selectedMealForEdit.subtitleZh || ''}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      subtitleZh: e.target.value,
+                                    })
+                                  }
+                                  placeholder="例如：高蛋白 · 有机时蔬 · 慢碳糙米"
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Price & Nutritional Macros */}
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">Price (RM) *</label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  required
+                                  value={selectedMealForEdit.price}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      price: parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 font-bold"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">Calories (kcal)</label>
+                                <input
+                                  type="number"
+                                  value={selectedMealForEdit.calories}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      calories: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">Protein (g)</label>
+                                <input
+                                  type="number"
+                                  value={selectedMealForEdit.protein}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      protein: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">Carbs (g)</label>
+                                <input
+                                  type="number"
+                                  value={selectedMealForEdit.carbs}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      carbs: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                              <div className="col-span-2 sm:col-span-1">
+                                <label className="text-xs font-bold text-stone-700 block mb-1">Fat (g)</label>
+                                <input
+                                  type="number"
+                                  value={selectedMealForEdit.fat || 0}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      fat: parseInt(e.target.value, 10) || 0,
+                                    })
+                                  }
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Descriptions (English & Chinese) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Description (English)
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  value={selectedMealForEdit.description || ''}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      description: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Full English description of the dish, preparation method, and dietary highlights."
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-bold text-stone-700 block mb-1">
+                                  Description (华语中文详细介绍)
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  value={selectedMealForEdit.descriptionZh || ''}
+                                  onChange={(e) =>
+                                    setSelectedMealForEdit({
+                                      ...selectedMealForEdit,
+                                      descriptionZh: e.target.value,
+                                    })
+                                  }
+                                  placeholder="菜品中文详细介绍、烹饪特色与营养搭配理念。"
+                                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="submit"
+                              className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all active:scale-[0.99]"
+                            >
+                              <Save className="w-4 h-4" />
+                              <span>Save Dish, Photo & Stock Status to Live Menu</span>
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="text-center py-16 text-stone-400">
+                            Select a dish from the left to edit its photo, description and stock status.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* =========================================================
                   TAB 4: KITCHEN PREPARATION & CUSTOMER ORDER REPORT
