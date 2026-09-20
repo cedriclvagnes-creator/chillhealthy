@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <g transform="translate(15, 0)">
+    <!-- Typography: CHILL HEALTHY -->
+    <g fill="#3b6026" font-family="'Outfit', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="700" letter-spacing="0.05em">
+      <text x="205" y="482" font-size="112">CHILL</text>
+      <text x="205" y="605" font-size="112">HEALTHY</text>
+    </g>
+
+    <!-- Logo Mark: Smiling Bowl with Sprout -->
+    <g stroke="#3b6026" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <!-- Center Stem -->
+      <line x1="675" y1="412" x2="675" y2="445" />
+
+      <!-- Left Sprout Leaf -->
+      <path d="M 675,412 C 632,385 595,370 605,348 C 625,340 660,375 675,412 Z" />
+
+      <!-- Right Sprout Leaf -->
+      <path d="M 675,412 C 700,378 722,342 744,332 C 758,348 720,392 675,412 Z" />
+
+      <!-- Bowl Rim / Ellipse Top -->
+      <ellipse cx="675" cy="452" rx="114" ry="26" />
+
+      <!-- Bowl Body / Curved Bottom -->
+      <path d="M 561,452 C 565,538 610,572 675,572 C 740,572 785,538 789,452" />
+
+      <!-- Gentle Smile inside bowl -->
+      <path d="M 632,504 C 646,528 704,528 718,504" stroke-width="13" />
+    </g>
+  </g>
+</svg>
