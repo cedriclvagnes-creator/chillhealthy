@@ -37,6 +37,7 @@ import * as XLSX from 'xlsx';
 import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
+import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
 
 interface BackOfficeModalProps {
   isOpen: boolean;
@@ -546,13 +547,13 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 font-mono"
                       />
                       <a
-                        href={`https://wa.me/60${formSettings.whatsappNumber}`}
+                        href={buildWhatsAppUrl(formSettings.whatsappNumber)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[11px] text-emerald-700 font-semibold mt-1 inline-flex items-center gap-1 hover:underline"
                       >
                         <ExternalLink className="w-3 h-3" />
-                        <span>Test WhatsApp Link (wa.me/60{formSettings.whatsappNumber})</span>
+                        <span>Test WhatsApp Link ({buildWhatsAppUrl(formSettings.whatsappNumber).replace('https://', '')})</span>
                       </a>
                     </div>
 
@@ -1595,11 +1596,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
                               {/* WhatsApp Direct Link */}
                               <a
-                                href={`https://wa.me/60${red.memberPhone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(
-                                  red.memberName
-                                )},%20CHILL%20Healthy%20kitchen%20update%20for%20your%20meal%20${encodeURIComponent(
-                                  red.mealName
-                                )}:%20Status%20is%20${encodeURIComponent(red.status)}!`}
+                                href={buildWhatsAppUrl(
+                                  red.memberPhone,
+                                  `Hi ${red.memberName}, CHILL Healthy kitchen update for your meal ${red.mealName}: Status is ${red.status}!`
+                                )}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShoppingBag, Menu, X, Phone, MessageCircle, Globe, Sparkles, Clock, MapPin, User, Shield, CheckCircle } from 'lucide-react';
 import { Language, CartItem, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
+import { buildWhatsAppUrl } from '../utils/whatsapp';
 
 interface HeaderProps {
   language: Language;
@@ -34,9 +35,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Robust WhatsApp number normalization (+60126189919)
-  const cleanWaDigits = (siteSettings.whatsappNumber || '0126189919').replace(/\D/g, '').replace(/^(60|0)/, '');
-  const waBaseUrl = `https://wa.me/60${cleanWaDigits || '126189919'}`;
+  // Robust WhatsApp link builder (+60126189919)
+  const waBaseUrl = buildWhatsAppUrl(siteSettings.whatsappNumber);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const scrollToSection = (id: string) => {

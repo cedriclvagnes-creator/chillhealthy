@@ -2,6 +2,7 @@ import React from 'react';
 import { MessageCircle, Phone, MapPin, Clock, Heart, ShieldCheck, Instagram, Facebook, User, Settings, Shield } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { ChillLogo } from './ChillLogo';
+import { buildWhatsAppUrl } from '../utils/whatsapp';
 
 interface FooterProps {
   language: Language;
@@ -49,7 +50,7 @@ export const Footer: React.FC<FooterProps> = ({
 
             <div className="pt-2 flex items-center gap-3">
               <a
-                href={`https://wa.me/60${siteSettings.whatsappNumber}`}
+                href={buildWhatsAppUrl(siteSettings.whatsappNumber)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 rounded-xl bg-emerald-950 text-emerald-400 hover:bg-emerald-800 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
@@ -167,7 +168,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <span>
                   WhatsApp:{' '}
                   <a
-                    href={`https://wa.me/60${(siteSettings.whatsappNumber || '0126189919').replace(/\D/g, '').replace(/^(60|0)/, '')}`}
+                    href={buildWhatsAppUrl(siteSettings.whatsappNumber)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-white hover:text-emerald-400 font-bold underline decoration-stone-600 cursor-pointer"

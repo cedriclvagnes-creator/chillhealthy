@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Clock, Truck, MessageCircle, Calendar, ShieldCheck, HeartPulse, ExternalLink, Sparkles } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
+import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
 
 interface OrderGuideSectionProps {
   language: Language;
@@ -16,15 +17,13 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
   onOpenMemberPortal,
 }) => {
   const isEn = language === 'en';
-  const whatsappNum = siteSettings.whatsappNumber || '0126189919';
-  const whatsappDisplay = siteSettings.whatsappDisplay || '012-618 9919';
+  const whatsappDisplay = siteSettings.whatsappDisplay || OFFICIAL_WA_DISPLAY;
 
-  const defaultMsg = encodeURIComponent(
-    isEn
-      ? 'Hi CHILL Healthy! I would like to confirm my Meal Plan order. My registered name is: '
-      : '您好 潮轻食 CHILL Healthy！我想确认我的健康餐配套订单，我的注册姓名是：'
-  );
-  const whatsappUrl = `https://wa.me/6${whatsappNum.replace(/^0/, '')}?text=${defaultMsg}`;
+  const defaultMsg = isEn
+    ? 'Hi CHILL Healthy! I would like to confirm my Meal Plan order. My registered name is: '
+    : '您好 潮轻食 CHILL Healthy！我想确认我的健康餐配套订单，我的注册姓名是：';
+
+  const whatsappUrl = buildWhatsAppUrl(siteSettings.whatsappNumber, defaultMsg);
 
   return (
     <section id="order-guide" className="py-16 bg-gradient-to-b from-stone-50 via-emerald-50/25 to-white border-y border-stone-200">
