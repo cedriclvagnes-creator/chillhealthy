@@ -1,6 +1,0 @@
-[install]
-frozenLockfile = false
-production = false
-
-[install.lockfile]
-save = true
