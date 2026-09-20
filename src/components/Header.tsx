@@ -185,26 +185,32 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Right Action Icons: Member Portal, Cart & WhatsApp */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Member Login & Redeem Button */}
+              {/* Member Login & Meal Balance Monitor Button */}
               <button
                 id="member-portal-btn"
                 onClick={onOpenMemberPortal}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
                   currentMember
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400'
                     : 'bg-stone-100 hover:bg-stone-200 text-stone-800'
                 }`}
-                title="Member Package Login & Daily Meal Redemption"
+                title="Member Package Login & Daily Meal Balance"
               >
-                <User className="w-4 h-4 text-emerald-700" />
+                <div className="relative">
+                  <User className="w-4 h-4 text-emerald-700" />
+                  {currentMember && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-white" />
+                  )}
+                </div>
                 {currentMember ? (
                   <span className="flex items-center gap-1.5">
-                    <span className="hidden sm:inline font-bold">{currentMember.name.split(' ')[0]}</span>
-                    <span className="text-[10px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded-full">
-                      {currentMember.activePackage ? `${currentMember.activePackage.remainingMeals} Meals` : 'Member'}
+                    <span className="hidden lg:inline font-bold text-stone-800">{currentMember.name.split(' ')[0]}</span>
+                    <span className="hidden sm:inline text-stone-300">|</span>
+                    <span className="text-[11px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-full shadow-2xs">
+                      {currentMember.activePackage ? `${currentMember.activePackage.remainingMeals} Meals Balance` : 'Member'}
                     </span>
-                    <span className="hidden md:inline text-emerald-700 font-extrabold text-[11px]">
-                      {language === 'en' ? 'Redeem' : '兑换'}
+                    <span className="hidden md:inline text-emerald-800 font-extrabold text-[11px]">
+                      {language === 'en' ? 'Select Meal' : '选餐'}
                     </span>
                   </span>
                 ) : (

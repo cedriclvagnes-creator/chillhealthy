@@ -1344,10 +1344,31 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <div>
                         <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>{language === 'en' ? 'Lunch Delivery Window *' : '午餐配送时段 *'}</span>
+                          <span>{language === 'en' ? 'Delivery Window (Lunch / Dinner) *' : '配送时段 (午餐 / 晚餐) *'}</span>
                         </label>
-                        <div className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-stone-50 text-stone-800 font-bold">
-                          🍱 午餐配送：10:00 AM – 2:00 PM
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSlot('Lunch (11:00 AM – 1:00 PM)')}
+                            className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
+                              selectedSlot.includes('Lunch')
+                                ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs ring-2 ring-emerald-600/30'
+                                : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+                            }`}
+                          >
+                            🍱 {language === 'en' ? 'Lunch (11am-1pm)' : '午餐 (11am-1pm)'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSlot('Dinner (5:00 PM – 7:00 PM)')}
+                            className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
+                              selectedSlot.includes('Dinner')
+                                ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-2 ring-amber-600/30'
+                                : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+                            }`}
+                          >
+                            🌙 {language === 'en' ? 'Dinner (5pm-7pm)' : '晚餐 (5pm-7pm)'}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1384,6 +1405,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         >
                           +
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Meal Selection Notice (Select any meal, not design meal) */}
+                    <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-950">
+                      <Sparkles className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">
+                          {language === 'en'
+                            ? 'Meal Package Member Selection Privilege:'
+                            : '配套会员每日选餐说明：'}
+                        </span>
+                        <span className="text-[11px] text-emerald-900 leading-relaxed">
+                          {language === 'en'
+                            ? 'As a meal package member, you are entitled to select any of our 26 signature chef-crafted healthy Bento meals. (Custom bowl designing is exclusive to Ala Carte orders).'
+                            : '配套会员可自由选择全场任意 26 款招牌轻食餐盒，无需额外加价！（DIY自定义搭配仅限单点散客会员使用）。'}
+                        </span>
                       </div>
                     </div>
 

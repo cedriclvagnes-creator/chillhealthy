@@ -55,6 +55,9 @@ interface BackOfficeModalProps {
   onUpdateMemberCredits: (memberId: string, deltaMeals: number) => void;
   initialTab?: 'settings' | 'packages' | 'menu' | 'redemptions' | 'members';
   onUpdateRedemptionOrder?: (order: MealRedemption) => void;
+  onUpdateMemberAccount?: (member: MemberAccount) => void;
+  onAddMemberAccount?: (member: MemberAccount) => void;
+  onDeleteMemberAccount?: (memberId: string) => void;
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -73,6 +76,9 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateMemberCredits,
   initialTab = 'settings',
   onUpdateRedemptionOrder,
+  onUpdateMemberAccount,
+  onAddMemberAccount,
+  onDeleteMemberAccount,
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -133,11 +139,121 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   // Success toast
   const [toastMsg, setToastMsg] = useState('');
 
+  // Daily 5:00 PM Member Order Report state
+  const [dailyReportDate, setDailyReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Customer Member Package Management state
+  const [memberSearch, setMemberSearch] = useState('');
+  const [editingMember, setEditingMember] = useState<MemberAccount | null>(null);
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [revealedMemberPasswords, setRevealedMemberPasswords] = useState<{ [id: string]: boolean }>({});
+
+  const togglePasswordReveal = (memberId: string) => {
+    setRevealedMemberPasswords((prev) => ({ ...prev, [memberId]: !prev[memberId] }));
+  };
+
+  // Add Member form fields
+  const [newMemName, setNewMemName] = useState('');
+  const [newMemPhone, setNewMemPhone] = useState('');
+  const [newMemPassword, setNewMemPassword] = useState('123456');
+  const [newMemPlanName, setNewMemPlanName] = useState('20-Day Transformation Plan (20餐轻食套餐)');
+  const [newMemTotalMeals, setNewMemTotalMeals] = useState<number>(20);
+  const [newMemRemainingMeals, setNewMemRemainingMeals] = useState<number>(20);
+  const [newMemAddress, setNewMemAddress] = useState('');
+  const [newMemArea, setNewMemArea] = useState('Klang');
+  const [newMemPostal, setNewMemPostal] = useState('41200');
+  const [newMemAddress2, setNewMemAddress2] = useState('');
+  const [newMemArea2, setNewMemArea2] = useState('');
+  const [newMemPostal2, setNewMemPostal2] = useState('');
+  const [newMemDietary, setNewMemDietary] = useState('');
+
   if (!isOpen) return null;
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3500);
+  };
+
+  const handleExportDaily5pmReport = (targetDate?: string) => {
+    try {
+      const exportDate = targetDate || dailyReportDate;
+      const dayOrders = redemptions.filter((r) => r.deliveryDate === exportDate);
+      const ordersToUse = dayOrders.length > 0 ? dayOrders : redemptions;
+
+      const currentHour = new Date().getHours();
+      const cutoffStatus = currentHour >= 17 ? 'Finalized (Post-5:00 PM)' : 'Pending (Pre-5:00 PM Cutoff)';
+
+      // 1. Primary Sheet: Member Order Status
+      const ordersSheetData = ordersToUse.map((r, index) => {
+        const mem = members.find((m) => m.id === r.memberId || m.phone === r.memberPhone);
+        return {
+          'No.': index + 1,
+          'Order / Ticket ID': r.id,
+          'Member Customer Name': r.memberName,
+          'Member Phone / Login ID': r.memberPhone,
+          'Subscribed Meal Package': mem?.activePackage ? mem.activePackage.planName : 'Healthy Meal Package',
+          'Current Meal Balance': mem?.activePackage ? `${mem.activePackage.remainingMeals} Meals Remaining` : 'N/A',
+          'Selected Meal (EN)': r.mealName,
+          'Selected Meal (ZH)': r.mealNameZh,
+          'Delivery Slot': r.deliverySlot,
+          'Delivery Date': r.deliveryDate,
+          'Delivery Address': r.deliveryAddress,
+          'Area': r.area,
+          'Postal Code': r.postalCode,
+          'Dietary Notes / Allergies': r.dietaryNotes || 'None',
+          'Order Status': r.status,
+          'Daily 5PM Cutoff Batch': cutoffStatus,
+          'Order Placed Time': r.createdAt || r.redeemedAt || new Date().toLocaleString(),
+        };
+      });
+
+      // 2. Summary Sheet: Kitchen Prep & Routing Summary
+      const dishCounts: { [dish: string]: number } = {};
+      const areaCounts: { [area: string]: number } = {};
+      let lunchCount = 0;
+      let dinnerCount = 0;
+
+      ordersToUse.forEach((o) => {
+        dishCounts[o.mealName] = (dishCounts[o.mealName] || 0) + 1;
+        areaCounts[o.area || 'Klang Valley'] = (areaCounts[o.area || 'Klang Valley'] || 0) + 1;
+        if (o.deliverySlot.toLowerCase().includes('lunch')) lunchCount++;
+        if (o.deliverySlot.toLowerCase().includes('dinner')) dinnerCount++;
+      });
+
+      const summarySheetData = [
+        { 'Summary Field': 'Report Type', 'Value / Details': 'Daily Member Customer Order Status (5:00 PM Cutoff)' },
+        { 'Summary Field': 'Delivery Target Date', 'Value / Details': exportDate },
+        { 'Summary Field': 'Daily 5:00 PM Cutoff Status', 'Value / Details': cutoffStatus },
+        { 'Summary Field': 'Total Member Orders', 'Value / Details': ordersToUse.length },
+        { 'Summary Field': 'Lunch Deliveries (11am-1pm)', 'Value / Details': lunchCount },
+        { 'Summary Field': 'Dinner Deliveries (5pm-7pm)', 'Value / Details': dinnerCount },
+        { 'Summary Field': '--- MEAL PORTIONS BREAKDOWN ---', 'Value / Details': '------------------------------' },
+        ...Object.entries(dishCounts).map(([dish, count]) => ({
+          'Summary Field': dish,
+          'Value / Details': `${count} Portions`,
+        })),
+        { 'Summary Field': '--- ROUTE & DISPATCH AREAS ---', 'Value / Details': '------------------------------' },
+        ...Object.entries(areaCounts).map(([area, count]) => ({
+          'Summary Field': area,
+          'Value / Details': `${count} Deliveries`,
+        })),
+        { 'Summary Field': 'Generated Timestamp', 'Value / Details': new Date().toLocaleString() },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      const wsOrders = XLSX.utils.json_to_sheet(ordersSheetData);
+      const wsSummary = XLSX.utils.json_to_sheet(summarySheetData);
+
+      XLSX.utils.book_append_sheet(workbook, wsOrders, 'Daily 5PM Member Orders');
+      XLSX.utils.book_append_sheet(workbook, wsSummary, 'Kitchen & Route Summary');
+
+      const fileName = `CHILL_Daily_Member_Orders_Report_${exportDate}_5PM.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      triggerToast(`✓ Generated 5PM Excel Report for ${ordersToUse.length} orders (${fileName})`);
+    } catch (err) {
+      console.error('5PM Excel generation error:', err);
+      triggerToast('Error generating Excel report.');
+    }
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -157,6 +273,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
     const isValidPass =
       inputPass === storedPass ||
+      inputPass === 'chilladmin2026' ||
       inputPass === 'chill@2026' ||
       inputPass === 'chillhealthy' ||
       inputPass === '0126189919' ||
@@ -373,13 +490,13 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
             <div className="mt-6 p-3.5 rounded-2xl bg-stone-100 border border-stone-200 text-[11px] text-stone-600 space-y-1 text-left">
               <div className="font-bold text-stone-800 flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Authorized Master Access Info</span>
+                <span>Authorized Admin Master Access</span>
               </div>
               <p className="text-stone-500">
-                Default Admin Name: <span className="font-mono font-bold text-stone-800">admin</span>
+                Designated Admin Name: <span className="font-mono font-bold text-stone-800">admin</span>
               </p>
               <p className="text-stone-500">
-                Default Password: <span className="font-mono font-bold text-stone-800">chill@2026</span> <span className="text-stone-400">(or kitchen phone 0126189919)</span>
+                Designated Admin Password: <span className="font-mono font-bold text-stone-800">chilladmin2026</span> <span className="text-stone-400">or chill@2026 / 0126189919</span>
               </p>
               <p className="text-[10px] text-stone-400 pt-1 border-t border-stone-200">
                 Credentials can be customized anytime in the Back Office Settings tab.
@@ -493,7 +610,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               >
                 <Clock className="w-3.5 h-3.5" />
                 <span>
-                  {language === 'en' ? 'Kitchen Redemptions' : '每日兑换配送调度'} ({redemptions.length})
+                  {language === 'en' ? 'Kitchen Orders & 5PM Report' : '后厨订单与5点报表'} ({redemptions.length})
                 </span>
               </button>
 
@@ -506,7 +623,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>{language === 'en' ? 'Member Package Credits' : '会员包月餐券管理'} ({members.length})</span>
+                <span>{language === 'en' ? 'Customer Package Orders & Info' : '会员套餐顾客与订单管理'} ({members.length})</span>
               </button>
             </div>
 
@@ -1416,6 +1533,60 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
                 return (
                   <div className="space-y-4">
+                    {/* Daily 5:00 PM Member Order Status Excel Report Card */}
+                    <div className="bg-emerald-950 text-white p-5 rounded-3xl border border-emerald-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="space-y-1.5 max-w-xl">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-[11px] border border-emerald-500/30">
+                            Daily 5:00 PM Cutoff
+                          </span>
+                          <span className="text-xs text-stone-300 flex items-center gap-1 font-mono">
+                            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Cutoff: 17:00 (5:00 PM MYT)</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            new Date().getHours() >= 17
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          }`}>
+                            {new Date().getHours() >= 17 ? '🟢 Cutoff Reached (Post-5PM)' : '⏰ Open Until 5:00 PM'}
+                          </span>
+                        </div>
+                        <h4 className="font-heading font-black text-base sm:text-lg text-white">
+                          {language === 'en'
+                            ? 'Daily 5:00 PM Member Order Status Excel Report'
+                            : '每日下午 5:00 会员订餐状态汇总报表 (.xlsx)'}
+                        </h4>
+                        <p className="text-xs text-emerald-200/80 leading-relaxed">
+                          {language === 'en'
+                            ? 'Generate detailed member orders, kitchen prep portion counts, and Klang Valley delivery routes everyday after 5:00 PM.'
+                            : '每天下午5点截单后，一键生成会员订餐状态明细、后厨备餐份数统计以及配送路线汇总Excel报表。'}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                        <div className="flex items-center gap-2 bg-stone-900/90 border border-emerald-700/60 rounded-xl px-3 py-2">
+                          <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <input
+                            type="date"
+                            value={dailyReportDate}
+                            onChange={(e) => setDailyReportDate(e.target.value)}
+                            className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleExportDaily5pmReport(dailyReportDate)}
+                          className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                          title="Generate official 5PM Cutoff Excel Sheet"
+                        >
+                          <FileSpreadsheet className="w-4 h-4 text-stone-950 shrink-0" />
+                          <span>{language === 'en' ? 'Export 5PM Report (.xlsx)' : '导出每日5点报表 (.xlsx)'}</span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Header & Export Controls */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs">
                       <div>
@@ -1443,7 +1614,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           title="Generate Excel (.xlsx) form with all order details"
                         >
                           <FileSpreadsheet className="w-4 h-4" />
-                          <span>{language === 'en' ? 'Export Excel Report (.xlsx)' : '生成后厨Excel备餐表'}</span>
+                          <span>{language === 'en' ? 'Export General Excel' : '生成后厨Excel备餐表'}</span>
                         </button>
 
                         <button
@@ -1825,105 +1996,808 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               })()}
 
               {/* =========================================================
-                  TAB 5: MEMBER CREDITS & USERS
+                  TAB 5: CUSTOMER MEAL PACKAGE ORDERS & MEMBER INFO
                   ========================================================= */}
-              {activeTab === 'members' && (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="font-heading font-extrabold text-base text-stone-900">
-                        Registered Member Package Subscriptions
-                      </h4>
-                      <p className="text-xs text-stone-500">
-                        View customer meal balances or grant bonus redemption credits
-                      </p>
-                    </div>
-                  </div>
+              {activeTab === 'members' && (() => {
+                const filteredMembers = members.filter((m) => {
+                  if (!memberSearch.trim()) return true;
+                  const q = memberSearch.toLowerCase();
+                  return (
+                    m.name.toLowerCase().includes(q) ||
+                    m.phone.includes(q) ||
+                    (m.email && m.email.toLowerCase().includes(q)) ||
+                    (m.memberNumber && m.memberNumber.toLowerCase().includes(q)) ||
+                    (m.address && m.address.toLowerCase().includes(q)) ||
+                    (m.address2 && m.address2.toLowerCase().includes(q)) ||
+                    (m.area && m.area.toLowerCase().includes(q)) ||
+                    (m.activePackage && m.activePackage.planName.toLowerCase().includes(q))
+                  );
+                });
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {members.map((mem) => (
-                      <div
-                        key={mem.id}
-                        className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h5 className="font-bold text-sm text-stone-900">{mem.name}</h5>
-                            <p className="text-xs text-stone-500 flex items-center gap-1.5 mt-0.5">
-                              <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px]">ID: {mem.memberNumber || mem.phone}</span>
-                              <span>·</span>
-                              <span>{mem.email}</span>
-                            </p>
-                            <div className="mt-1.5 text-[11px] text-stone-600 space-y-0.5">
-                              <p className="truncate">
-                                <span className="font-bold text-emerald-800">Addr 1:</span> {mem.address}, {mem.area} {mem.postalCode}
-                              </p>
-                              {mem.address2 && (
-                                <p className="truncate">
-                                  <span className="font-bold text-emerald-700">Addr 2:</span> {mem.address2}, {mem.area2 || mem.area} {mem.postalCode2 || ''}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                            Member
+                const totalMealsInCirculation = members.reduce(
+                  (sum, m) => sum + (m.activePackage?.remainingMeals || 0),
+                  0
+                );
+
+                const handleSaveMemberChanges = (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!editingMember) return;
+
+                  if (onUpdateMemberAccount) {
+                    onUpdateMemberAccount(editingMember);
+                  }
+                  triggerToast(`✓ Updated info for ${editingMember.name} successfully!`);
+                  setEditingMember(null);
+                };
+
+                const handleCreateNewMember = (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!newMemName.trim() || !newMemPhone.trim()) {
+                    triggerToast('Please provide customer name and phone number.');
+                    return;
+                  }
+
+                  const newAccount: MemberAccount = {
+                    id: `mem-${Date.now()}`,
+                    name: newMemName.trim(),
+                    phone: newMemPhone.trim(),
+                    email: `${newMemPhone.trim().replace(/\D/g, '')}@chillhealthy.customer`,
+                    password: newMemPassword.trim() || '123456',
+                    address: newMemAddress.trim() || 'Klang Central',
+                    area: newMemArea.trim() || 'Klang',
+                    postalCode: newMemPostal.trim() || '41200',
+                    address2: newMemAddress2.trim() || undefined,
+                    area2: newMemArea2.trim() || undefined,
+                    postalCode2: newMemPostal2.trim() || undefined,
+                    dietaryPreferences: newMemDietary.trim() || undefined,
+                    activePackage: {
+                      planId: 'custom-plan',
+                      planName: newMemPlanName,
+                      planNameZh: newMemPlanName,
+                      totalMeals: Number(newMemTotalMeals) || 20,
+                      remainingMeals: Number(newMemRemainingMeals) || 20,
+                      purchasedDate: new Date().toISOString().split('T')[0],
+                      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    },
+                    creditsHistory: [
+                      {
+                        id: `cred-${Date.now()}`,
+                        date: new Date().toISOString().split('T')[0],
+                        type: 'purchase',
+                        amount: Number(newMemRemainingMeals) || 20,
+                        note: 'Initial meal package registration',
+                      },
+                    ],
+                  };
+
+                  if (onAddMemberAccount) {
+                    onAddMemberAccount(newAccount);
+                  }
+                  triggerToast(`✓ Registered new meal package customer: ${newAccount.name}`);
+                  setIsAddingMember(false);
+
+                  // Reset form
+                  setNewMemName('');
+                  setNewMemPhone('');
+                  setNewMemAddress('');
+                  setNewMemAddress2('');
+                  setNewMemDietary('');
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {/* Header & Quick Stats */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-heading font-extrabold text-base text-stone-900">
+                            {language === 'en' ? 'Customer Meal Package Orders & Member Accounts' : '会员套餐顾客与订单管理'}
+                          </h4>
+                          <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                            {filteredMembers.length} {language === 'en' ? 'Members' : '位会员'}
                           </span>
                         </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {language === 'en'
+                            ? 'Monitor meal balances, edit customer details, addresses, and meal package credits.'
+                            : '监控顾客剩余餐券余额、修改会员地址、登录信息及套餐详情。'}
+                        </p>
+                      </div>
 
-                        <div className="bg-stone-50 p-3 rounded-xl text-xs space-y-1">
-                          <div className="flex justify-between text-stone-600">
-                            <span>Package:</span>
-                            <span className="font-bold text-stone-900">
-                              {mem.activePackage ? mem.activePackage.planName : 'No Active Plan'}
-                            </span>
-                          </div>
-                          {mem.activePackage && (
-                            <div className="flex justify-between items-center pt-1 border-t border-stone-200">
-                              <span>Meal Credits:</span>
-                              <span className="font-heading font-black text-emerald-800 text-sm">
-                                {mem.activePackage.remainingMeals} / {mem.activePackage.totalMeals} Meals
-                              </span>
-                            </div>
-                          )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingMember(true)}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Register Customer Package' : '录入新会员套餐'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Stats Pills */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3 bg-white rounded-2xl border border-stone-200 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                          <Users className="w-5 h-5" />
                         </div>
-
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onUpdateMemberCredits(mem.id, 5);
-                              triggerToast(`✓ Added 5 meal credits to ${mem.name}`);
-                            }}
-                            className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors cursor-pointer text-center"
-                          >
-                            +5 Meals
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onUpdateMemberCredits(mem.id, 1);
-                              triggerToast(`✓ Added 1 meal credit to ${mem.name}`);
-                            }}
-                            className="flex-1 py-1.5 px-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-colors cursor-pointer text-center"
-                          >
-                            +1 Meal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onUpdateMemberCredits(mem.id, -1);
-                              triggerToast(`✓ Deducted 1 meal credit from ${mem.name}`);
-                            }}
-                            className="py-1.5 px-3 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition-colors cursor-pointer text-center"
-                          >
-                            -1 Meal
-                          </button>
+                        <div>
+                          <span className="text-xs text-stone-500 block">Total Registered Customers</span>
+                          <span className="font-heading font-black text-lg text-stone-900">{members.length} Members</span>
                         </div>
                       </div>
-                    ))}
+
+                      <div className="p-3 bg-white rounded-2xl border border-stone-200 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                          <Package className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-xs text-stone-500 block">Active Package Plans</span>
+                          <span className="font-heading font-black text-lg text-stone-900">
+                            {members.filter((m) => (m.activePackage?.remainingMeals || 0) > 0).length} Active
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-white rounded-2xl border border-stone-200 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                          <Utensils className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-xs text-stone-500 block">Remaining Meals in Circulation</span>
+                          <span className="font-heading font-black text-lg text-stone-900">{totalMealsInCirculation} Meals</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="bg-white p-3 rounded-2xl border border-stone-200 flex items-center gap-2">
+                      <Search className="w-4 h-4 text-stone-400 shrink-0" />
+                      <input
+                        type="text"
+                        placeholder={language === 'en' ? 'Search customer by name, login phone, package, or address...' : '搜索会员姓名、登录手机、套餐或送餐地址...'}
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        className="w-full text-xs bg-transparent focus:outline-none text-stone-800"
+                      />
+                      {memberSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setMemberSearch('')}
+                          className="text-stone-400 hover:text-stone-600 text-xs px-2"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Customer Member Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredMembers.map((mem) => {
+                        const isPassRevealed = revealedMemberPasswords[mem.id] || false;
+                        const remaining = mem.activePackage?.remainingMeals || 0;
+                        const total = mem.activePackage?.totalMeals || 0;
+
+                        return (
+                          <div
+                            key={mem.id}
+                            className="p-4 rounded-3xl border border-stone-200 bg-white shadow-2xs space-y-3.5 hover:border-emerald-300 transition-all flex flex-col justify-between"
+                          >
+                            <div className="space-y-3">
+                              {/* Top row: Name, Login ID & Badge */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <h5 className="font-bold text-base text-stone-900 flex items-center gap-2">
+                                    <span>{mem.name}</span>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                      Member
+                                    </span>
+                                  </h5>
+                                  <p className="text-xs text-stone-500 flex items-center gap-1.5 mt-0.5">
+                                    <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
+                                      Login ID: {mem.phone}
+                                    </span>
+                                    {mem.memberNumber && (
+                                      <span className="text-stone-400 text-[11px]">({mem.memberNumber})</span>
+                                    )}
+                                  </p>
+                                </div>
+
+                                <div className="text-right">
+                                  <span className="text-xs text-stone-400 block text-[10px]">Meal Balance</span>
+                                  <span className="font-heading font-black text-emerald-800 text-base">
+                                    {remaining} / {total}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Login Password row (viewable by admin) */}
+                              <div className="flex items-center justify-between px-3 py-2 bg-stone-50 rounded-xl text-xs border border-stone-200/80">
+                                <div className="flex items-center gap-1.5 text-stone-600">
+                                  <Lock className="w-3.5 h-3.5 text-stone-400" />
+                                  <span className="font-medium">Password:</span>
+                                  <span className="font-mono font-bold text-stone-900">
+                                    {isPassRevealed ? mem.password || '123456' : '••••••••'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => togglePasswordReveal(mem.id)}
+                                  className="text-[11px] text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  {isPassRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  <span>{isPassRevealed ? 'Hide' : 'Reveal'}</span>
+                                </button>
+                              </div>
+
+                              {/* Package Info Card */}
+                              <div className="bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100 text-xs space-y-1.5">
+                                <div className="flex justify-between items-center text-stone-700">
+                                  <span className="font-medium text-stone-500">Subscribed Plan:</span>
+                                  <span className="font-bold text-emerald-950 text-right">
+                                    {mem.activePackage ? mem.activePackage.planName : 'No Active Plan'}
+                                  </span>
+                                </div>
+                                {mem.activePackage && (
+                                  <div className="flex justify-between items-center text-stone-500 text-[11px] pt-1 border-t border-emerald-100">
+                                    <span>Purchased: {mem.activePackage.purchasedDate || 'Recent'}</span>
+                                    <span>Expires: {mem.activePackage.expiryDate || '60 Days'}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Delivery Addresses */}
+                              <div className="text-[11px] text-stone-600 space-y-1 bg-stone-50/70 p-2.5 rounded-xl border border-stone-200/70">
+                                <p className="truncate">
+                                  <span className="font-bold text-emerald-800">Primary (Addr 1):</span> {mem.address}, {mem.area} {mem.postalCode}
+                                </p>
+                                {mem.address2 ? (
+                                  <p className="truncate">
+                                    <span className="font-bold text-emerald-700">Secondary (Addr 2):</span> {mem.address2}, {mem.area2 || mem.area} {mem.postalCode2 || ''}
+                                  </p>
+                                ) : (
+                                  <p className="text-stone-400 italic">Secondary address: None configured</p>
+                                )}
+                                {mem.dietaryPreferences && (
+                                  <p className="text-amber-800 font-medium truncate pt-1 border-t border-stone-200/60">
+                                    <span className="font-bold">Dietary Notes:</span> {mem.dietaryPreferences}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Bottom Controls: Quick adjustments & Edit & WhatsApp */}
+                            <div className="space-y-2 pt-2 border-t border-stone-100">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateMemberCredits(mem.id, 5);
+                                    triggerToast(`✓ Added 5 meal credits to ${mem.name}`);
+                                  }}
+                                  className="flex-1 py-1 px-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold transition-colors cursor-pointer text-center"
+                                  title="Add 5 meal credits"
+                                >
+                                  +5 Meals
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateMemberCredits(mem.id, 1);
+                                    triggerToast(`✓ Added 1 meal credit to ${mem.name}`);
+                                  }}
+                                  className="flex-1 py-1 px-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] font-bold transition-colors cursor-pointer text-center"
+                                  title="Add 1 meal credit"
+                                >
+                                  +1 Meal
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateMemberCredits(mem.id, -1);
+                                    triggerToast(`✓ Deducted 1 meal credit from ${mem.name}`);
+                                  }}
+                                  className="py-1 px-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[11px] font-bold transition-colors cursor-pointer text-center"
+                                  title="Deduct 1 meal credit"
+                                >
+                                  -1 Meal
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMember(JSON.parse(JSON.stringify(mem)))}
+                                  className="flex-1 py-2 px-3 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>{language === 'en' ? 'Edit Customer & Package Info' : '修改会员与套餐信息'}</span>
+                                </button>
+
+                                <a
+                                  href={buildWhatsAppUrl(
+                                    mem.phone,
+                                    `Hi ${mem.name}, this is CHILL Healthy Kitchen regarding your meal package (Remaining balance: ${remaining} meals).`
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="py-2 px-3 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 text-emerald-800 font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer border border-[#25D366]/30"
+                                  title="WhatsApp Customer"
+                                >
+                                  <Phone className="w-3.5 h-3.5 text-[#25D366]" />
+                                  <span className="hidden sm:inline">WhatsApp</span>
+                                </a>
+
+                                {onDeleteMemberAccount && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`Delete member record for ${mem.name}? This will remove their meal plan access.`)) {
+                                        onDeleteMemberAccount(mem.id);
+                                        triggerToast(`✓ Deleted member ${mem.name}`);
+                                      }
+                                    }}
+                                    className="p-2 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
+                                    title="Delete Member"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* MODAL 1: EDIT CUSTOMER & PACKAGE INFO */}
+                    {editingMember && (
+                      <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+                        <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+                          <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between border-b border-stone-800">
+                            <div className="flex items-center gap-2">
+                              <Edit2 className="w-4 h-4 text-emerald-400" />
+                              <h4 className="font-heading font-black text-sm sm:text-base text-white">
+                                {language === 'en' ? 'Edit Customer & Meal Package Details' : '编辑顾客信息与套餐详情'}
+                              </h4>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditingMember(null)}
+                              className="text-stone-400 hover:text-white cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          <form onSubmit={handleSaveMemberChanges} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+                            {/* Section 1: Customer Account Credentials */}
+                            <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                              <h5 className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Customer Identity & Login Credentials</span>
+                              </h5>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Customer Full Name *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={editingMember.name}
+                                    onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Login Phone Number (Member ID) *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={editingMember.phone}
+                                    onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Login Password *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={editingMember.password || '123456'}
+                                    onChange={(e) => setEditingMember({ ...editingMember, password: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Email / Alternate ID</label>
+                                  <input
+                                    type="text"
+                                    value={editingMember.email || ''}
+                                    onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 2: Meal Package Credits & Balance */}
+                            <div className="space-y-3 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
+                              <h5 className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                                <Package className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Meal Package Subscription & Remaining Balance</span>
+                              </h5>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="sm:col-span-3">
+                                  <label className="font-bold text-stone-700 block mb-1">Subscribed Package Plan Name</label>
+                                  <input
+                                    type="text"
+                                    value={editingMember.activePackage?.planName || ''}
+                                    onChange={(e) => {
+                                      const curPkg = editingMember.activePackage || {
+                                        planId: 'custom-pkg',
+                                        planName: '',
+                                        planNameZh: '',
+                                        totalMeals: 20,
+                                        remainingMeals: 20,
+                                        purchasedDate: new Date().toISOString().split('T')[0],
+                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                      };
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: { ...curPkg, planName: e.target.value, planNameZh: e.target.value },
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Remaining Meal Balance *</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    required
+                                    value={editingMember.activePackage?.remainingMeals ?? 0}
+                                    onChange={(e) => {
+                                      const val = Math.max(0, parseInt(e.target.value) || 0);
+                                      const curPkg = editingMember.activePackage || {
+                                        planId: 'custom-pkg',
+                                        planName: 'Healthy Meal Plan',
+                                        planNameZh: 'Healthy Meal Plan',
+                                        totalMeals: val,
+                                        remainingMeals: val,
+                                        purchasedDate: new Date().toISOString().split('T')[0],
+                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                      };
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: { ...curPkg, remainingMeals: val },
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white font-black text-emerald-900 text-sm focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Total Meals in Package</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={editingMember.activePackage?.totalMeals ?? 20}
+                                    onChange={(e) => {
+                                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                                      const curPkg = editingMember.activePackage || {
+                                        planId: 'custom-pkg',
+                                        planName: 'Healthy Meal Plan',
+                                        planNameZh: 'Healthy Meal Plan',
+                                        totalMeals: val,
+                                        remainingMeals: val,
+                                        purchasedDate: new Date().toISOString().split('T')[0],
+                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                      };
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: { ...curPkg, totalMeals: val },
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Package Expiry Date</label>
+                                  <input
+                                    type="date"
+                                    value={editingMember.activePackage?.expiryDate || ''}
+                                    onChange={(e) => {
+                                      const curPkg = editingMember.activePackage || {
+                                        planId: 'custom-pkg',
+                                        planName: 'Healthy Meal Plan',
+                                        planNameZh: 'Healthy Meal Plan',
+                                        totalMeals: 20,
+                                        remainingMeals: 20,
+                                        purchasedDate: new Date().toISOString().split('T')[0],
+                                        expiryDate: e.target.value,
+                                      };
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: { ...curPkg, expiryDate: e.target.value },
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 3: Delivery Addresses */}
+                            <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                              <h5 className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Saved Delivery Addresses (Primary & Secondary)</span>
+                              </h5>
+
+                              {/* Primary Address */}
+                              <div className="space-y-2">
+                                <span className="font-bold text-emerald-800 text-[11px] block">Primary Address (Default) *</span>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Street address, unit, building..."
+                                  value={editingMember.address}
+                                  onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Area (e.g. Klang, Shah Alam, Subang)"
+                                    value={editingMember.area}
+                                    onChange={(e) => setEditingMember({ ...editingMember, area: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Postal Code"
+                                    value={editingMember.postalCode}
+                                    onChange={(e) => setEditingMember({ ...editingMember, postalCode: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Secondary Address */}
+                              <div className="space-y-2 pt-2 border-t border-stone-200">
+                                <span className="font-bold text-emerald-700 text-[11px] block">Secondary Address (Office / Home 2)</span>
+                                <input
+                                  type="text"
+                                  placeholder="Secondary address line..."
+                                  value={editingMember.address2 || ''}
+                                  onChange={(e) => setEditingMember({ ...editingMember, address2: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Secondary Area"
+                                    value={editingMember.area2 || ''}
+                                    onChange={(e) => setEditingMember({ ...editingMember, area2: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Secondary Postal Code"
+                                    value={editingMember.postalCode2 || ''}
+                                    onChange={(e) => setEditingMember({ ...editingMember, postalCode2: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Dietary Notes */}
+                              <div className="pt-2 border-t border-stone-200">
+                                <label className="font-bold text-stone-700 block mb-1">Customer Dietary Preferences & Allergens</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. No beef, low sodium, allergy to peanuts, sauce on side"
+                                  value={editingMember.dietaryPreferences || ''}
+                                  onChange={(e) => setEditingMember({ ...editingMember, dietaryPreferences: e.target.value })}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Footer Submit Buttons */}
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMember(null)}
+                                className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-100 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center gap-2 shadow-md cursor-pointer"
+                              >
+                                <Save className="w-4 h-4" />
+                                <span>Save Customer Changes</span>
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODAL 2: REGISTER NEW CUSTOMER PACKAGE */}
+                    {isAddingMember && (
+                      <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+                        <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+                          <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between border-b border-stone-800">
+                            <div className="flex items-center gap-2">
+                              <Plus className="w-4 h-4 text-emerald-400" />
+                              <h4 className="font-heading font-black text-sm sm:text-base text-white">
+                                {language === 'en' ? 'Register New Customer Meal Package' : '录入新会员套餐与订餐顾客'}
+                              </h4>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsAddingMember(false)}
+                              className="text-stone-400 hover:text-white cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          <form onSubmit={handleCreateNewMember} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 text-xs">
+                            <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                              <h5 className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Customer Info & Credentials</span>
+                              </h5>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Customer Name *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. Tan Ah Hock"
+                                    value={newMemName}
+                                    onChange={(e) => setNewMemName(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Phone (Member Login ID) *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. 012-3456789"
+                                    value={newMemPhone}
+                                    onChange={(e) => setNewMemPhone(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Initial Password *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={newMemPassword}
+                                    onChange={(e) => setNewMemPassword(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
+                              <h5 className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                                <Package className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Meal Package & Credits</span>
+                              </h5>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="sm:col-span-3">
+                                  <label className="font-bold text-stone-700 block mb-1">Package Name</label>
+                                  <input
+                                    type="text"
+                                    value={newMemPlanName}
+                                    onChange={(e) => setNewMemPlanName(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Total Package Meals</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={newMemTotalMeals}
+                                    onChange={(e) => setNewMemTotalMeals(parseInt(e.target.value) || 20)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Starting Meal Balance *</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={newMemRemainingMeals}
+                                    onChange={(e) => setNewMemRemainingMeals(parseInt(e.target.value) || 0)}
+                                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white font-black text-emerald-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                              <h5 className="font-bold text-stone-900 text-xs flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Delivery Address</span>
+                              </h5>
+
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Street address (Unit, Building, Street)..."
+                                  value={newMemAddress}
+                                  onChange={(e) => setNewMemAddress(e.target.value)}
+                                  className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Area (e.g. Klang, Shah Alam, Petaling Jaya)"
+                                    value={newMemArea}
+                                    onChange={(e) => setNewMemArea(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Postal Code"
+                                    value={newMemPostal}
+                                    onChange={(e) => setNewMemPostal(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingMember(false)}
+                                className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-100 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center gap-2 shadow-md cursor-pointer"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Save and Activate Member</span>
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </>
         )}

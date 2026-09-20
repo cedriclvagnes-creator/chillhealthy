@@ -667,6 +667,26 @@ export default function App() {
     );
   };
 
+  const handleUpdateMemberAccount = (updatedMember: MemberAccount) => {
+    setMembers((prev) =>
+      prev.map((m) => (m.id === updatedMember.id ? updatedMember : m))
+    );
+    if (currentMember?.id === updatedMember.id) {
+      setCurrentMember(updatedMember);
+    }
+  };
+
+  const handleAddMemberAccount = (newMember: MemberAccount) => {
+    setMembers((prev) => [newMember, ...prev]);
+  };
+
+  const handleDeleteMemberAccount = (memberId: string) => {
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
+    if (currentMember?.id === memberId) {
+      setCurrentMember(null);
+    }
+  };
+
   // Cart operations
   const handleAddToCart = (newItem: CartItem) => {
     setCart((prevCart) => {
@@ -929,6 +949,9 @@ export default function App() {
           onUpdateRedemptionOrder={handleUpdateRedemptionOrder}
           members={members}
           onUpdateMemberCredits={handleUpdateMemberCredits}
+          onUpdateMemberAccount={handleUpdateMemberAccount}
+          onAddMemberAccount={handleAddMemberAccount}
+          onDeleteMemberAccount={handleDeleteMemberAccount}
           initialTab={backOfficeTab}
         />
       )}
