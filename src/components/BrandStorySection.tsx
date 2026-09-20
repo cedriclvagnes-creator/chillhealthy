@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle } from 'lucide-react';
+import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle, Instagram } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { CraftedWithCarePhoto } from './CraftedWithCarePhoto';
 
@@ -17,27 +17,35 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({ language, 
           <div className="lg:col-span-5 relative">
             <CraftedWithCarePhoto language={language} />
 
-            {/* Founder callout */}
-            <div className="mt-4 p-4 rounded-2xl bg-white border border-stone-200 flex items-center gap-3 shadow-xs">
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#3b6026] shadow-xs shrink-0 bg-stone-100">
-                <img
-                  src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=300&q=80"
-                  alt="Agnes Lim"
-                  className="w-full h-full object-cover"
-                />
+            {/* Official Instagram callout */}
+            <a
+              href="https://www.instagram.com/chillhealthybox/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 p-4 rounded-2xl bg-white border border-stone-200 flex items-center justify-between gap-3 shadow-xs hover:border-pink-300 hover:shadow-md transition-all group cursor-pointer"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600 shadow-xs shrink-0">
+                  <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                    <Instagram className="w-6 h-6 text-pink-600" />
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-stone-900 flex items-center gap-1.5 flex-wrap">
+                    <span>CHILL Healthy</span>
+                    <span className="text-[11px] font-bold text-pink-600">@chillhealthybox</span>
+                  </p>
+                  <p className="text-[11px] text-[#3b6026] font-medium truncate">
+                    {language === 'en'
+                      ? 'Official Instagram · Daily Prep & Meal Posts'
+                      : '官方 Instagram · 每日便当制作与真实顾客分享'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
-                  <span>{language === 'en' ? 'Agnes Lim' : '创办人 Agnes Lim'}</span>
-                  <span className="text-[11px] font-normal text-stone-500">(@agneswei_wei)</span>
-                </p>
-                <p className="text-[11px] text-[#3b6026] font-medium">
-                  {language === 'en'
-                    ? 'Founder & Clean Eating Advocate, CHILL Healthy'
-                    : 'CHILL Healthy 潮轻食创办人 · 健康轻食倡导者'}
-                </p>
-              </div>
-            </div>
+              <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2.5 py-1.5 rounded-xl border border-pink-200 group-hover:bg-gradient-to-r group-hover:from-pink-600 group-hover:to-purple-600 group-hover:text-white transition-all shrink-0">
+                {language === 'en' ? 'Follow IG' : '关注 IG'}
+              </span>
+            </a>
           </div>
 
           {/* Right Column: Mission & Commitments */}

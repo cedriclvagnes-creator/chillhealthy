@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Menu, X, Phone, MessageCircle, Globe, Sparkles, Clock, MapPin, User, Shield, CheckCircle } from 'lucide-react';
+import { ShoppingBag, Menu, X, Phone, MessageCircle, Globe, Sparkles, Clock, MapPin, User, Shield, CheckCircle, Instagram } from 'lucide-react';
 import { Language, CartItem, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
@@ -67,6 +67,18 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium">
+            <a
+              id="instagram-top-link"
+              href="https://www.instagram.com/chillhealthybox/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer"
+              title="Instagram @chillhealthybox"
+            >
+              <Instagram className="w-3.5 h-3.5" />
+              <span>@chillhealthybox</span>
+            </a>
+
             <a
               id="whatsapp-top-link"
               href={`${waBaseUrl}?text=Hello%20CHILL%20Healthy%20team,%20I%20would%20like%20to%20inquire%20about%20meal%20orders!`}
@@ -180,6 +192,20 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 {language === 'en' ? 'Coverage' : '配送范围'}
+              </button>
+
+              <button
+                id="nav-link-instagram"
+                onClick={() => scrollToSection('instagram')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                  activeSection === 'instagram' ? 'text-pink-700 bg-pink-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                }`}
+              >
+                <Instagram className="w-3.5 h-3.5 text-pink-600" />
+                <span>{language === 'en' ? 'IG Posts' : 'IG 动态'}</span>
+                <span className="text-[10px] bg-pink-100 text-pink-700 font-bold px-1.5 py-0.2 rounded-full hidden xl:inline">
+                  @chillhealthybox
+                </span>
               </button>
             </nav>
 
@@ -325,7 +351,14 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => scrollToSection('story')}
               className="w-full text-left py-2.5 px-3 rounded-lg text-stone-800 font-medium hover:bg-stone-100 cursor-pointer"
             >
-              {language === 'en' ? 'Our Story (@agneswei_wei)' : '关于潮轻食品牌故事'}
+              {language === 'en' ? 'Our Story (@chillhealthybox)' : '关于潮轻食品牌故事'}
+            </button>
+            <button
+              onClick={() => scrollToSection('instagram')}
+              className="w-full text-left py-2.5 px-3 rounded-lg text-pink-700 font-medium hover:bg-pink-50 cursor-pointer flex items-center justify-between"
+            >
+              <span>{language === 'en' ? 'Instagram Posts (@chillhealthybox)' : '官方 Instagram 动态 (@chillhealthybox)'}</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">IG</span>
             </button>
             <button
               onClick={() => scrollToSection('delivery')}

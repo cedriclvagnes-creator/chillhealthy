@@ -855,6 +855,45 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Instagram Profile Settings */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        Official Instagram Handle
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="@chillhealthybox"
+                        value={formSettings.instagramHandle || '@chillhealthybox'}
+                        onChange={(e) =>
+                          setFormSettings({
+                            ...formSettings,
+                            instagramHandle: e.target.value,
+                          })
+                        }
+                        className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        Instagram Profile Link URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://www.instagram.com/chillhealthybox/"
+                        value={formSettings.instagramUrl || 'https://www.instagram.com/chillhealthybox/'}
+                        onChange={(e) =>
+                          setFormSettings({
+                            ...formSettings,
+                            instagramUrl: e.target.value,
+                          })
+                        }
+                        className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
+                  </div>
+
                   <button
                     type="submit"
                     className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md transition-colors cursor-pointer"

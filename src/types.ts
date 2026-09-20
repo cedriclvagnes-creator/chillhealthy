@@ -143,6 +143,8 @@ export interface SiteSettings {
   announcementZh: string;
   kitchenAddress: string;
   kitchenHours: string;
+  instagramHandle?: string;
+  instagramUrl?: string;
 }
 
 export interface MemberAccount {

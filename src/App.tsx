@@ -7,6 +7,7 @@ import { OrderGuideSection } from './components/OrderGuideSection';
 import { CalorieGoalCalculator } from './components/CalorieGoalCalculator';
 import { MealDetailModal } from './components/MealDetailModal';
 import { BrandStorySection } from './components/BrandStorySection';
+import { InstagramFeedSection } from './components/InstagramFeedSection';
 import { DeliverySection } from './components/DeliverySection';
 import { ReviewsSection } from './components/ReviewsSection';
 import { CartDrawer } from './components/CartDrawer';
@@ -212,14 +213,18 @@ export default function App() {
       const hash = window.location.hash.toLowerCase();
       const pathname = window.location.pathname.toLowerCase();
 
-      // Member portal & order portal sublink
+      // Member portal & order/redeem portal sublink
       if (
         hash === '#portal' ||
         hash === '#member' ||
         hash === '#order' ||
+        hash === '#redeem' ||
         search.includes('portal=true') ||
         search.includes('page=portal') ||
-        pathname.endsWith('/portal')
+        search.includes('redeem=true') ||
+        search.includes('page=redeem') ||
+        pathname.endsWith('/portal') ||
+        pathname.endsWith('/redeem')
       ) {
         setIsMemberPortalOpen(true);
       }
@@ -815,6 +820,22 @@ export default function App() {
         <BrandStorySection
           language={language}
           siteSettings={siteSettings}
+        />
+
+        <InstagramFeedSection
+          language={language}
+          siteSettings={siteSettings}
+          onSelectMealByName={(name) => {
+            const found = menuItems.find((m) =>
+              m.name.toLowerCase().includes(name.toLowerCase()) ||
+              name.toLowerCase().includes(m.name.toLowerCase())
+            );
+            if (found) {
+              setSelectedMealForDetail(found);
+            } else {
+              scrollToSection('menu');
+            }
+          }}
         />
 
         <DeliverySection language={language} />

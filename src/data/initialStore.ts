@@ -8,6 +8,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   announcementZh: '🌿 巴生河流域及吉隆坡高品质午餐与晚餐外卖餐盒 · 官方 WhatsApp: +60126189919',
   kitchenAddress: 'CHILL Healthy Kitchen, Klang & Selangor Delivery Hub, Malaysia',
   kitchenHours: 'Mon – Sat: 8:30 AM – 7:30 PM (Sun: Kitchen prep & rest)',
+  instagramHandle: '@chillhealthybox',
+  instagramUrl: 'https://www.instagram.com/chillhealthybox/',
 };
 
 export const INITIAL_MEMBERS: MemberAccount[] = [

@@ -68,11 +68,11 @@ export const Footer: React.FC<FooterProps> = ({
                 <Facebook className="w-5 h-5" />
               </a>
               <a
-                href="https://instagram.com/agneswei_wei"
+                href={siteSettings.instagramUrl || "https://www.instagram.com/chillhealthybox/"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-9 h-9 rounded-xl bg-stone-800 text-stone-300 hover:bg-stone-700 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                title="Instagram @agneswei_wei"
+                className="w-9 h-9 rounded-xl bg-stone-800 text-stone-300 hover:bg-gradient-to-tr hover:from-amber-500 hover:via-pink-500 hover:to-purple-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                title="Instagram @chillhealthybox"
               >
                 <Instagram className="w-5 h-5" />
               </a>
@@ -191,8 +191,8 @@ export const Footer: React.FC<FooterProps> = ({
                 {language === 'en' ? 'Official Channels Advisory:' : '认准官方唯一订餐通道:'}
               </span>
               {language === 'en'
-                ? `Official orders are processed exclusively through chillhealthy.com and our verified WhatsApp at ${siteSettings.whatsappDisplay}. Founder: @agneswei_wei.`
-                : `请注意仅通过官方网站 chillhealthy.com 及官方客服 WhatsApp ${siteSettings.whatsappDisplay} 订餐，谨防网络第三方仿冒链接。创办人：@agneswei_wei。`}
+                ? `Official orders are processed exclusively through chillhealthy.com and our verified WhatsApp at ${siteSettings.whatsappDisplay}. Follow our daily meal creations on Instagram: @chillhealthybox.`
+                : `请注意仅通过官方网站 chillhealthy.com 及官方客服 WhatsApp ${siteSettings.whatsappDisplay} 订餐，谨防网络第三方仿冒链接。关注官方 Instagram：@chillhealthybox。`}
             </div>
           </div>
         </div>
