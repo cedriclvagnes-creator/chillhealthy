@@ -1,11 +1,11 @@
 import { SiteSettings, MemberAccount, MealRedemption } from '../types';
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
-  whatsappNumber: '0126189919',
-  whatsappDisplay: '012-618 9919',
+  whatsappNumber: '60126189919',
+  whatsappDisplay: '+60126189919',
   logoUrl: '/chill-healthy-logo.svg',
-  announcementEn: '🌿 Fresh Daily Lunch Box Delivery Across Klang Valley & KL · WhatsApp: 012-618 9919',
-  announcementZh: '🌿 巴生河流域及吉隆坡高品质轻食外卖与包月餐盒 · 官方订餐热线：012-618 9919',
+  announcementEn: '🌿 Fresh Daily Lunch & Dinner Bento Delivery Across Klang Valley & KL · WhatsApp: +60126189919',
+  announcementZh: '🌿 巴生河流域及吉隆坡高品质午餐与晚餐外卖餐盒 · 官方 WhatsApp: +60126189919',
   kitchenAddress: 'CHILL Healthy Kitchen, Klang & Selangor Delivery Hub, Malaysia',
   kitchenHours: 'Mon – Sat: 8:30 AM – 7:30 PM (Sun: Kitchen prep & rest)',
 };

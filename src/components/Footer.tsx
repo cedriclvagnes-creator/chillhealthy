@@ -167,7 +167,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <span>
                   WhatsApp:{' '}
                   <a
-                    href={`https://wa.me/60${siteSettings.whatsappNumber}`}
+                    href={`https://wa.me/60${(siteSettings.whatsappNumber || '0126189919').replace(/\D/g, '').replace(/^(60|0)/, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-white hover:text-emerald-400 font-bold underline decoration-stone-600 cursor-pointer"

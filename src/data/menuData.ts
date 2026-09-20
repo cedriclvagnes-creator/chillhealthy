@@ -1593,11 +1593,11 @@ export const REVIEWS: Review[] = [
 ];
 
 export const DELIVERY_AREAS = [
-  { name: 'Klang (巴生核心区)', fee: 'FREE (满 RM 35 免运)', minOrder: 20, time: '11:00 AM - 12:15 PM' },
-  { name: 'Shah Alam (莎阿南)', fee: 'FREE (满 RM 40 免运)', minOrder: 25, time: '11:15 AM - 12:30 PM' },
-  { name: 'Subang Jaya & USJ (梳邦再也)', fee: 'FREE (满 RM 45 免运)', minOrder: 30, time: '11:30 AM - 12:45 PM' },
-  { name: 'Petaling Jaya / Damansara (八打灵 / 白沙罗)', fee: 'FREE (满 RM 50 免运)', minOrder: 35, time: '11:45 AM - 1:00 PM' },
-  { name: 'Puchong (蒲种)', fee: 'FREE (满 RM 45 免运)', minOrder: 30, time: '11:30 AM - 12:45 PM' },
-  { name: 'Kuala Lumpur CBD / Bangsar / Sentral (吉隆坡市区)', fee: 'FREE (满 RM 50 免运)', minOrder: 40, time: '11:45 AM - 1:00 PM' },
-  { name: 'Cheras / Ampang (蕉赖 / 安邦)', fee: 'RM 5.00 (满 RM 60 免运)', minOrder: 40, time: '12:00 PM - 1:15 PM' },
+  { name: 'Klang (巴生核心区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Shah Alam (莎阿南)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Subang Jaya & USJ (梳邦再也)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Petaling Jaya / Damansara (八打灵 / 白沙罗)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Puchong (蒲种)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Kuala Lumpur CBD / Bangsar / Sentral (吉隆坡市区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
+  { name: 'Cheras / Ampang (蕉赖 / 安邦)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 17:00-19:30' },
 ];

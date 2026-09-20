@@ -1,42 +1,77 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, RefreshCw, Upload, Grid2X2, Image as ImageIcon, Sparkles, UtensilsCrossed } from 'lucide-react';
+import {
+  Camera,
+  RefreshCw,
+  Grid2X2,
+  Image as ImageIcon,
+  Sparkles,
+  Edit3,
+  X,
+  Save,
+  Check,
+  Upload,
+} from 'lucide-react';
 import { Language } from '../types';
+
+export interface AlaCarteGridItem {
+  id: string;
+  name: string;
+  nameZh: string;
+  image: string;
+  tag: string;
+  protein?: string;
+  description?: string;
+  descriptionZh?: string;
+}
 
 interface AlaCarteCombinationPhotoProps {
   language: Language;
   onExploreMenu?: () => void;
 }
 
-const STORAGE_KEY = 'chillhealthy_hero_combo_photo';
+const STORAGE_KEY_PHOTO = 'chillhealthy_hero_combo_photo';
+const STORAGE_KEY_ITEMS = 'chillhealthy_hero_ala_carte_items';
 
-const ALA_CARTE_ITEMS = [
+const INITIAL_ALA_CARTE_ITEMS: AlaCarteGridItem[] = [
   {
     id: 'combo-salmon-chicken',
     name: 'Combo Salmon & Chicken',
     nameZh: '三文鱼与鸡肉双拼',
     image: 'https://admin.chillhealthy.com/uploads/h2ia7y6vd60ogckg84.jpg',
     tag: '52g Protein',
+    protein: '52g Protein',
+    description: 'Double protein power: Pan-seared Norwegian salmon fillet & herb-roasted chicken breast.',
+    descriptionZh: '双重高蛋白盛宴：香煎挪威深海三文鱼排与鲜嫩迷迭香烤鸡胸肉双拼。',
   },
   {
     id: 'chi-kut-teh',
     name: 'Chi Kut Teh',
     nameZh: '潮式清补鸡骨茶',
     image: 'https://admin.chillhealthy.com/uploads/d1j2uwbv4mgowsccow.jpg',
-    tag: 'Herbal Broth',
+    tag: '38g Protein',
+    protein: '38g Protein',
+    description: 'Slow-simmered herbal heritage broth infused with angelica, wolfberry, garlic and tender chicken.',
+    descriptionZh: '草本慢熬清补鸡骨茶：选用当归、红枣、枸杞、大蒜与温体去皮鸡肉，零油脂负担。',
   },
   {
     id: 'prawn-omelette',
     name: 'Golden Prawn Omelette',
     nameZh: '金黄虾仁烘蛋',
     image: 'https://admin.chillhealthy.com/uploads/y92l27dzynko4kock.jpg',
-    tag: 'Wild Sea Prawns',
+    tag: '35g Protein',
+    protein: '35g Protein',
+    description: 'Fresh wild tiger sea prawns folded into fluffy, golden high-protein farm eggs.',
+    descriptionZh: '精选野生活捕黑虎海虾仁，融入农场鲜鸡蛋烘制，蓬松金黄，高蛋白低负担。',
   },
   {
     id: 'garlic-chicken',
     name: 'Golden Garlic Chicken',
     nameZh: '金蒜香烤鸡胸',
     image: 'https://admin.chillhealthy.com/uploads/1uijdxelztq8w0s80o.jpg',
-    tag: 'Lean & Juicy',
+    tag: '42g Protein',
+    protein: '42g Protein',
+    description: 'Tender chicken breast marinated in slow-roasted garlic oil and rosemary herbs.',
+    descriptionZh: '慢烤金黄蒜香迷迭香鸡胸，外香微焦内里柔嫩多汁，低脂高饱腹。',
   },
 ];
 
@@ -49,10 +84,33 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
   const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'spread'>('grid');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const singleItemImageRef = useRef<HTMLInputElement>(null);
+
+  // Stateful & editable ala carte items (especially the last two ala carte items!)
+  const [alaCarteItems, setAlaCarteItems] = useState<AlaCarteGridItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= 4) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_ALA_CARTE_ITEMS;
+  });
+
+  // Editor Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [activeEditIndex, setActiveEditIndex] = useState(2); // default to 2 (first of the last two items)
+  const [editForm, setEditForm] = useState<AlaCarteGridItem>(alaCarteItems[2]);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY_PHOTO);
       if (saved) {
         setCustomPhoto(saved);
       }
@@ -70,7 +128,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
       const dataUrl = reader.result as string;
       setCustomPhoto(dataUrl);
       try {
-        localStorage.setItem(STORAGE_KEY, dataUrl);
+        localStorage.setItem(STORAGE_KEY_PHOTO, dataUrl);
       } catch {
         // quota exceeded fallback
       }
@@ -81,10 +139,67 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
   const handleResetPhoto = () => {
     setCustomPhoto(null);
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY_PHOTO);
     } catch {
       // ignore
     }
+  };
+
+  // Switch which ala carte item to edit
+  const handleSelectEditItem = (index: number) => {
+    setActiveEditIndex(index);
+    setEditForm({ ...alaCarteItems[index] });
+    setSaveSuccess(false);
+  };
+
+  const handleOpenEditModal = (targetIndex: number = 2) => {
+    setActiveEditIndex(targetIndex);
+    setEditForm({ ...alaCarteItems[targetIndex] });
+    setIsEditModalOpen(true);
+    setSaveSuccess(false);
+  };
+
+  // Upload image specifically for the selected ala carte item
+  const handleSingleItemImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setEditForm((prev) => ({ ...prev, image: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveEditItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = [...alaCarteItems];
+    updated[activeEditIndex] = {
+      ...editForm,
+      tag: editForm.protein || editForm.tag || 'High Protein',
+    };
+    setAlaCarteItems(updated);
+    try {
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+    setSaveSuccess(true);
+    setTimeout(() => {
+      setSaveSuccess(false);
+    }, 2000);
+  };
+
+  const handleResetAllAlaCarteItems = () => {
+    setAlaCarteItems(INITIAL_ALA_CARTE_ITEMS);
+    setEditForm(INITIAL_ALA_CARTE_ITEMS[activeEditIndex]);
+    try {
+      localStorage.removeItem(STORAGE_KEY_ITEMS);
+    } catch {
+      // ignore
+    }
+    setSaveSuccess(true);
   };
 
   return (
@@ -100,6 +215,16 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
 
       {/* Top action controls bar */}
       <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-stone-900/85 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20 shadow-md">
+        {/* Quick Edit Ala Carte Items (Editable Photo, Name, Protein & Description) */}
+        <button
+          onClick={() => handleOpenEditModal(2)}
+          title={language === 'en' ? 'Edit Ala Carte Items & Photos' : '编辑单点菜品、照片、蛋白质与介绍'}
+          className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 hover:text-white px-2 py-0.5 rounded-full bg-emerald-950/70 hover:bg-emerald-800 border border-emerald-500/30 transition-colors cursor-pointer"
+        >
+          <Edit3 className="w-3 h-3" />
+          <span>{language === 'en' ? 'Edit Dishes' : '编辑菜品'}</span>
+        </button>
+
         {customPhoto ? (
           <button
             onClick={handleResetPhoto}
@@ -165,22 +290,47 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
         ) : (
           /* 2x2 Grid of authentic official ala carte meals */
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5 bg-stone-900">
-            {ALA_CARTE_ITEMS.map((item, index) => (
+            {alaCarteItems.map((item, index) => (
               <div
                 key={item.id}
-                className="relative w-full h-full overflow-hidden group/item bg-stone-800"
+                onClick={() => handleOpenEditModal(index)}
+                className="relative w-full h-full overflow-hidden group/item bg-stone-800 cursor-pointer"
+                title={language === 'en' ? `Click to edit ${item.name}` : `点击编辑 ${item.nameZh}`}
               >
                 <img
                   src={item.image}
                   alt={item.name}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover/item:scale-110"
                 />
-                {/* Subtle dish badge */}
-                <div className="absolute top-2 left-2 pointer-events-none">
+
+                {/* Hover overlay hint */}
+                <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <span className="px-2 py-1 rounded-lg bg-stone-900/85 text-[11px] font-bold text-white flex items-center gap-1">
+                    <Edit3 className="w-3 h-3 text-emerald-400" />
+                    <span>{language === 'en' ? 'Edit' : '编辑'}</span>
+                  </span>
+                </div>
+
+                {/* Dish badge & protein */}
+                <div className="absolute top-2 left-2 pointer-events-none flex flex-col gap-1 items-start">
                   <span className="px-1.5 py-0.5 rounded-md bg-stone-900/80 backdrop-blur-xs text-[10px] font-semibold text-white/90 border border-white/15">
                     {language === 'en' ? item.name : item.nameZh}
                   </span>
+                  {item.protein && (
+                    <span className="px-1.5 py-0.2 rounded-md bg-emerald-900/80 text-[9px] font-bold text-emerald-300 border border-emerald-500/20">
+                      {item.protein}
+                    </span>
+                  )}
                 </div>
+
+                {/* Marker for the last two ala carte items */}
+                {index >= 2 && (
+                  <div className="absolute bottom-2 right-2 pointer-events-none">
+                    <span className="px-1.5 py-0.5 rounded-md bg-amber-500/90 text-[9px] font-black text-stone-900">
+                      {index === 2 ? 'Ala Carte #3' : 'Ala Carte #4'}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -196,7 +346,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
               {language === 'en' ? '★ Signature Ala Carte Selection' : '★ 潮轻食精选单点组合'}
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
-              {language === 'en' ? '24 Fresh Choices' : '24款单点现做'}
+              {language === 'en' ? '24 Fresh Choices · All Editable' : '24款单点现做 · 全部可自定义'}
             </span>
           </div>
 
@@ -236,6 +386,241 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
           </div>
         </div>
       </div>
+
+      {/* =========================================================================
+          ALA CARTE EDIT MODAL (PHOTO, NAME, PROTEIN, DESCRIPTION EDITABLE)
+          Allows editing any item, specifically the last two ala carte items!
+         ========================================================================= */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 text-stone-900">
+          <div className="bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-emerald-700" />
+                <div>
+                  <h4 className="font-heading font-extrabold text-base sm:text-lg text-stone-900">
+                    {language === 'en' ? 'Edit Ala Carte Dish Details' : '编辑单点菜品信息与照片'}
+                  </h4>
+                  <p className="text-[11px] text-stone-500">
+                    {language === 'en'
+                      ? 'Edit photo, name, protein and description for any item including the last two ala carte.'
+                      : '可随时修改菜品图片、中英文名称、蛋白质含量与描述（包括最后两款单点）。'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-stone-200 text-stone-700 flex items-center justify-center transition-colors cursor-pointer border border-stone-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Dish Tabs (emphasizing the last two items) */}
+            <div className="p-3 bg-stone-100/80 border-b border-stone-200 flex items-center gap-1.5 overflow-x-auto">
+              {alaCarteItems.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSelectEditItem(idx)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeEditIndex === idx
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'bg-white text-stone-700 hover:bg-stone-200/80'
+                  }`}
+                >
+                  <span>#{idx + 1}</span>
+                  <span className="truncate max-w-[120px]">{language === 'en' ? item.name : item.nameZh}</span>
+                  {idx >= 2 && (
+                    <span
+                      className={`text-[9px] px-1 py-0.2 rounded-full font-black ${
+                        activeEditIndex === idx ? 'bg-amber-400 text-stone-900' : 'bg-amber-100 text-amber-900'
+                      }`}
+                    >
+                      Last 2
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Edit Form */}
+            <form onSubmit={handleSaveEditItem} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Photo Preview & URL / File input */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 bg-stone-50 p-4 rounded-2xl border border-stone-200">
+                <img
+                  src={editForm.image}
+                  alt={editForm.name}
+                  className="w-24 h-24 rounded-2xl object-cover border-2 border-white shadow-sm shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.src =
+                      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                  }}
+                />
+                <div className="flex-1 w-full space-y-2">
+                  <label className="text-xs font-bold text-stone-700 block">
+                    {language === 'en' ? 'Dish Photo (Image URL or File Upload) *' : '菜品照片 (图片链接或文件上传) *'}
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={editForm.image}
+                    onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={singleItemImageRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSingleItemImageUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => singleItemImageRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50 cursor-pointer shadow-2xs"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>{language === 'en' ? 'Upload Image File' : '从设备上传新照片'}</span>
+                    </button>
+                    <span className="text-[10px] text-stone-400">
+                      {language === 'en' ? 'Supports JPG, PNG, WebP' : '支持 JPG、PNG、WebP'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Names */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Dish Name (English) *' : '菜品名称 (英文) *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Dish Name (Chinese) *' : '菜品名称 (中文) *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.nameZh}
+                    onChange={(e) => setEditForm({ ...editForm, nameZh: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Protein and Tag */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Protein Content (e.g. 52g Protein) *' : '蛋白质含量 (例如: 52g 蛋白质) *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.protein || ''}
+                    onChange={(e) => setEditForm({ ...editForm, protein: e.target.value, tag: e.target.value })}
+                    placeholder="e.g. 42g Protein"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white font-semibold text-emerald-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Highlighted Feature / Tag' : '亮点标签'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.tag || ''}
+                    onChange={(e) => setEditForm({ ...editForm, tag: e.target.value })}
+                    placeholder="e.g. Lean & Juicy"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Description (English) *' : '介绍描述 (英文) *'}
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={editForm.description || ''}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    {language === 'en' ? 'Description (Chinese) *' : '介绍描述 (中文) *'}
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={editForm.descriptionZh || ''}
+                    onChange={(e) => setEditForm({ ...editForm, descriptionZh: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Save Success Alert */}
+              {saveSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2 font-bold animate-in fade-in">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>
+                    {language === 'en'
+                      ? 'Changes saved to live menu! Persisted in localStorage.'
+                      : '菜品已成功更新并保存！'}
+                  </span>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-stone-200 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleResetAllAlaCarteItems}
+                  className="text-xs text-stone-500 hover:text-stone-800 font-semibold"
+                >
+                  {language === 'en' ? 'Reset All to Defaults' : '恢复默认数据'}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 text-xs font-bold cursor-pointer"
+                  >
+                    {language === 'en' ? 'Close' : '关闭'}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{language === 'en' ? 'Save Dish' : '保存更新'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

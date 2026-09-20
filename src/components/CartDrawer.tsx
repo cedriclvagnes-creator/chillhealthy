@@ -24,7 +24,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   if (!isOpen) return null;
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = subtotal >= 40 || subtotal === 0 ? 0 : 5.0;
+  const hasPlan = cart.some((item) => item.type === 'plan' || Boolean(item.planDetails));
+  const deliveryFee = hasPlan || subtotal >= 100 || subtotal === 0 ? 0 : 15.0;
   const grandTotal = subtotal + deliveryFee;
 
   return (
@@ -158,11 +159,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {cart.length > 0 && (
             <div className="p-5 border-t border-stone-200 bg-stone-50 space-y-3">
               {/* Free delivery reminder */}
-              {subtotal < 40 && (
+              {!hasPlan && subtotal < 100 && (
                 <div className="text-[11px] text-amber-800 bg-amber-100/70 p-2 rounded-xl text-center font-medium">
                   {language === 'en'
-                    ? `Add RM ${(40 - subtotal).toFixed(2)} more for FREE Klang Valley Delivery!`
-                    : `再点 RM ${(40 - subtotal).toFixed(2)} 即可享巴生河流域免费配送！`}
+                    ? `Add RM ${(100 - subtotal).toFixed(2)} more for FREE Klang Valley Delivery (RM15 standard fee)!`
+                    : `再点 RM ${(100 - subtotal).toFixed(2)} 即可享巴生河流域免费配送（未满RM100统一运费RM15）！`}
                 </div>
               )}
 

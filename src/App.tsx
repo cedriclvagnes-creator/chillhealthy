@@ -38,7 +38,16 @@ export default function App() {
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_SITE_SETTINGS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_SITE_SETTINGS,
+          ...parsed,
+          whatsappNumber: '60126189919',
+          whatsappDisplay: '+60126189919',
+        };
+      }
+      return DEFAULT_SITE_SETTINGS;
     } catch {
       return DEFAULT_SITE_SETTINGS;
     }
@@ -59,9 +68,12 @@ export default function App() {
     try {
       const saved = localStorage.getItem('chillhealthy_menu_v2');
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed: MealItem[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length >= 20) {
-          return parsed;
+          // Ensure all official items including the last two ala carte items are present!
+          const existingIds = new Set(parsed.map((m) => m.id));
+          const missing = MEAL_ITEMS.filter((m) => !existingIds.has(m.id));
+          return missing.length > 0 ? [...parsed, ...missing] : parsed;
         }
       }
       localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(MEAL_ITEMS));
@@ -339,7 +351,7 @@ export default function App() {
   };
 
   const handleMemberRegister = (newMemberData: Partial<MemberAccount>) => {
-    const rawPhone = (newMemberData.phone || '0126189919').replace(/\D/g, '');
+    const rawPhone = (newMemberData.phone || '').replace(/\D/g, '');
     const cleanPhone =
       rawPhone.length >= 8
         ? rawPhone.startsWith('60')
@@ -347,7 +359,11 @@ export default function App() {
           : rawPhone.startsWith('0')
           ? rawPhone
           : `0${rawPhone}`
-        : '0126189919';
+        : rawPhone || '0126189919';
+
+    const existingIndex = members.findIndex(
+      (m) => m.phone === cleanPhone || m.memberNumber === cleanPhone || m.id === cleanPhone
+    );
 
     const newAcct: MemberAccount = {
       id: cleanPhone,
@@ -356,30 +372,47 @@ export default function App() {
       email: newMemberData.email || `${cleanPhone}@customer.chillhealthy.com`,
       phone: cleanPhone,
       password: newMemberData.password || '123456', // Default password 123456
-      address: newMemberData.address || 'Klang Valley',
+      address: newMemberData.address || '',
       area: newMemberData.area || 'Klang / Bukit Tinggi',
       postalCode: newMemberData.postalCode || '41200',
+      address2: newMemberData.address2 || undefined,
+      area2: newMemberData.area2 || undefined,
+      postalCode2: newMemberData.postalCode2 || undefined,
+      activeAddressSlot: 1,
       dietaryPreferences: newMemberData.dietaryPreferences,
-      activePackage: {
-        planId: 'plan-10day',
-        planName: '10-Day Workday Vitality Plan (10 Meals)',
-        planNameZh: '10天工作日元气定制套餐 (10餐)',
-        totalMeals: 10,
-        remainingMeals: 10,
-        purchasedDate: new Date().toISOString().split('T')[0],
-        expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      },
-      creditsHistory: [
-        {
-          id: `cr-${Date.now()}`,
-          date: new Date().toISOString().split('T')[0],
-          type: 'purchase',
-          amount: 10,
-          note: 'Welcome membership package bonus',
-        },
-      ],
+      activePackage: existingIndex >= 0 && members[existingIndex].activePackage
+        ? members[existingIndex].activePackage
+        : {
+            planId: 'plan-10day',
+            planName: '10-Day Workday Vitality Plan (10 Meals)',
+            planNameZh: '10天工作日元气定制套餐 (10餐)',
+            totalMeals: 10,
+            remainingMeals: 10,
+            purchasedDate: new Date().toISOString().split('T')[0],
+            expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          },
+      creditsHistory: existingIndex >= 0 && members[existingIndex].creditsHistory?.length
+        ? members[existingIndex].creditsHistory
+        : [
+            {
+              id: `cr-${Date.now()}`,
+              date: new Date().toISOString().split('T')[0],
+              type: 'purchase',
+              amount: 10,
+              note: 'Welcome membership package bonus',
+            },
+          ],
     };
-    setMembers((prev) => [newAcct, ...prev]);
+
+    if (existingIndex >= 0) {
+      setMembers((prev) => {
+        const copy = [...prev];
+        copy[existingIndex] = { ...copy[existingIndex], ...newAcct };
+        return copy;
+      });
+    } else {
+      setMembers((prev) => [newAcct, ...prev]);
+    }
     setCurrentMember(newAcct);
   };
 
@@ -786,6 +819,11 @@ export default function App() {
           language={language}
           onClose={() => setSelectedMealForDetail(null)}
           onAddToCart={handleAddToCart}
+          onUpdateMeal={(updatedMeal) => {
+            const next = menuItems.map((m) => (m.id === updatedMeal.id ? updatedMeal : m));
+            handleUpdateMenuItems(next);
+            setSelectedMealForDetail(updatedMeal);
+          }}
         />
       )}
 

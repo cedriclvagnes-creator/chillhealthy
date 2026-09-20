@@ -1849,7 +1849,21 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         <div className="flex items-center justify-between">
                           <div>
                             <h5 className="font-bold text-sm text-stone-900">{mem.name}</h5>
-                            <p className="text-xs text-stone-500">{mem.email} · {mem.phone}</p>
+                            <p className="text-xs text-stone-500 flex items-center gap-1.5 mt-0.5">
+                              <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px]">ID: {mem.memberNumber || mem.phone}</span>
+                              <span>·</span>
+                              <span>{mem.email}</span>
+                            </p>
+                            <div className="mt-1.5 text-[11px] text-stone-600 space-y-0.5">
+                              <p className="truncate">
+                                <span className="font-bold text-emerald-800">Addr 1:</span> {mem.address}, {mem.area} {mem.postalCode}
+                              </p>
+                              {mem.address2 && (
+                                <p className="truncate">
+                                  <span className="font-bold text-emerald-700">Addr 2:</span> {mem.address2}, {mem.area2 || mem.area} {mem.postalCode2 || ''}
+                                </p>
+                              )}
+                            </div>
                           </div>
                           <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
                             Member

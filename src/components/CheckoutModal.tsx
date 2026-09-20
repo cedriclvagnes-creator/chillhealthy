@@ -16,6 +16,7 @@ import {
   Home,
 } from 'lucide-react';
 import { CartItem, Language, SiteSettings } from '../types';
+import { DuitNowPaymentCard } from './DuitNowPaymentCard';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -53,7 +54,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const hasPlan = cart.some((i) => i.type === 'plan');
   const planItem = cart.find((i) => i.type === 'plan');
 
-  const [deliveryMethod, setDeliveryMethod] = useState<'delivery' | 'pickup'>('delivery');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [area, setArea] = useState('Klang / Bukit Tinggi');
@@ -75,8 +75,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return d.toISOString().split('T')[0];
   });
 
-  const [deliverySlot, setDeliverySlot] = useState('Lunch (10:00 AM – 2:00 PM)');
-  const [paymentMethod, setPaymentMethod] = useState<'whatsapp' | 'duitnow' | 'bank_transfer'>('whatsapp');
+  const [deliverySlot, setDeliverySlot] = useState<'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (5:00 PM – 7:30 PM)' | 'Both Lunch & Dinner'>(
+    'Lunch (10:00 AM – 2:00 PM)'
+  );
+  const [paymentMethod, setPaymentMethod] = useState<'duitnow' | 'whatsapp'>('duitnow');
   const [notes, setNotes] = useState('');
 
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -85,12 +87,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   if (!isOpen) return null;
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = hasPlan ? 0 : deliveryMethod === 'pickup' ? 0 : subtotal >= 40 ? 0 : 5.0;
-  const grandTotal = subtotal + deliveryFee - (!hasPlan && deliveryMethod === 'pickup' ? 2.0 : 0);
+  // Standardized delivery fee: RM15 for order < RM100; FREE on RM100 and above or meal packages
+  const deliveryFee = hasPlan ? 0 : subtotal >= 100 ? 0 : 15.0;
+  const grandTotal = subtotal + deliveryFee;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || (deliveryMethod === 'delivery' && !address)) {
+    if (!name || !phone || !address) {
       alert(language === 'en' ? 'Please complete all required fields.' : '请填写完整联系信息与送餐地址。');
       return;
     }
@@ -112,12 +115,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
     }
 
-    // Prepare WhatsApp Message
-    const targetPhone = siteSettings.whatsappNumber.replace(/\D/g, '') || '0126189919';
-    const whatsappLinkNumber = targetPhone.startsWith('60') ? targetPhone : `60${targetPhone.replace(/^0/, '')}`;
+    // Prepare WhatsApp Message to official number +60126189919
+    const whatsappLinkNumber = '60126189919';
 
     if (hasPlan && planItem) {
-      // Step 2 format as per official flyer:
       const msg =
         `*📣 Confirm Order | 订单确认* %0A` +
         `感谢您下单我们的【潮轻食健康配套】❤️%0A` +
@@ -126,11 +127,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `*Registered Name (注册姓名):* ${name}%0A` +
         `*Phone (联系电话):* ${phone}%0A` +
         `*Package (所选配套):* ${planItem.title}%0A` +
+        `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
         `*Total Amount (总额):* RM ${grandTotal.toFixed(2)}%0A` +
         `*Delivery Address 1 (地址一):* ${address}, ${area} ${postalCode}%0A` +
         (hasAddress2 && address2 ? `*Delivery Address 2 (地址二):* ${address2}, ${area2} ${postalCode2}%0A` : '') +
         (notes ? `*Dietary Notes (忌口备注):* ${notes}%0A` : '') +
-        `%0A请为我确认配套，以便我前往会员中心选择每天的餐点！🥗%0A` +
+        `*Payment Method:* DuitNow QR (Chill Healthy Trading)%0A` +
+        `%0A已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗%0A` +
         `Website: www.chill-healthy.com`;
 
       if (paymentMethod === 'whatsapp') {
@@ -145,13 +148,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `*New Order: ${generatedId}*%0A` +
         `Customer: ${name}%0A` +
         `Phone: ${phone}%0A` +
-        `Type: ${deliveryMethod === 'delivery' ? 'Delivery' : 'Self Pickup'}%0A` +
+        `Type: Delivery%0A` +
         `Date: ${deliveryDate} | Slot: ${deliverySlot}%0A` +
-        (deliveryMethod === 'delivery' ? `Address: ${address}, ${area} ${postalCode}%0A` : '') +
+        `Address: ${address}, ${area} ${postalCode}%0A` +
         `Items:%0A${itemsText}%0A` +
+        `Subtotal: RM ${subtotal.toFixed(2)}%0A` +
+        `Delivery Fee: ${deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}%0A` +
         `*Total Amount: RM ${grandTotal.toFixed(2)}*%0A` +
         (notes ? `Notes: ${notes}%0A` : '') +
-        `Please confirm my healthy meal delivery with CHILL Healthy team!`;
+        `*Payment:* DuitNow QR (Chill Healthy Trading)%0A` +
+        `已完成付款，附上付款凭证，请查收并安排配送！🥗`;
 
       if (paymentMethod === 'whatsapp') {
         window.open(`https://wa.me/${whatsappLinkNumber}?text=${msg}`, '_blank');
@@ -166,18 +172,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     onClose();
   };
 
-  const targetPhone = siteSettings.whatsappNumber.replace(/\D/g, '') || '0126189919';
-  const whatsappLinkNumber = targetPhone.startsWith('60') ? targetPhone : `60${targetPhone.replace(/^0/, '')}`;
+  const whatsappLinkNumber = '60126189919';
 
   const confirmOrderWhatsAppMessage =
-    `*📣 Confirm Order | 订单确认*%0A` +
-    `感谢您下单我们的【潮轻食健康配套】❤️%0A` +
+    `*📣 Confirm Order | 订单付款凭单确认*%0A` +
+    `感谢您下单我们的【潮轻食健康餐】❤️%0A` +
     `*Order ID:* ${orderId}%0A` +
     `*Registered Name (注册姓名):* ${name}%0A` +
     `*Phone (联系电话):* ${phone}%0A` +
     (planItem ? `*Package (所选配套):* ${planItem.title}%0A` : '') +
+    `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
     `*Total Paid (支付金额):* RM ${grandTotal.toFixed(2)}%0A` +
-    `请为我确认配套，开启每日订餐权限！🥗`;
+    `已通过 DuitNow QR 付款给 Chill Healthy Trading，附上付款凭单水单截图，请协助确认！🥗`;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -240,12 +246,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                   <div className="text-xs flex-1">
                     <p className="font-bold text-emerald-950">
-                      {language === 'en' ? 'Step 2 | WhatsApp Us Your Name' : '第二步 | WhatsApp 通知我们'}
+                      {language === 'en' ? 'Step 2 | WhatsApp Payment Slip & Name' : '第二步 | 付款后 WhatsApp 发送凭证水单'}
                     </p>
                     <p className="text-emerald-800 mt-0.5">
                       {language === 'en'
-                        ? `Kindly notify us via WhatsApp (${siteSettings.whatsappDisplay}) with your registered name "${name}" so we can confirm your order.`
-                        : `付款后请前往 WhatsApp 通知我们，并提供您的注册名字「${name}」，以便我们为您确认配套。`}
+                        ? `After payment, kindly send your receipt/slip via WhatsApp to +60126189919 with your name "${name}" so our kitchen team can activate your account.`
+                        : `DuitNow 付款后，请将付款凭单截图发送到官方 WhatsApp (+60126189919)，附上注册名字「${name}」，以便我们立即为您开启订餐权限。`}
                     </p>
                     <a
                       href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
@@ -254,7 +260,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       className="inline-flex items-center gap-1.5 mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{language === 'en' ? 'WhatsApp Us Now (012-618 9919)' : '立即发 WhatsApp 通知 (012-618 9919)'}</span>
+                      <span>{language === 'en' ? 'WhatsApp Us Now (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)'}</span>
                     </a>
                   </div>
                 </div>
@@ -270,8 +276,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <p className="text-stone-500 mt-0.5">
                       {language === 'en'
-                        ? 'Once confirmed, select your meals daily before 5:00 PM (Monday – Friday lunch 10:00 AM – 2:00 PM).'
-                        : '确认配套后，即可开始自选每天午餐（周一至周五 10:00 AM – 2:00 PM 送达，每天下午 5:00 前选好隔天餐点）。'}
+                        ? 'Once confirmed, select your meals daily before 5:00 PM for lunch (10:00 AM – 2:00 PM) or dinner (5:00 PM – 7:30 PM).'
+                        : '确认配套后，即可自选每天午餐（10:00 AM – 2:00 PM）或晚餐（5:00 PM – 7:30 PM），前一天下午 5:00 前选定。'}
                     </p>
                   </div>
                 </div>
@@ -286,22 +292,39 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between font-medium text-stone-600">
-                  <span>{language === 'en' ? 'Delivery Date:' : '预计送达日期:'}</span>
+                  <span>{language === 'en' ? 'Delivery Date & Slot:' : '送达日期与时段:'}</span>
                   <span className="font-bold text-stone-900">
                     {deliveryDate} · {deliverySlot}
                   </span>
                 </div>
-                {deliveryMethod === 'delivery' && (
-                  <div className="flex justify-between font-medium text-stone-600">
-                    <span>{language === 'en' ? 'Address:' : '送达地址:'}</span>
-                    <span className="font-bold text-stone-900 text-right max-w-xs">
-                      {address}, {area}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between font-medium text-stone-600">
+                  <span>{language === 'en' ? 'Address:' : '送达地址:'}</span>
+                  <span className="font-bold text-stone-900 text-right max-w-xs">
+                    {address}, {area} {postalCode}
+                  </span>
+                </div>
+                <div className="flex justify-between font-medium text-stone-600">
+                  <span>{language === 'en' ? 'Delivery Fee:' : '配送费用:'}</span>
+                  <span className="font-bold text-emerald-700">
+                    {deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}
+                  </span>
+                </div>
                 <div className="pt-2 border-t border-stone-200 flex justify-between font-extrabold text-sm text-stone-900">
                   <span>{language === 'en' ? 'Total Amount:' : '支付金额:'}</span>
                   <span className="text-emerald-800 font-heading text-base">RM {grandTotal.toFixed(2)}</span>
+                </div>
+
+                {/* WhatsApp Slip notice */}
+                <div className="pt-2">
+                  <a
+                    href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>{language === 'en' ? 'Send Payment Slip via WhatsApp (+60126189919)' : 'WhatsApp 发送付款凭证水单 (+60126189919)'}</span>
+                  </a>
                 </div>
               </div>
             )}
@@ -352,38 +375,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ? 'Free delivery across Klang Valley · 1 account supports up to 2 addresses'
                     : '巴生谷全免运费 · 一个户口支持两个送餐地址（办公室/住家）'
                   : language === 'en'
-                  ? 'Fresh warm meals prepped daily in Klang Valley'
-                  : '每日巴生谷现烹温热送达'}
+                  ? 'Standard delivery fee RM15 for orders below RM100 · FREE on orders RM100 and above!'
+                  : '未满RM100统一运费RM15 · 满RM100全巴生谷免运费！'}
               </p>
             </div>
-
-            {/* If Single Bento, show pickup vs delivery switch */}
-            {!hasPlan && (
-              <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-2xl">
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMethod('delivery')}
-                  className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    deliveryMethod === 'delivery'
-                      ? 'bg-white text-stone-900 shadow-xs'
-                      : 'text-stone-500 hover:text-stone-900'
-                  }`}
-                >
-                  {language === 'en' ? 'Delivery (送餐上门)' : '送餐上门 (Klang Valley)'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMethod('pickup')}
-                  className={`py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    deliveryMethod === 'pickup'
-                      ? 'bg-white text-stone-900 shadow-xs'
-                      : 'text-stone-500 hover:text-stone-900'
-                  }`}
-                >
-                  {language === 'en' ? 'Self Pickup (到店自取 -RM2)' : '到店自取 (巴生中央厨房 -RM2)'}
-                </button>
-              </div>
-            )}
 
             {/* Customer Contact */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -417,132 +412,130 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             {/* Delivery Address 1 (Main: Office or Home) */}
-            {deliveryMethod === 'delivery' && (
-              <div className="space-y-3 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
-                    <Building className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>{language === 'en' ? 'Address 1 (Office / Main Address) *' : '送餐地址一 (办公室 / 主地址) *'}</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
-                    {language === 'en' ? 'Free Delivery' : '免运费'}
-                  </span>
-                </div>
+            <div className="space-y-3 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>{language === 'en' ? 'Address 1 (Office / Main Address) *' : '送餐地址一 (办公室 / 主地址) *'}</span>
+                </span>
+                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
+                  {hasPlan || subtotal >= 100
+                    ? (language === 'en' ? 'Free Delivery' : '免运费')
+                    : (language === 'en' ? 'Fee RM 15' : '运费 RM 15')}
+                </span>
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                      {language === 'en' ? 'Area / City *' : '区域 / 城市 *'}
-                    </label>
-                    <select
-                      value={area}
-                      onChange={(e) => setArea(e.target.value)}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                    >
-                      <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
-                      <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
-                      <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
-                      <option value="Petaling Jaya / Damansara">Petaling Jaya (八打灵)</option>
-                      <option value="Puchong">Puchong (蒲种)</option>
-                      <option value="Kuala Lumpur CBD / Bangsar">Kuala Lumpur CBD (吉隆坡)</option>
-                      <option value="Cheras / Ampang">Cheras / Ampang (蕉赖/安邦)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                      {language === 'en' ? 'Postal Code *' : '邮区编号 *'}
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={5}
-                      required
-                      value={postalCode}
-                      onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="e.g. 41200"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                    />
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-stone-600 block mb-1">
+                    {language === 'en' ? 'Area / City *' : '区域 / 城市 *'}
+                  </label>
+                  <select
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                  >
+                    <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
+                    <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
+                    <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
+                    <option value="Petaling Jaya / Damansara">Petaling Jaya (八打灵)</option>
+                    <option value="Puchong">Puchong (蒲种)</option>
+                    <option value="Kuala Lumpur CBD / Bangsar">Kuala Lumpur CBD (吉隆坡)</option>
+                    <option value="Cheras / Ampang">Cheras / Ampang (蕉赖/安邦)</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                    {language === 'en' ? 'Detailed Street / Building / Floor / Unit *' : '详细地址 (公司大厦/楼层/门牌号) *'}
+                    {language === 'en' ? 'Postal Code *' : '邮区编号 *'}
                   </label>
                   <input
                     type="text"
+                    maxLength={5}
                     required
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="e.g. Level 10, Menara Symphony, Jalan Kemuning Prima"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 41200"
                     className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
                   />
                 </div>
+              </div>
 
-                {/* Optional Address 2 (1 account 2 addresses) */}
-                {hasPlan && (
-                  <div className="pt-2 border-t border-stone-200/80">
-                    {!hasAddress2 ? (
+              <div>
+                <label className="text-[11px] font-medium text-stone-600 block mb-1">
+                  {language === 'en' ? 'Detailed Street / Building / Floor / Unit *' : '详细地址 (公司大厦/楼层/门牌号) *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. Level 10, Menara Symphony, Jalan Kemuning Prima"
+                  className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                />
+              </div>
+
+              {/* Optional Address 2 (1 account 2 addresses) */}
+              <div className="pt-2 border-t border-stone-200/80">
+                {!hasAddress2 ? (
+                  <button
+                    type="button"
+                    onClick={() => setHasAddress2(true)}
+                    className="text-xs text-emerald-800 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Home className="w-3.5 h-3.5" />
+                    <span>{language === 'en' ? '+ Add Address 2 (Home / Secondary)' : '+ 添加第二地址 (住家/备用送餐点)'}</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2 mt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                        <Home className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>{language === 'en' ? 'Address 2 (Home / Secondary)' : '送餐地址二 (住家/备用送餐点)'}</span>
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setHasAddress2(true)}
-                        className="text-xs text-emerald-800 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
+                        onClick={() => setHasAddress2(false)}
+                        className="text-[11px] text-stone-400 hover:text-red-600"
                       >
-                        <Home className="w-3.5 h-3.5" />
-                        <span>{language === 'en' ? '+ Add Address 2 (Home / Secondary)' : '+ 添加第二地址 (住家/备用送餐点)'}</span>
+                        {language === 'en' ? 'Remove' : '移除'}
                       </button>
-                    ) : (
-                      <div className="space-y-2 mt-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
-                            <Home className="w-3.5 h-3.5 text-emerald-700" />
-                            <span>{language === 'en' ? 'Address 2 (Home / Secondary)' : '送餐地址二 (住家/备用送餐点)'}</span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setHasAddress2(false)}
-                            className="text-[11px] text-stone-400 hover:text-red-600"
-                          >
-                            {language === 'en' ? 'Remove' : '移除'}
-                          </button>
-                        </div>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <input
-                              type="text"
-                              value={area2}
-                              onChange={(e) => setArea2(e.target.value)}
-                              placeholder="Area (e.g. Klang Botanic)"
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                            />
-                          </div>
-                          <div>
-                            <input
-                              type="text"
-                              maxLength={5}
-                              value={postalCode2}
-                              onChange={(e) => setPostalCode2(e.target.value.replace(/\D/g, ''))}
-                              placeholder="Postal Code"
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                            />
-                          </div>
-                        </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
                         <input
                           type="text"
-                          value={address2}
-                          onChange={(e) => setAddress2(e.target.value)}
-                          placeholder="Home address: Unit, Condo, Street..."
+                          value={area2}
+                          onChange={(e) => setArea2(e.target.value)}
+                          placeholder="Area (e.g. Klang Botanic)"
                           className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
                         />
                       </div>
-                    )}
+                      <div>
+                        <input
+                          type="text"
+                          maxLength={5}
+                          value={postalCode2}
+                          onChange={(e) => setPostalCode2(e.target.value.replace(/\D/g, ''))}
+                          placeholder="Postal Code"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      value={address2}
+                      onChange={(e) => setAddress2(e.target.value)}
+                      placeholder="Home address: Unit, Condo, Street..."
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                    />
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* Delivery Schedule notice */}
+            {/* Delivery Schedule notice: Lunch & Dinner Available */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
@@ -560,11 +553,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{language === 'en' ? 'Official Delivery Time' : '官方配送时段'}</span>
+                  <span>{language === 'en' ? 'Delivery Slot (Lunch / Dinner) *' : '送餐时段 (午餐 / 晚餐) *'}</span>
                 </label>
-                <div className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-stone-50 font-bold text-stone-800">
-                  🍱 午餐配送：10:00 AM – 2:00 PM
-                </div>
+                <select
+                  value={deliverySlot}
+                  onChange={(e) =>
+                    setDeliverySlot(
+                      e.target.value as 'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (5:00 PM – 7:30 PM)' | 'Both Lunch & Dinner'
+                    )
+                  }
+                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white font-semibold text-stone-800"
+                >
+                  <option value="Lunch (10:00 AM – 2:00 PM)">
+                    🍱 {language === 'en' ? 'Lunch (10:00 AM – 2:00 PM)' : '午餐配送 (10:00 AM – 2:00 PM)'}
+                  </option>
+                  <option value="Dinner (5:00 PM – 7:30 PM)">
+                    🌙 {language === 'en' ? 'Dinner (5:00 PM – 7:30 PM)' : '晚餐配送 (5:00 PM – 7:30 PM)'}
+                  </option>
+                  <option value="Both Lunch & Dinner">
+                    🍱🌙 {language === 'en' ? 'Both Lunch & Dinner (Split)' : '午餐与晚餐分批送达'}
+                  </option>
+                </select>
               </div>
             </div>
 
@@ -586,13 +595,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               />
             </div>
 
-            {/* Payment Method */}
+            {/* Payment Method: Enforce DuitNow QR with WhatsApp confirmation, NO bank transfer */}
             <div>
-              <label className="text-xs font-bold text-stone-700 block mb-2">
-                {language === 'en' ? 'Payment Method *' : '付款方式 *'}
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold text-stone-700 block">
+                  {language === 'en' ? 'Payment Method *' : '结账付款方式 *'}
+                </label>
+                <span className="text-[11px] font-bold text-pink-700 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200">
+                  {language === 'en' ? 'DuitNow QR Instant Pay' : '推荐使用 DuitNow QR'}
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('duitnow')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                    paymentMethod === 'duitnow'
+                      ? 'border-pink-600 bg-pink-50/50 text-pink-950 font-bold ring-2 ring-pink-600/30'
+                      : 'border-stone-200 text-stone-700 hover:bg-stone-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <QrCode className="w-4 h-4 text-pink-600" />
+                    <span className="text-xs font-bold">DuitNow QR (Instant Pay)</span>
+                  </div>
+                  <span className="text-[10px] text-stone-500 block">
+                    {language === 'en' ? 'Malaysia National QR · Any Bank / TNG' : '国家通用二维码 · 任何银行或电子钱包'}
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('whatsapp')}
@@ -602,75 +634,65 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       : 'border-stone-200 text-stone-700 hover:bg-stone-50'
                   }`}
                 >
-                  <MessageCircle className="w-4 h-4 text-emerald-600 mb-1" />
-                  <span className="text-xs block font-bold">WhatsApp Direct</span>
-                  <span className="text-[10px] text-stone-400 block mt-0.5">
-                    {language === 'en' ? `Direct to ${siteSettings.whatsappDisplay}` : '一键直连官方客服'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('duitnow')}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                    paymentMethod === 'duitnow'
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-600/30'
-                      : 'border-stone-200 text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4 text-pink-600 mb-1" />
-                  <span className="text-xs block font-bold">DuitNow QR</span>
-                  <span className="text-[10px] text-stone-400 block mt-0.5">
-                    {language === 'en' ? 'Instant Bank / TNG' : '各大网银及电子钱包'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('bank_transfer')}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                    paymentMethod === 'bank_transfer'
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-600/30'
-                      : 'border-stone-200 text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-sky-600 mb-1" />
-                  <span className="text-xs block font-bold">Bank Transfer</span>
-                  <span className="text-[10px] text-stone-400 block mt-0.5">
-                    {language === 'en' ? 'Maybank / Public Bank' : '企业对公转账'}
+                  <div className="flex items-center gap-2 mb-1">
+                    <MessageCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-bold">WhatsApp Direct Pay</span>
+                  </div>
+                  <span className="text-[10px] text-stone-500 block">
+                    {language === 'en' ? 'Direct to +60126189919' : '直连官方客服 WhatsApp +60126189919'}
                   </span>
                 </button>
               </div>
 
+              {/* DuitNow QR Interactive Card embedded directly */}
               {paymentMethod === 'duitnow' && (
-                <div className="mt-3 p-3 bg-pink-50/60 rounded-xl border border-pink-200 text-center space-y-1.5">
-                  <div className="w-24 h-24 bg-white rounded-lg border border-pink-200 mx-auto flex items-center justify-center p-1 shadow-2xs">
-                    <QrCode className="w-16 h-16 text-stone-800" />
+                <div className="mt-3">
+                  <DuitNowPaymentCard
+                    amount={grandTotal}
+                    orderId="NEW-CHECKOUT"
+                    language={language}
+                    whatsappNumber="60126189919"
+                  />
+                  <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                    <span className="text-base shrink-0">⚠️</span>
+                    <div>
+                      <p className="font-bold">
+                        {language === 'en'
+                          ? 'Important: After payment, please WhatsApp payment slip to us (+60126189919)'
+                          : '重要提醒：DuitNow 付款成功后，请务必将付款水单截图 WhatsApp 发送给我们 (+60126189919)！'}
+                      </p>
+                      <p className="text-[11px] text-amber-700 mt-0.5">
+                        {language === 'en'
+                          ? 'We will verify your transaction immediately and confirm your order schedule.'
+                          : '厨房收到付款水单后将即时核销并为您安排鲜食排期。'}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-[11px] font-bold text-stone-800">
-                    DuitNow ID: 012-618 9919 (CHILL HEALTHY SDN BHD)
-                  </p>
-                  <p className="text-[10px] text-stone-500">
-                    {language === 'en'
-                      ? 'Scan with any banking app or TNG eWallet. Receipt can be uploaded in WhatsApp.'
-                      : '支持所有马来西亚银行 App 或 TNG eWallet 扫码付款，付款后请在 WhatsApp 发送凭证。'}
-                  </p>
                 </div>
               )}
             </div>
 
             {/* Total Breakdown */}
-            <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 text-xs space-y-1">
+            <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 text-xs space-y-1.5">
               <div className="flex justify-between text-stone-600">
-                <span>{language === 'en' ? 'Package / Items Total:' : '配套/餐品总额:'}</span>
+                <span>{language === 'en' ? 'Order Subtotal:' : '餐品总额:'}</span>
                 <span className="font-bold text-stone-900">RM {subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-stone-600">
                 <span>{language === 'en' ? 'Klang Valley Delivery:' : '巴生谷配送运费:'}</span>
                 <span className="font-bold text-emerald-700">
-                  {deliveryFee === 0 ? 'FREE (全免运费)' : `RM ${deliveryFee.toFixed(2)}`}
+                  {deliveryFee === 0
+                    ? (language === 'en' ? 'FREE (Orders ≥ RM100 / Package)' : '全免运费 (满RM100/配套包免运)')
+                    : `RM ${deliveryFee.toFixed(2)} (${language === 'en' ? 'Standard fee < RM100' : '未满RM100统一运费'})`}
                 </span>
               </div>
+              {subtotal > 0 && subtotal < 100 && !hasPlan && (
+                <div className="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                  {language === 'en'
+                    ? `💡 Add RM ${(100 - subtotal).toFixed(2)} more to enjoy FREE delivery!`
+                    : `💡 还差 RM ${(100 - subtotal).toFixed(2)} 即可享全巴生谷免运费！`}
+                </div>
+              )}
               <div className="pt-2 border-t border-stone-200 flex justify-between font-extrabold text-sm text-stone-900">
                 <span>{language === 'en' ? 'Grand Total Due:' : '结账总计:'}</span>
                 <span className="text-emerald-800 font-heading text-base font-black">
@@ -689,8 +711,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ? `Confirm Package Order (RM ${grandTotal.toFixed(2)})`
                     : `确认订购配套 (RM ${grandTotal.toFixed(2)})`
                   : language === 'en'
-                  ? `Place Order (RM ${grandTotal.toFixed(2)})`
-                  : `立即提交订单 (RM ${grandTotal.toFixed(2)})`}
+                  ? `Place Order & Submit Payment (RM ${grandTotal.toFixed(2)})`
+                  : `提交订单并确认付款 (RM ${grandTotal.toFixed(2)})`}
               </span>
               <ArrowRight className="w-4 h-4" />
             </button>

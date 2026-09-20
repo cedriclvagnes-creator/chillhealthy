@@ -23,6 +23,8 @@ import {
   KeyRound,
   Lock,
   Check,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings } from '../types';
 
@@ -102,11 +104,16 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   // Register state
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('0126189919');
+  const [regPhone, setRegPhone] = useState('');
   const [regPass, setRegPass] = useState('123456');
   const [regAddress, setRegAddress] = useState('');
   const [regArea, setRegArea] = useState('Klang / Bukit Tinggi');
   const [regPostal, setRegPostal] = useState('41200');
+  const [hasRegAddress2, setHasRegAddress2] = useState(false);
+  const [regAddress2, setRegAddress2] = useState('');
+  const [regArea2, setRegArea2] = useState('Klang / Bukit Tinggi');
+  const [regPostal2, setRegPostal2] = useState('');
+  const [regError, setRegError] = useState('');
 
   // Change Password Modal state
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -195,18 +202,82 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName || !regEmail || !regPhone) {
-      alert(language === 'en' ? 'Please fill in name, email and phone.' : '请填写姓名、邮箱和电话。');
+    setRegError('');
+
+    const trimmedName = regName.trim();
+    if (!trimmedName) {
+      setRegError(language === 'en' ? 'Please enter your Full Name.' : '请填写您的真实姓名。');
       return;
     }
+
+    const rawPhone = regPhone.replace(/\D/g, '');
+    if (!rawPhone || rawPhone.length < 8) {
+      setRegError(
+        language === 'en'
+          ? 'Please enter a valid Handphone Number (which serves as your Login ID).'
+          : '请填写有效的手机号码（作为您的会员登录账号）。'
+      );
+      return;
+    }
+
+    const cleanPhone =
+      rawPhone.startsWith('60')
+        ? rawPhone.slice(1)
+        : rawPhone.startsWith('0')
+        ? rawPhone
+        : `0${rawPhone}`;
+
+    // Validate Address 1 (Mandatory)
+    if (!regAddress.trim()) {
+      setRegError(
+        language === 'en'
+          ? 'Address 1 is mandatory. Please enter your detailed street, building, or unit.'
+          : '送餐地址一为必填项。请填写详细街道、大厦或门牌。'
+      );
+      return;
+    }
+
+    if (!regPostal.trim()) {
+      setRegError(
+        language === 'en'
+          ? 'Please enter a 5-digit postal code for Address 1.'
+          : '请填写地址一的5位数邮区编号。'
+      );
+      return;
+    }
+
+    // Validate Address 2 if enabled
+    if (hasRegAddress2) {
+      if (!regAddress2.trim()) {
+        setRegError(
+          language === 'en'
+            ? 'Address 2 is enabled. Please enter street address or click "Remove Address 2".'
+            : '您已开启第二送餐地址。请填写地址二的详细街道，或点击“移除地址二”。'
+        );
+        return;
+      }
+      if (!regPostal2.trim()) {
+        setRegError(
+          language === 'en'
+            ? 'Please enter postal code for Address 2.'
+            : '请填写地址二的邮区编号。'
+        );
+        return;
+      }
+    }
+
     onRegister({
-      name: regName,
-      email: regEmail,
-      phone: regPhone,
-      password: regPass || '123456',
-      address: regAddress,
+      name: trimmedName,
+      phone: cleanPhone,
+      email: regEmail.trim() || `${cleanPhone}@customer.chillhealthy.com`,
+      password: regPass.trim() || '123456',
+      address: regAddress.trim(),
       area: regArea,
-      postalCode: regPostal,
+      postalCode: regPostal.trim(),
+      address2: hasRegAddress2 && regAddress2.trim() ? regAddress2.trim() : undefined,
+      area2: hasRegAddress2 && regAddress2.trim() ? regArea2 : undefined,
+      postalCode2: hasRegAddress2 && regAddress2.trim() ? regPostal2.trim() : undefined,
+      activeAddressSlot: 1,
     });
   };
 
@@ -542,125 +613,285 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               </form>
             ) : (
               /* Register Form */
-              <form onSubmit={handleRegisterSubmit} className="max-w-md mx-auto space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Full Name *' : '姓名 *'}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="e.g. Jessica Chen"
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                    />
+              <form onSubmit={handleRegisterSubmit} className="max-w-lg mx-auto space-y-4">
+                {/* Validation Error Alert */}
+                {regError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                    <span>{regError}</span>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Handphone Number (Member ID) *' : '手机号码 (会员登录账号) *'}
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      placeholder="0126189919"
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
-                    />
+                )}
+
+                {/* Section 1: Member Info */}
+                <div className="bg-stone-50/80 p-4 rounded-2xl border border-stone-200 space-y-3">
+                  <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+                    <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>{language === 'en' ? 'Personal Info & Login ID' : '基本资料与登录账号'}</span>
+                    </span>
+                    <span className="text-[10px] text-stone-500 font-medium">
+                      {language === 'en' ? '* Required fields' : '* 必填项目'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        {language === 'en' ? 'Full Name *' : '会员姓名 *'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        placeholder={language === 'en' ? 'e.g. Jessica Chen' : '例如：陈美玲'}
+                        className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-stone-700 block">
+                          {language === 'en' ? 'Handphone Number (Login ID) *' : '手机号码 (会员登录账号) *'}
+                        </label>
+                      </div>
+                      <div className="relative">
+                        <Phone className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-3" />
+                        <input
+                          type="tel"
+                          required
+                          value={regPhone}
+                          onChange={(e) => setRegPhone(e.target.value)}
+                          placeholder="e.g. 012-618 9919"
+                          className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border border-emerald-600/40 bg-emerald-50/30 focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold text-stone-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2 rounded-xl bg-emerald-100/60 border border-emerald-200 text-[11px] text-emerald-900 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span>
+                      {language === 'en'
+                        ? 'Your handphone number will be your official Member Login ID.'
+                        : '您的手机号码将作为唯一的会员登录ID，简单好记。'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        {language === 'en' ? 'Email Address (Optional)' : '电子邮箱 (选填)'}
+                      </label>
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="jessica@example.com"
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-stone-700 block">
+                          {language === 'en' ? 'Login Password' : '登录密码'}
+                        </label>
+                        <span className="text-[10px] text-stone-500 font-medium">
+                          {language === 'en' ? 'Default: 123456' : '默认: 123456'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={regPass}
+                        onChange={(e) => setRegPass(e.target.value)}
+                        placeholder="123456"
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Email Address *' : '电子邮箱 *'}
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="jessica@example.com"
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-stone-700 block">
-                        {language === 'en' ? 'Password' : '登录密码'}
-                      </label>
-                      <span className="text-[10px] text-stone-400">
-                        {language === 'en' ? 'Default 123456' : '默认 123456'}
+                {/* Section 2: 1 or 2 Delivery Addresses */}
+                <div className="bg-stone-50/80 p-4 rounded-2xl border border-stone-200 space-y-3">
+                  <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-700" />
+                      <span className="text-xs font-bold text-stone-900">
+                        {language === 'en' ? 'Delivery Addresses (1 or 2 Addresses)' : '配送地址 (必须填写1或2个地址)'}
                       </span>
                     </div>
-                    <input
-                      type="text"
-                      value={regPass}
-                      onChange={(e) => setRegPass(e.target.value)}
-                      placeholder="123456"
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                    />
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                      {hasRegAddress2
+                        ? (language === 'en' ? '2 Addresses Registered' : '已设定2个送餐地址')
+                        : (language === 'en' ? '1 Address (Can add 2nd)' : '填好地址一，可加第二地址')}
+                    </span>
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    {language === 'en' ? 'Address 1 (Office or Main Address)' : '地址一 (办公室/主要送餐点)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={regAddress}
-                    onChange={(e) => setRegAddress(e.target.value)}
-                    placeholder="Unit, Building name, Street..."
-                    className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                  />
-                </div>
+                  <p className="text-[11px] text-stone-600">
+                    {language === 'en'
+                      ? 'Address 1 is mandatory (e.g. Office). You can also add Address 2 (e.g. Home) so you can switch delivery spots effortlessly.'
+                      : '送餐地址一为必填（如办公室/主地址）；亦可同时填写地址二（如住家），日常配送随心一键切换。'}
+                  </p>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Area' : '配送区域'}
-                    </label>
-                    <select
-                      value={regArea}
-                      onChange={(e) => setRegArea(e.target.value)}
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white"
+                  {/* Address 1 Box (Mandatory) */}
+                  <div className="p-3.5 rounded-xl border border-stone-200 bg-white space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>{language === 'en' ? 'Address 1 (Primary / Office / Main) *' : '地址一 (主送餐点 / 办公室 / 住家) *'}</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        {language === 'en' ? 'Mandatory' : '必填'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          {language === 'en' ? 'Area / Region *' : '配送区域 *'}
+                        </label>
+                        <select
+                          value={regArea}
+                          onChange={(e) => setRegArea(e.target.value)}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                        >
+                          <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
+                          <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
+                          <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
+                          <option value="Petaling Jaya / Damansara">Petaling Jaya (八打灵)</option>
+                          <option value="Puchong">Puchong (蒲种)</option>
+                          <option value="Kuala Lumpur CBD / Bangsar">Kuala Lumpur CBD (吉隆坡)</option>
+                          <option value="Cheras / Ampang">Cheras / Ampang (蕉赖/安邦)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          {language === 'en' ? 'Postal Code *' : '邮区编号 *'}
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={5}
+                          required
+                          value={regPostal}
+                          onChange={(e) => setRegPostal(e.target.value.replace(/\D/g, ''))}
+                          placeholder="e.g. 41200"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                        {language === 'en' ? 'Detailed Street / Unit / Building *' : '详细街道 / 门牌 / 大厦楼层 *'}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={regAddress}
+                        onChange={(e) => setRegAddress(e.target.value)}
+                        placeholder={language === 'en' ? 'Unit, Level, Building Name, Street...' : '例如：Unit 12-03, Menara Symphony, Jalan Kemuning Prima'}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Address 2 Option (1 or 2 addresses) */}
+                  {!hasRegAddress2 ? (
+                    <button
+                      type="button"
+                      onClick={() => setHasRegAddress2(true)}
+                      className="w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-emerald-400/80 bg-emerald-50/40 hover:bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
-                      <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
-                      <option value="Subang Jaya / USJ">Subang Jaya / USJ</option>
-                      <option value="Petaling Jaya / Damansara">Petaling Jaya (八打灵)</option>
-                      <option value="Kuala Lumpur CBD">Kuala Lumpur CBD (吉隆坡)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Postal Code' : '邮区编号'}
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={5}
-                      value={regPostal}
-                      onChange={(e) => setRegPostal(e.target.value)}
-                      placeholder="41200"
-                      className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200"
-                    />
-                  </div>
+                      <Home className="w-4 h-4 text-emerald-700" />
+                      <span>
+                        {language === 'en'
+                          ? '+ Add Address 2 (Home / Secondary Delivery Location)'
+                          : '+ 添加第二配送地址 (住家 / 备用送餐点)'}
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="p-3.5 rounded-xl border border-emerald-300 bg-emerald-50/30 space-y-2.5 shadow-2xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          <Home className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>{language === 'en' ? 'Address 2 (Secondary / Home / Office) *' : '地址二 (备用送餐点 / 住家 / 第二地址) *'}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHasRegAddress2(false);
+                            setRegAddress2('');
+                            setRegPostal2('');
+                          }}
+                          className="text-[11px] text-stone-500 hover:text-red-600 font-semibold cursor-pointer flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>{language === 'en' ? 'Remove Address 2' : '移除地址二'}</span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                            {language === 'en' ? 'Area / Region *' : '配送区域 *'}
+                          </label>
+                          <select
+                            value={regArea2}
+                            onChange={(e) => setRegArea2(e.target.value)}
+                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                          >
+                            <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
+                            <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
+                            <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
+                            <option value="Petaling Jaya / Damansara">Petaling Jaya (八打灵)</option>
+                            <option value="Puchong">Puchong (蒲种)</option>
+                            <option value="Kuala Lumpur CBD / Bangsar">Kuala Lumpur CBD (吉隆坡)</option>
+                            <option value="Cheras / Ampang">Cheras / Ampang (蕉赖/安邦)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                            {language === 'en' ? 'Postal Code *' : '邮区编号 *'}
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={5}
+                            required
+                            value={regPostal2}
+                            onChange={(e) => setRegPostal2(e.target.value.replace(/\D/g, ''))}
+                            placeholder="e.g. 40150"
+                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-stone-500 block mb-1">
+                          {language === 'en' ? 'Detailed Street / House / Condo *' : '详细街道 / 门牌 / 屋苑 *'}
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={regAddress2}
+                          onChange={(e) => setRegAddress2(e.target.value)}
+                          placeholder={language === 'en' ? 'e.g. No. 18, Jalan Botanic 2, Bandar Botanic' : '例如：No. 18, Jalan Botanic 2, Bandar Botanic'}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800">
-                  {language === 'en'
-                    ? '✓ Your handphone number will be your Member Login Number. Default password is set to 123456 and can be changed later.'
-                    : '✓ 您的手机号码将作为您的专属会员账号，初始密码设为 123456，进入会员中心后可随时修改。'}
-                </div>
-
+                {/* Bottom Registration CTA */}
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer mt-2"
+                  className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer mt-2 flex items-center justify-center gap-2"
                 >
-                  {language === 'en' ? 'Create Account & Access Portal' : '立即注册并进入会员中心'}
+                  <Check className="w-4 h-4" />
+                  <span>{language === 'en' ? 'Create Account & Access Member Portal' : '立即注册并进入会员中心'}</span>
                 </button>
               </form>
             )}

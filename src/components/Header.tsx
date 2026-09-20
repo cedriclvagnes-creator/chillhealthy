@@ -33,6 +33,10 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Robust WhatsApp number normalization (+60126189919)
+  const cleanWaDigits = (siteSettings.whatsappNumber || '0126189919').replace(/\D/g, '').replace(/^(60|0)/, '');
+  const waBaseUrl = `https://wa.me/60${cleanWaDigits || '126189919'}`;
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const scrollToSection = (id: string) => {
@@ -65,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium">
             <a
               id="whatsapp-top-link"
-              href={`https://wa.me/60${siteSettings.whatsappNumber}?text=Hello%20CHILL%20Healthy%20team,%20I%20would%20like%20to%20inquire%20about%20meal%20orders!`}
+              href={`${waBaseUrl}?text=Hello%20CHILL%20Healthy%20team,%20I%20would%20like%20to%20inquire%20about%20meal%20orders!`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
@@ -213,7 +217,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <a
                 id="whatsapp-header-button"
-                href={`https://wa.me/60${siteSettings.whatsappNumber}?text=Hi%20CHILL%20Healthy,%20I'd%20like%20to%20order%20meals!`}
+                href={`${waBaseUrl}?text=Hi%20CHILL%20Healthy,%20I'd%20like%20to%20order%20meals!`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all hover:shadow-emerald-600/20 cursor-pointer"
@@ -337,7 +341,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <a
-                href={`https://wa.me/60${siteSettings.whatsappNumber}`}
+                href={waBaseUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg cursor-pointer"
