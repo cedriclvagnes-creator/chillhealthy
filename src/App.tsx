@@ -339,24 +339,8 @@ export default function App() {
         address: 'Bandar Bukit Tinggi, Klang',
         area: 'Klang / Bukit Tinggi',
         postalCode: '41200',
-        activePackage: {
-          planId: 'plan-20day',
-          planName: '20-Day Transformation Plan (20 Meals)',
-          planNameZh: '20天全效塑形月度餐包 (20餐)',
-          totalMeals: 20,
-          remainingMeals: 15,
-          purchasedDate: new Date().toISOString().split('T')[0],
-          expiryDate: new Date(Date.now() + 45 * 86400000).toISOString().split('T')[0],
-        },
-        creditsHistory: [
-          {
-            id: `cr-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            type: 'purchase',
-            amount: 20,
-            note: 'Online package subscription activation',
-          },
-        ],
+        activePackage: null, // Register with 0 meals until customer confirms purchase of any meal plan
+        creditsHistory: [],
       };
       setMembers((prev) => [newAcct, ...prev]);
       setCurrentMember(newAcct);
@@ -396,28 +380,13 @@ export default function App() {
       postalCode2: newMemberData.postalCode2 || undefined,
       activeAddressSlot: 1,
       dietaryPreferences: newMemberData.dietaryPreferences,
+      // 0 meals granted to newly registered customer until customer confirms purchase of any meal plan
       activePackage: existingIndex >= 0 && members[existingIndex].activePackage
         ? members[existingIndex].activePackage
-        : {
-            planId: 'plan-10day',
-            planName: '10-Day Workday Vitality Plan (10 Meals)',
-            planNameZh: '10天工作日元气定制套餐 (10餐)',
-            totalMeals: 10,
-            remainingMeals: 10,
-            purchasedDate: new Date().toISOString().split('T')[0],
-            expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-          },
+        : null,
       creditsHistory: existingIndex >= 0 && members[existingIndex].creditsHistory?.length
         ? members[existingIndex].creditsHistory
-        : [
-            {
-              id: `cr-${Date.now()}`,
-              date: new Date().toISOString().split('T')[0],
-              type: 'purchase',
-              amount: 10,
-              note: 'Welcome membership package bonus',
-            },
-          ],
+        : [],
     };
 
     if (existingIndex >= 0) {
@@ -1022,6 +991,7 @@ export default function App() {
         onOpenCalorie={() => setIsCalorieModalOpen(true)}
         onOpenMemberPortal={() => setIsMemberPortalOpen(true)}
         onOpenBackOffice={() => setIsBackOfficeOpen(true)}
+        currentMember={currentMember}
       />
 
       {/* Meal Detail Customization Modal */}
@@ -1046,6 +1016,19 @@ export default function App() {
           isOpen={isCalorieModalOpen}
           onClose={() => setIsCalorieModalOpen(false)}
           onSelectRecommendedMeal={(meal) => setSelectedMealForDetail(meal)}
+          currentMember={currentMember}
+          onOpenPlans={() => {
+            setIsCalorieModalOpen(false);
+            scrollToSection('plans');
+          }}
+          onOpenMemberPortal={() => {
+            setIsCalorieModalOpen(false);
+            setIsMemberPortalOpen(true);
+          }}
+          onOpenMenu={() => {
+            setIsCalorieModalOpen(false);
+            scrollToSection('menu');
+          }}
         />
       )}
 
@@ -1102,6 +1085,18 @@ export default function App() {
           packages={packages}
           allRedemptions={redemptions}
           siteSettings={siteSettings}
+          onOpenMenu={() => {
+            setIsMemberPortalOpen(false);
+            scrollToSection('menu');
+          }}
+          onOpenPlans={() => {
+            setIsMemberPortalOpen(false);
+            scrollToSection('plans');
+          }}
+          onOpenCalorie={() => {
+            setIsMemberPortalOpen(false);
+            setIsCalorieModalOpen(true);
+          }}
           onSelectPackageToBuy={(pkg) => {
             setIsMemberPortalOpen(false);
             const cartItem: CartItem = {

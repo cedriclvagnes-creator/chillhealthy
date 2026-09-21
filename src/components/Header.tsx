@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Menu, X, Phone, MessageCircle, Globe, Sparkles, Clock, MapPin, User, Shield, CheckCircle, Instagram } from 'lucide-react';
+import { ShoppingBag, Menu, X, Phone, MessageCircle, Globe, Sparkles, Clock, MapPin, User, Shield, CheckCircle, Instagram, Lock, Check } from 'lucide-react';
 import { Language, CartItem, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
@@ -34,6 +34,13 @@ export const Header: React.FC<HeaderProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Calorie calculator is granted to customers who have purchased a meal plan
+  const hasPurchasedMealPlan = Boolean(
+    currentMember?.activePackage &&
+    (currentMember.activePackage.totalMeals > 0 ||
+      (currentMember.creditsHistory && currentMember.creditsHistory.length > 0))
+  );
 
   // Robust WhatsApp link builder (+60126189919)
   const waBaseUrl = buildWhatsAppUrl(siteSettings.whatsappNumber);
@@ -169,9 +176,34 @@ export const Header: React.FC<HeaderProps> = ({
                 id="nav-link-calculator"
                 onClick={onOpenCalorieModal}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100/80 transition-colors cursor-pointer"
+                title={
+                  hasPurchasedMealPlan
+                    ? language === 'en'
+                      ? 'Calorie Matcher (Subscriber Perk Unlocked)'
+                      : '热量规划计算器 (配套会员已解锁)'
+                    : language === 'en'
+                    ? 'Calorie Matcher (Exclusive to Meal Plan Subscribers)'
+                    : '热量规划计算器 (健康餐配套订购会员专属)'
+                }
               >
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                 <span>{language === 'en' ? 'Calorie Matcher' : '热量规划计算器'}</span>
+                <span
+                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 ${
+                    hasPurchasedMealPlan
+                      ? 'bg-emerald-200/80 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800 border border-amber-200/80'
+                  }`}
+                >
+                  {hasPurchasedMealPlan ? (
+                    'VIP'
+                  ) : (
+                    <>
+                      <Lock className="w-2.5 h-2.5" />
+                      <span>{language === 'en' ? 'Plan Perk' : '配套专属'}</span>
+                    </>
+                  )}
+                </span>
               </button>
 
               <button
@@ -233,10 +265,16 @@ export const Header: React.FC<HeaderProps> = ({
                     <span className="hidden lg:inline font-bold text-stone-800">{currentMember.name.split(' ')[0]}</span>
                     <span className="hidden sm:inline text-stone-300">|</span>
                     <span className="text-[11px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-full shadow-2xs">
-                      {currentMember.activePackage ? `${currentMember.activePackage.remainingMeals} Meals Balance` : 'Member'}
+                      {currentMember.activePackage && currentMember.activePackage.remainingMeals > 0
+                        ? `${currentMember.activePackage.remainingMeals} Meals Balance`
+                        : language === 'en'
+                        ? '0 Meals · Select Plan'
+                        : '0餐额 · 选购配套'}
                     </span>
                     <span className="hidden md:inline text-emerald-800 font-extrabold text-[11px]">
-                      {language === 'en' ? 'Select Meal' : '选餐'}
+                      {currentMember.activePackage && currentMember.activePackage.remainingMeals > 0
+                        ? language === 'en' ? 'Select Meal' : '选餐'
+                        : language === 'en' ? 'Choose Plan' : '选配套'}
                     </span>
                   </span>
                 ) : (
@@ -342,10 +380,28 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenCalorieModal();
               }}
-              className="w-full text-left py-2.5 px-3 rounded-lg text-emerald-700 font-medium hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
+              className="w-full text-left py-2.5 px-3 rounded-lg text-emerald-700 font-medium hover:bg-emerald-50 flex items-center justify-between cursor-pointer"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>{language === 'en' ? 'Calorie Matcher Tool' : '热量与目标规划器'}</span>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                <span>{language === 'en' ? 'Calorie Matcher Tool' : '热量与目标规划器'}</span>
+              </div>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                  hasPurchasedMealPlan
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}
+              >
+                {hasPurchasedMealPlan ? (
+                  'Unlocked'
+                ) : (
+                  <>
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>{language === 'en' ? 'Plan Perk' : '配套专属'}</span>
+                  </>
+                )}
+              </span>
             </button>
             <button
               onClick={() => scrollToSection('story')}

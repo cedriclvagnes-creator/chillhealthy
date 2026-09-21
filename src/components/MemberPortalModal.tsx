@@ -58,6 +58,9 @@ interface MemberPortalModalProps {
   allRedemptions: MealRedemption[];
   siteSettings: SiteSettings;
   onSelectPackageToBuy: (pkg: MealPlan) => void;
+  onOpenMenu?: () => void;
+  onOpenPlans?: () => void;
+  onOpenCalorie?: () => void;
 }
 
 // Utility: get next workday (Mon-Fri) string YYYY-MM-DD
@@ -105,6 +108,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   allRedemptions,
   siteSettings,
   onSelectPackageToBuy,
+  onOpenMenu,
+  onOpenPlans,
+  onOpenCalorie,
 }) => {
   // Login / Register / Forgot Password state
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
@@ -673,14 +679,25 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           {/* Right Action Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* When Logged In: Meal Balance Indicator */}
-            {currentMember && currentMember.activePackage && (
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-xs font-bold">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
-                  {currentMember.activePackage.remainingMeals} / {currentMember.activePackage.totalMeals}{' '}
-                  {language === 'en' ? 'Meals Left' : '剩余餐券'}
-                </span>
-              </div>
+            {currentMember && (
+              currentMember.activePackage && currentMember.activePackage.remainingMeals > 0 ? (
+                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-xs font-bold">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    {currentMember.activePackage.remainingMeals} / {currentMember.activePackage.totalMeals}{' '}
+                    {language === 'en' ? 'Meals Left' : '剩余餐券'}
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPortalTab('renew')}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/70 text-amber-300 hover:bg-amber-900/80 text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{language === 'en' ? '0 Meals · Select Plan' : '0餐额 · 选购配套'}</span>
+                </button>
+              )
             )}
 
             {/* Return to Public Store Button */}
@@ -1432,13 +1449,28 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     )}
                   </div>
 
+                  {/* 0-Meal Initial Registration Notice */}
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/90 text-xs text-amber-950 flex items-start gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-amber-900 block">
+                        {language === 'en' ? '0 Meals Initial Policy · You Decide What to Buy' : '0 餐额初始政策 · 自由决定购买配套或单点'}
+                      </span>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        {language === 'en'
+                          ? 'New member accounts are registered with 0 meals and no forced subscription. Once registered, you can choose to purchase a meal plan (5-day, 10-day, 20-day) or order ala carte on-demand!'
+                          : '新注册账号初始包含 0 份餐额，不强制绑定任何套餐。注册后您可以自由按需选购周期餐包，或直接单点今日轻食外卖！'}
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Bottom Registration CTA */}
                   <button
                     type="submit"
                     className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer mt-2 flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{language === 'en' ? 'Create Account & Access Member Portal' : '立即注册并进入会员中心'}</span>
+                    <span>{language === 'en' ? 'Create Account & Access Member Portal (0 Meals Initial)' : '立即注册并进入会员中心 (初始0餐)'}</span>
                   </button>
                 </form>
               )}

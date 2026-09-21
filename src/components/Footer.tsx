@@ -1,6 +1,6 @@
 import React from 'react';
-import { MessageCircle, Phone, MapPin, Clock, Heart, ShieldCheck, Instagram, Facebook, User, Settings, Shield } from 'lucide-react';
-import { Language, SiteSettings } from '../types';
+import { MessageCircle, Phone, MapPin, Clock, Heart, ShieldCheck, Instagram, Facebook, User, Settings, Shield, Lock } from 'lucide-react';
+import { Language, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
 
@@ -11,6 +11,7 @@ interface FooterProps {
   onOpenCalorie: () => void;
   onOpenMemberPortal: () => void;
   onOpenBackOffice?: () => void;
+  currentMember?: MemberAccount | null;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -20,7 +21,13 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenCalorie,
   onOpenMemberPortal,
   onOpenBackOffice,
+  currentMember,
 }) => {
+  const hasPurchasedMealPlan = Boolean(
+    currentMember?.activePackage &&
+    (currentMember.activePackage.totalMeals > 0 ||
+      (currentMember.creditsHistory && currentMember.creditsHistory.length > 0))
+  );
   return (
     <footer id="footer" className="bg-stone-900 text-stone-300 pt-16 pb-12 border-t border-stone-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -112,9 +119,25 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <button
                   onClick={onOpenCalorie}
-                  className="hover:text-emerald-400 transition-colors text-left text-emerald-400 font-semibold cursor-pointer"
+                  className="hover:text-emerald-400 transition-colors text-left text-emerald-400 font-semibold cursor-pointer flex items-center gap-1.5"
                 >
-                  {language === 'en' ? 'Calorie & TDEE Matcher' : '热量与宏量营养计算器'}
+                  <span>{language === 'en' ? 'Calorie & TDEE Matcher' : '热量与宏量营养计算器'}</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold flex items-center gap-0.5 ${
+                      hasPurchasedMealPlan
+                        ? 'bg-emerald-800 text-emerald-200'
+                        : 'bg-amber-950 text-amber-300 border border-amber-800'
+                    }`}
+                  >
+                    {hasPurchasedMealPlan ? (
+                      'VIP'
+                    ) : (
+                      <>
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>{language === 'en' ? 'Plan Perk' : '配套专属'}</span>
+                      </>
+                    )}
+                  </span>
                 </button>
               </li>
               <li className="pt-2 border-t border-stone-800 flex flex-col gap-2">
