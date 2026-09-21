@@ -38,7 +38,7 @@ export const Footer: React.FC<FooterProps> = ({
                     潮轻食
                   </span>
                 </div>
-                <span className="text-[11px] text-stone-400">chillhealthy.com</span>
+                <span className="text-[11px] text-stone-400">chill-healthy.com</span>
               </div>
             </div>
 
@@ -59,11 +59,11 @@ export const Footer: React.FC<FooterProps> = ({
                 <MessageCircle className="w-5 h-5" />
               </a>
               <a
-                href="https://facebook.com"
+                href={siteSettings.facebookUrl || "https://www.facebook.com/chillhealthy88"}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-9 h-9 rounded-xl bg-stone-800 text-stone-300 hover:bg-stone-700 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                title="Facebook"
+                className="w-9 h-9 rounded-xl bg-stone-800 text-stone-300 hover:bg-[#1877F2] hover:text-white flex items-center justify-center transition-colors cursor-pointer shadow-xs"
+                title="Facebook: @chillhealthy88"
               >
                 <Facebook className="w-5 h-5" />
               </a>
@@ -181,7 +181,11 @@ export const Footer: React.FC<FooterProps> = ({
 
               <div className="flex items-center gap-2.5">
                 <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{siteSettings.kitchenHours}</span>
+                <span>
+                  {language === 'en'
+                    ? (siteSettings.kitchenHours || 'Monday to Friday: 8:30 AM – 7:30 PM')
+                    : '营业时间：周一至周五 8:30 AM – 7:30 PM'}
+                </span>
               </div>
             </div>
 
@@ -191,15 +195,15 @@ export const Footer: React.FC<FooterProps> = ({
                 {language === 'en' ? 'Official Channels Advisory:' : '认准官方唯一订餐通道:'}
               </span>
               {language === 'en'
-                ? `Official orders are processed exclusively through chillhealthy.com and our verified WhatsApp at ${siteSettings.whatsappDisplay}. Follow our daily meal creations on Instagram: @chillhealthybox.`
-                : `请注意仅通过官方网站 chillhealthy.com 及官方客服 WhatsApp ${siteSettings.whatsappDisplay} 订餐，谨防网络第三方仿冒链接。关注官方 Instagram：@chillhealthybox。`}
+                ? `Official orders are processed exclusively through chill-healthy.com and our verified WhatsApp at ${siteSettings.whatsappDisplay}. Follow our daily meal creations on Instagram: @chillhealthybox.`
+                : `请注意仅通过官方网站 chill-healthy.com 及官方客服 WhatsApp ${siteSettings.whatsappDisplay} 订餐，谨防网络第三方仿冒链接。关注官方 Instagram：@chillhealthybox。`}
             </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500">
-          <p>© {new Date().getFullYear()} CHILL Healthy (潮轻食) · chillhealthy.com. All Rights Reserved.</p>
+          <p>© {new Date().getFullYear()} CHILL Healthy (潮轻食) · chill-healthy.com. All Rights Reserved.</p>
           <div className="flex items-center gap-4">
             <span>Halal-Sourced Poultry</span>
             <span>·</span>

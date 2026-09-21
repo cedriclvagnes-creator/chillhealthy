@@ -1,16 +1,59 @@
 import React from 'react';
-import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle, Instagram } from 'lucide-react';
-import { Language, SiteSettings } from '../types';
+import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle, Instagram, Edit3 } from 'lucide-react';
+import { Language, SiteSettings, HomepageContent } from '../types';
 import { CraftedWithCarePhoto } from './CraftedWithCarePhoto';
 
 interface BrandStorySectionProps {
   language: Language;
   siteSettings: SiteSettings;
+  content?: HomepageContent;
+  isEditMode?: boolean;
+  onEditStory?: () => void;
 }
 
-export const BrandStorySection: React.FC<BrandStorySectionProps> = ({ language, siteSettings }) => {
+export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
+  language,
+  siteSettings,
+  content,
+  isEditMode = false,
+  onEditStory,
+}) => {
+  const storyTag = content
+    ? (language === 'en' ? content.storyTagEn : content.storyTagZh)
+    : (language === 'en' ? 'Crafted with care' : '用心手作 · 严选天然');
+
+  const storyHeadline = content
+    ? (language === 'en' ? content.storyHeadlineEn : content.storyHeadlineZh)
+    : (language === 'en' ? 'Why CHILL Healthy Bento Tastes So Much Better' : '为什么潮轻食能做到 低卡却极致入味？');
+
+  const storySubtitle = content
+    ? (language === 'en' ? content.storySubtitleEn : content.storySubtitleZh)
+    : (language === 'en' ? '— Crafted with care, everyday in our central kitchen' : '— 每一份，皆是用心手作的健康温度');
+
+  const storyDescription = content
+    ? (language === 'en' ? content.storyDescriptionEn : content.storyDescriptionZh)
+    : (language === 'en'
+        ? 'Most people give up on diets not because of lack of willpower, but because traditional diet food is dry, tasteless, and exhausting to maintain. At CHILL Healthy, we combine modern sous-vide culinary science with authentic Asian home-cooking flavors so you can eat clean consistently without feeling deprived.'
+        : '绝大多数人减脂失败，不是毅力不足，而是传统减脂餐太难下咽！CHILL Healthy 潮轻食突破传统束缚，将法式低温慢煮工艺与南洋风味巧妙结合，坚持0味精、低盐低油，让每天的健康午餐成为期待已久的生活享受。');
+
   return (
-    <section id="story" className="py-16 sm:py-20 bg-stone-50 border-b border-stone-200">
+    <section id="story" className={`py-16 sm:py-20 bg-stone-50 border-b relative ${
+      isEditMode ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-stone-200'
+    }`}>
+      {/* Edit Story Button */}
+      {isEditMode && onEditStory && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+          <button
+            type="button"
+            onClick={onEditStory}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs shadow-md border border-amber-300 transition-all cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>{language === 'en' ? 'Edit Brand Story & Kitchen Photo' : '编辑品牌故事与厨房照片'}</span>
+          </button>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Left Column: Visual Brand Story Collage */}
@@ -139,8 +182,8 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({ language, 
                 </span>
                 <p className="leading-relaxed text-amber-800">
                   {language === 'en'
-                    ? `Please ensure you only order via chillhealthy.com or our verified WhatsApp (+60 ${siteSettings.whatsappNumber}). Be cautious of fake social media ads promoting unrealistic promotions.`
-                    : `请认准官方订餐平台 chillhealthy.com 及官方唯一客服 WhatsApp（${siteSettings.whatsappDisplay}）。请广大顾客警惕第三方仿冒广告及不实低价活动，官方品质用心保障。`}
+                    ? `Please ensure you only order via chill-healthy.com or our verified WhatsApp (+60 ${siteSettings.whatsappNumber}). Be cautious of fake social media ads promoting unrealistic promotions.`
+                    : `请认准官方订餐平台 chill-healthy.com 及官方唯一客服 WhatsApp（${siteSettings.whatsappDisplay}）。请广大顾客警惕第三方仿冒广告及不实低价活动，官方品质用心保障。`}
                 </p>
               </div>
             </div>

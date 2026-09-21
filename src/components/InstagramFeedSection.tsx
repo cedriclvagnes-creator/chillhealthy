@@ -36,6 +36,9 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
   const instagramUrl = siteSettings.instagramUrl || 'https://www.instagram.com/chillhealthybox/';
   const instagramHandle = siteSettings.instagramHandle || '@chillhealthybox';
 
+  // Top view post with highest engagement / views to link at the IG introduction
+  const topViewPost = [...INSTAGRAM_POSTS].sort((a, b) => b.likes - a.likes)[0] || INSTAGRAM_POSTS[0];
+
   const filteredPosts = selectedCategory === 'all'
     ? INSTAGRAM_POSTS
     : INSTAGRAM_POSTS.filter(p => p.category === selectedCategory);
@@ -67,7 +70,7 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
             
             {/* Profile Avatar & Info */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-5">
-              {/* Instagram Story Gradient Ring */}
+              {/* Instagram Story Gradient Ring with Exact Official IG Account Logo */}
               <a
                 href={instagramUrl}
                 target="_blank"
@@ -75,13 +78,14 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
                 className="relative p-1 rounded-full bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600 shadow-md group shrink-0"
                 title="View @chillhealthybox on Instagram"
               >
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white p-1 overflow-hidden transition-transform duration-300 group-hover:scale-105">
-                  <div className="w-full h-full rounded-full bg-stone-900 flex flex-col items-center justify-center text-white">
-                    <span className="font-heading font-black text-sm tracking-tight text-emerald-400">CHILL</span>
-                    <Instagram className="w-5 h-5 text-pink-500 mt-0.5" />
-                  </div>
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white p-1 overflow-hidden transition-transform duration-300 group-hover:scale-105 flex items-center justify-center">
+                  <img
+                    src={siteSettings.logoUrl || '/chill-healthy-logo.svg'}
+                    alt="CHILL Healthy Official IG Account Logo"
+                    className="w-full h-full object-contain rounded-full bg-white"
+                  />
                 </div>
-                <div className="absolute -bottom-1 -right-1 bg-pink-600 text-white p-1 rounded-full border-2 border-white shadow-xs">
+                <div className="absolute -bottom-1 -right-1 bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600 text-white p-1.5 rounded-full border-2 border-white shadow-xs">
                   <Instagram className="w-3.5 h-3.5" />
                 </div>
               </a>
@@ -120,6 +124,46 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
                     <strong className="font-bold text-stone-900">Klang Valley</strong> {language === 'en' ? 'hub' : '配送中心'}
                   </span>
                 </div>
+
+                {/* Top View Post from IG linked at the IG introduction */}
+                {topViewPost && (
+                  <div className="pt-2">
+                    <a
+                      href={instagramUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group inline-flex items-center gap-3 p-2 pr-3.5 rounded-2xl bg-amber-50/90 hover:bg-amber-100 border border-amber-200 text-xs text-stone-800 transition-all shadow-2xs cursor-pointer"
+                      title={language === 'en' ? 'Watch our top-viewed post on Instagram' : '前往 Instagram 观看本季最高播放精选动态'}
+                    >
+                      <div className="relative w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-amber-300 shadow-2xs">
+                        <img
+                          src={topViewPost.imageUrl}
+                          alt="Top Viewed Post on Instagram"
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-stone-950/30 flex items-center justify-center">
+                          <Play className="w-4 h-4 text-white fill-white drop-shadow-sm" />
+                        </div>
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                          <span className="inline-flex items-center gap-1 text-pink-600">
+                            <Flame className="w-3.5 h-3.5 fill-pink-500 text-pink-500" />
+                            {language === 'en' ? 'Top Viewed IG Post' : 'IG 最高播放/点赞精选'}
+                          </span>
+                          <span className="text-stone-300">·</span>
+                          <span className="text-stone-600 font-medium">
+                            ❤️ {topViewPost.likes} {language === 'en' ? 'likes' : '人点赞'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-600 line-clamp-1 group-hover:text-emerald-800 font-medium max-w-sm sm:max-w-md">
+                          {language === 'en' ? topViewPost.captionEn : topViewPost.captionZh}
+                        </p>
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 text-stone-400 group-hover:text-stone-800 shrink-0 ml-auto" />
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
 

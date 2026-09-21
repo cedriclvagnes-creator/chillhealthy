@@ -19,6 +19,7 @@ interface MealDetailModalProps {
   onClose: () => void;
   onAddToCart: (item: CartItem) => void;
   onUpdateMeal?: (updatedMeal: MealItem) => void;
+  allowEdit?: boolean;
 }
 
 export const MealDetailModal: React.FC<MealDetailModalProps> = ({
@@ -27,6 +28,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   onClose,
   onAddToCart,
   onUpdateMeal,
+  allowEdit = false,
 }) => {
   const [quantity, setQuantity] = useState(1);
   const [substitutions, setSubstitutions] = useState({
@@ -109,24 +111,26 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
       <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200">
         {/* Top Control Buttons */}
         <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-          {/* Quick Edit button for Photo, Name, Protein, Description */}
-          <button
-            onClick={() => {
-              if (!isEditing) {
-                setEditedMeal({ ...meal });
-              }
-              setIsEditing(!isEditing);
-            }}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-md backdrop-blur-md transition-all cursor-pointer ${
-              isEditing
-                ? 'bg-amber-500 text-stone-900 ring-2 ring-amber-400'
-                : 'bg-white/90 hover:bg-white text-stone-800'
-            }`}
-            title="Edit Photo, Name, Protein, and Description"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
-            <span>{isEditing ? (language === 'en' ? 'Cancel Edit' : '取消编辑') : (language === 'en' ? 'Edit Dish' : '编辑菜品')}</span>
-          </button>
+          {/* Quick Edit button for Photo, Name, Protein, Description (Admin Only) */}
+          {allowEdit && (
+            <button
+              onClick={() => {
+                if (!isEditing) {
+                  setEditedMeal({ ...meal });
+                }
+                setIsEditing(!isEditing);
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-md backdrop-blur-md transition-all cursor-pointer ${
+                isEditing
+                  ? 'bg-amber-500 text-stone-900 ring-2 ring-amber-400'
+                  : 'bg-white/90 hover:bg-white text-stone-800'
+              }`}
+              title="Edit Photo, Name, Protein, and Description"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
+              <span>{isEditing ? (language === 'en' ? 'Cancel Edit' : '取消编辑') : (language === 'en' ? 'Edit Dish' : '编辑菜品')}</span>
+            </button>
+          )}
 
           {/* Close Button */}
           <button

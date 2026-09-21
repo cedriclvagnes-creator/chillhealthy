@@ -75,7 +75,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return d.toISOString().split('T')[0];
   });
 
-  const [deliverySlot, setDeliverySlot] = useState<'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (5:00 PM – 7:30 PM)' | 'Both Lunch & Dinner'>(
+  const [deliverySlot, setDeliverySlot] = useState<'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (3:00 PM – 7:00 PM)' | 'Both Lunch & Dinner'>(
     'Lunch (10:00 AM – 2:00 PM)'
   );
   const [paymentMethod, setPaymentMethod] = useState<'duitnow' | 'whatsapp'>('duitnow');
@@ -276,8 +276,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <p className="text-stone-500 mt-0.5">
                       {language === 'en'
-                        ? 'Once confirmed, select your meals daily before 5:00 PM for lunch (10:00 AM – 2:00 PM) or dinner (5:00 PM – 7:30 PM).'
-                        : '确认配套后，即可自选每天午餐（10:00 AM – 2:00 PM）或晚餐（5:00 PM – 7:30 PM），前一天下午 5:00 前选定。'}
+                        ? 'Once confirmed, select your meals daily before 5:00 PM for lunch (10:00 AM – 2:00 PM) or dinner: 3:00pm - 7:00pm.'
+                        : '确认配套后，即可自选每天午餐（10:00 AM – 2:00 PM）或晚餐：3:00pm - 7:00pm，前一天下午 5:00 前选定。'}
                     </p>
                   </div>
                 </div>
@@ -559,7 +559,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   value={deliverySlot}
                   onChange={(e) =>
                     setDeliverySlot(
-                      e.target.value as 'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (5:00 PM – 7:30 PM)' | 'Both Lunch & Dinner'
+                      e.target.value as 'Lunch (10:00 AM – 2:00 PM)' | 'Dinner (3:00 PM – 7:00 PM)' | 'Both Lunch & Dinner'
                     )
                   }
                   className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white font-semibold text-stone-800"
@@ -567,11 +567,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <option value="Lunch (10:00 AM – 2:00 PM)">
                     🍱 {language === 'en' ? 'Lunch (10:00 AM – 2:00 PM)' : '午餐配送 (10:00 AM – 2:00 PM)'}
                   </option>
-                  <option value="Dinner (5:00 PM – 7:30 PM)">
-                    🌙 {language === 'en' ? 'Dinner (5:00 PM – 7:30 PM)' : '晚餐配送 (5:00 PM – 7:30 PM)'}
+                  <option value="Dinner: 3:00pm - 7:00pm">
+                    🍲 {language === 'en' ? 'Dinner: 3:00pm - 7:00pm' : '晚餐配送：3:00pm - 7:00pm'}
                   </option>
                   <option value="Both Lunch & Dinner">
-                    🍱🌙 {language === 'en' ? 'Both Lunch & Dinner (Split)' : '午餐与晚餐分批送达'}
+                    🍱🍲 {language === 'en' ? 'Both Lunch & Dinner (Split)' : '午餐与晚餐分批送达'}
                   </option>
                 </select>
               </div>

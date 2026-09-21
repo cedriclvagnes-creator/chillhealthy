@@ -29,6 +29,8 @@ import {
   ArrowLeft,
   Search,
   Filter,
+  Gift,
+  Send,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings } from '../types';
 import { ChillLogo } from './ChillLogo';
@@ -302,7 +304,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     onRegister({
       name: trimmedName,
       phone: cleanPhone,
-      email: regEmail.trim() || `${cleanPhone}@customer.chillhealthy.com`,
+      email: regEmail.trim() || `${cleanPhone}@customer.chill-healthy.com`,
       password: regPass.trim() || '123456',
       address: regAddress.trim(),
       area: regArea,
@@ -1207,8 +1209,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   <div className="h-9 w-px bg-stone-700 hidden sm:block" />
 
                   {currentMember.activePackage ? (
-                    <div className="flex items-center gap-3">
-                      <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Balance Meal Available */}
+                      <div className="bg-stone-900/90 px-3.5 py-2 rounded-xl border border-stone-700/70">
                         <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
                           {language === 'en' ? 'Meal Balance' : '剩余可用餐券'}
                         </span>
@@ -1222,11 +1225,94 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         </div>
                       </div>
 
+                      {/* WhatsApp Plan Renewal Reminder Button (Right Beside Balance Meal Available) */}
+                      {(() => {
+                        const planName = (currentMember.activePackage.planName || '').toLowerCase();
+                        const planId = (currentMember.activePackage.planId || '').toLowerCase();
+                        const totalMeals = currentMember.activePackage.totalMeals || 20;
+
+                        // Calculate free meals: 1 meal free for single, 2 for duo, etc.
+                        let freeMeals = 1;
+                        let tierLabelEn = 'Single Plan (1 Meal Free + Free Delivery)';
+                        let tierLabelZh = '单人配套（送1餐+免运费）';
+
+                        if (planId.includes('6-person') || planName.includes('6-person') || totalMeals >= 120) {
+                          freeMeals = 6;
+                          tierLabelEn = '6-Person Plan (6 Meals Free + Free Delivery)';
+                          tierLabelZh = '六人配套（送6餐+免运费）';
+                        } else if (planId.includes('5-person') || planName.includes('5-person') || totalMeals >= 100) {
+                          freeMeals = 5;
+                          tierLabelEn = '5-Person Plan (5 Meals Free + Free Delivery)';
+                          tierLabelZh = '五人配套（送5餐+免运费）';
+                        } else if (planId.includes('4-person') || planName.includes('4-person') || totalMeals >= 80) {
+                          freeMeals = 4;
+                          tierLabelEn = '4-Person Plan (4 Meals Free + Free Delivery)';
+                          tierLabelZh = '四人配套（送4餐+免运费）';
+                        } else if (planId.includes('3-person') || planName.includes('3-person') || totalMeals >= 60) {
+                          freeMeals = 3;
+                          tierLabelEn = '3-Person Plan (3 Meals Free + Free Delivery)';
+                          tierLabelZh = '三人配套（送3餐+免运费）';
+                        } else if (planId.includes('2-person') || planName.includes('duo') || planName.includes('2-person') || totalMeals >= 40) {
+                          freeMeals = 2;
+                          tierLabelEn = 'Duo Plan (2 Meals Free + Free Delivery)';
+                          tierLabelZh = '双人配套（送2餐+免运费）';
+                        }
+
+                        const bonusTextEn = `${freeMeals} Meal${freeMeals > 1 ? 's' : ''} Free with Delivery`;
+                        const bonusTextZh = `送 ${freeMeals} 餐 + 免运费`;
+
+                        const whatsappMessage = encodeURIComponent(
+                          `Hi CHILL Healthy (chill-healthy.com)! 👋\n\n` +
+                          `I would like to renew my meal plan with the Renewal Special Bonus:\n` +
+                          `👤 Member: ${currentMember.name} (${currentMember.memberNumber || currentMember.phone})\n` +
+                          `📦 Current Plan: ${currentMember.activePackage.planName}\n` +
+                          `🍱 Balance Remaining: ${currentMember.activePackage.remainingMeals}/${currentMember.activePackage.totalMeals} meals\n` +
+                          `🎁 Renewal Incentive: ${bonusTextEn} (${tierLabelZh})\n\n` +
+                          `Please help me confirm my plan renewal and claim my ${freeMeals} free meal(s) with delivery. Thank you!`
+                        );
+
+                        return (
+                          <a
+                            id="btn-whatsapp-renewal-reminder"
+                            href={`https://wa.me/${whatsappLinkNumber}?text=${whatsappMessage}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group relative flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md hover:shadow-emerald-600/30 transition-all cursor-pointer border border-emerald-400/40 active:scale-95"
+                            title={
+                              language === 'en'
+                                ? `Renew via WhatsApp & get ${bonusTextEn}`
+                                : `通过 WhatsApp 续订配套，即可获赠 ${bonusTextZh}`
+                            }
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                              <Gift className="w-4 h-4 text-amber-300 animate-bounce" />
+                            </div>
+                            <div className="text-left">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100 flex items-center gap-1">
+                                  <MessageCircle className="w-3 h-3 text-emerald-300 fill-emerald-300/30" />
+                                  {language === 'en' ? 'Renew via WhatsApp' : 'WhatsApp 专属续订'}
+                                </span>
+                                <span className="text-[9px] font-black bg-amber-400 text-stone-900 px-1.5 py-0.2 rounded-full shadow-2xs">
+                                  {language === 'en' ? `+${freeMeals} FREE` : `送${freeMeals}餐`}
+                                </span>
+                              </div>
+                              <p className="text-xs font-extrabold text-white leading-tight">
+                                {language === 'en'
+                                  ? `${bonusTextEn}`
+                                  : `${bonusTextZh}`}
+                              </p>
+                            </div>
+                          </a>
+                        );
+                      })()}
+
+                      {/* Redeem Daily Meal Button */}
                       <button
                         onClick={() => setPortalTab('redeem')}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        className="px-3.5 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 text-white text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-stone-600"
                       >
-                        <Utensils className="w-3.5 h-3.5" />
+                        <Utensils className="w-3.5 h-3.5 text-emerald-400" />
                         <span>{language === 'en' ? 'Redeem Meal' : '每日选餐'}</span>
                       </button>
                     </div>
@@ -1492,14 +1578,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setSelectedSlot('Dinner (5:00 PM – 7:00 PM)')}
+                              onClick={() => setSelectedSlot('Dinner: 3:00pm - 7:00pm')}
                               className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
                                 selectedSlot.includes('Dinner')
                                   ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-2 ring-amber-600/30'
                                   : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
                               }`}
                             >
-                              🌙 {language === 'en' ? 'Dinner (5pm–7pm)' : '晚餐 (5pm–7pm)'}
+                              🍲 {language === 'en' ? 'Dinner: 3:00pm - 7:00pm' : '晚餐：3:00pm - 7:00pm'}
                             </button>
                           </div>
                         </div>

@@ -1,6 +1,6 @@
 {
   "name": "CHILL Healthy 潮轻食",
-  "description": "Official CHILL Healthy (chillhealthy.com) healthy meal packages (1 to 6 persons), 26 rotating lunch bentos, member daily meal redemption, and admin back office.",
+  "description": "Official CHILL Healthy (chill-healthy.com) healthy meal packages (1 to 6 persons), 26 rotating lunch bentos, member daily meal redemption, and admin back office.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

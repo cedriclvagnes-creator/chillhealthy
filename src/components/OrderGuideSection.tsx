@@ -223,22 +223,40 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3 text-stone-300 text-sm">
-                  <Clock className="w-5 h-5 text-emerald-400 shrink-0" />
-                  <span>
-                    <strong className="text-white">
-                      {isEn ? 'Lunch Delivery: 10:00 AM – 2:00 PM' : '🍱 午餐配送：10:00 AM – 2:00 PM'}
-                    </strong>
-                  </span>
+                <div className="space-y-2 text-stone-300 text-sm">
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <span>
+                      <strong className="text-white">
+                        {isEn ? 'Lunch Delivery: 10:00 AM – 2:00 PM' : '🍱 午餐配送：10:00 AM – 2:00 PM'}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+                    <span>
+                      <strong className="text-white">
+                        {isEn ? 'Dinner Delivery: 3:00pm - 7:00pm' : '🍲 晚餐配送：3:00pm - 7:00pm'}
+                      </strong>
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-400 pl-8">
+                    {isEn
+                      ? 'Daily lunch delivered fresh. Daily meal selection cutoff before 5:00 PM.'
+                      : '每日新鲜现做配送。隔天餐点请在每天下午 5:00 前完成选择。'}
+                  </p>
                 </div>
 
                 <div className="border-t border-stone-700 pt-4 space-y-3">
                   <div className="flex items-start gap-2 text-xs sm:text-sm text-stone-300">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <Truck className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                     <span>
+                      <strong className="text-white">
+                        {isEn ? 'Klang Valley Free Delivery: ' : '巴生谷全境免运费：'}
+                      </strong>
                       {isEn
-                        ? 'Includes Klang Valley Delivery · 1 Account can register up to 2 addresses'
-                        : '包含巴生谷运费 · 一个户口可支持两个常用配送地址'}
+                        ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses. One day deliver one address for each account.'
+                        : '覆盖巴生河流域免运费。1 个账户支持最多 2 个地址，每个账户一天派送一个地址。'}
                     </span>
                   </div>
                   <div className="flex items-start gap-2 text-xs sm:text-sm text-stone-300">

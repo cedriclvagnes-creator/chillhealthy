@@ -95,7 +95,7 @@ export const INSTAGRAM_POSTS: InstagramPost[] = [
     comments: 47,
     dateEn: '6 days ago',
     dateZh: '6天前',
-    captionEn: 'Macro Nutrition Guide: How to choose your lunch when aiming for fat loss vs muscle gain? 🥗 Check our Calorie Matcher tool on chillhealthy.com or drop us a DM on @chillhealthybox for customized meal advice!',
+    captionEn: 'Macro Nutrition Guide: How to choose your lunch when aiming for fat loss vs muscle gain? 🥗 Check our Calorie Matcher tool on chill-healthy.com or drop us a DM on @chillhealthybox for customized meal advice!',
     captionZh: '轻食营养搭配指南：减脂期与增肌期该如何挑选热量？🥗 欢迎使用官网热量匹配工具，或直接在 Instagram @chillhealthybox 私信我们获取一对一定制建议！',
     tags: ['#chillhealthybox', '#nutritiontips', '#caloriedeficit', '#fitnessmalaysia'],
   },

@@ -1,6 +1,6 @@
 import React from 'react';
-import { ArrowRight, ShieldCheck, Flame, Leaf, Clock, Sparkles, Star, Award, HeartHandshake, UtensilsCrossed } from 'lucide-react';
-import { Language } from '../types';
+import { ArrowRight, ShieldCheck, Flame, Leaf, Clock, Sparkles, Star, Award, HeartHandshake, UtensilsCrossed, Edit3 } from 'lucide-react';
+import { Language, HomepageContent } from '../types';
 import { AlaCarteCombinationPhoto } from './AlaCarteCombinationPhoto';
 
 interface HeroBannerProps {
@@ -8,6 +8,9 @@ interface HeroBannerProps {
   onExploreMenu: () => void;
   onViewPlans: () => void;
   onViewOrderGuide?: () => void;
+  content?: HomepageContent;
+  isEditMode?: boolean;
+  onEditHero?: () => void;
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
@@ -15,12 +18,45 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onExploreMenu,
   onViewPlans,
   onViewOrderGuide,
+  content,
+  isEditMode = false,
+  onEditHero,
 }) => {
+  const heroTag = content
+    ? (language === 'en' ? content.heroTagEn : content.heroTagZh)
+    : (language === 'en' ? 'Official CHILL Healthy (潮轻食) Kitchen' : 'CHILL Healthy 潮轻食 · 官方健康轻食厨房');
+
+  const heroHeadline = content
+    ? (language === 'en' ? content.heroHeadlineEn : content.heroHeadlineZh)
+    : (language === 'en' ? "Eating Clean Shouldn't Be Boring." : '潮味轻食，让健康生活 毫不费力又美味');
+
+  const heroDescription = content
+    ? (language === 'en' ? content.heroDescriptionEn : content.heroDescriptionZh)
+    : (language === 'en'
+        ? 'Chef-crafted high-protein meal boxes, sous-vide tender meats, and whole-grain nutrition. Cooked fresh daily in Klang Valley with zero MSG, low sodium, and clean healthy oils. Fuel your body without sacrificing taste.'
+        : '拒绝寡淡水煮菜！CHILL Healthy 潮轻食坚持每日清晨现做，以65°C低温真空慢煮鲜嫩鸡胸肉、现煎深海三文鱼排与有机原粒糙米，严格控制热量与三大营养素，准时热腾腾配送至您的办公桌与家中。');
+
   return (
-    <section id="hero" className="relative overflow-hidden bg-stone-100/70 pt-8 pb-16 lg:py-20 border-b border-stone-200/60">
+    <section id="hero" className={`relative overflow-hidden bg-stone-100/70 pt-8 pb-16 lg:py-20 border-b ${
+      isEditMode ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-stone-200/60'
+    }`}>
       {/* Decorative background ambient circles */}
       <div className="absolute top-0 right-0 -mr-24 -mt-24 w-96 h-96 rounded-full bg-emerald-100/50 blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 -mb-20 w-80 h-80 rounded-full bg-amber-100/40 blur-3xl pointer-events-none" />
+
+      {/* Edit Overlay Button */}
+      {isEditMode && onEditHero && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+          <button
+            type="button"
+            onClick={onEditHero}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs shadow-md border border-amber-300 transition-all cursor-pointer"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>{language === 'en' ? 'Edit Hero Headline & Text' : '编辑主页首图与标题文案'}</span>
+          </button>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -29,31 +65,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             {/* Top Brand Tag */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-800 text-white text-xs font-semibold shadow-xs">
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>
-                {language === 'en'
-                  ? 'Official CHILL Healthy (潮轻食) Kitchen'
-                  : 'CHILL Healthy 潮轻食 · 官方健康轻食厨房'}
-              </span>
+              <span>{heroTag}</span>
             </div>
 
             {/* Main Headline */}
             <h1 className="font-heading text-4xl sm:text-5xl xl:text-6xl font-extrabold text-stone-900 tracking-tight leading-[1.15]">
-              {language === 'en' ? (
-                <>
-                  Eating Clean Shouldn't Be <span className="text-emerald-700 underline decoration-emerald-300 decoration-wavy decoration-2">Boring</span>.
-                </>
-              ) : (
-                <>
-                  潮味轻食，让健康生活 <span className="text-emerald-700">毫不费力又美味</span>
-                </>
-              )}
+              {heroHeadline}
             </h1>
 
             {/* Subheading / Description */}
             <p className="text-stone-600 text-base sm:text-lg leading-relaxed max-w-2xl font-normal">
-              {language === 'en'
-                ? 'Chef-crafted high-protein meal boxes, sous-vide tender meats, and whole-grain nutrition. Cooked fresh daily in Klang Valley with zero MSG, low sodium, and clean healthy oils. Fuel your body without sacrificing taste.'
-                : '拒绝寡淡水煮菜！CHILL Healthy 潮轻食坚持每日清晨现做，以65°C低温真空慢煮鲜嫩鸡胸肉、现煎深海三文鱼排与有机原粒糙米，严格控制热量与三大营养素，准时热腾腾配送至您的办公桌与家中。'}
+              {heroDescription}
             </p>
 
             {/* Action Buttons */}
@@ -138,6 +160,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <AlaCarteCombinationPhoto
                 language={language}
                 onExploreMenu={onExploreMenu}
+                allowEdit={isEditMode}
               />
 
               {/* Floating Highlight Card 1: 24 Ala Carte Choices */}

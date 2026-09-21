@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, Clock, Calendar, ShieldCheck, ArrowRight, UserCheck, Users, HeartPulse, Plus } from 'lucide-react';
+import { Check, Sparkles, Clock, Calendar, ShieldCheck, ArrowRight, UserCheck, Users, HeartPulse, Plus, Edit3 } from 'lucide-react';
 import { MealPlan, Language, CartItem } from '../types';
 import { MEAL_PLANS } from '../data/menuData';
 
@@ -8,6 +8,8 @@ interface MealPlansSectionProps {
   onAddPlanToCart: (item: CartItem) => void;
   packages?: MealPlan[];
   onOpenMemberPortal?: () => void;
+  isEditMode?: boolean;
+  onEditPackages?: () => void;
 }
 
 export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
@@ -15,6 +17,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
   onAddPlanToCart,
   packages = MEAL_PLANS,
   onOpenMemberPortal,
+  isEditMode = false,
+  onEditPackages,
 }) => {
   const isEn = language === 'en';
   // Track upsize choice per plan ID
@@ -71,6 +75,18 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-8">
+          {isEditMode && onEditPackages && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={onEditPackages}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs shadow-md border border-amber-300 transition-all cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>{isEn ? 'Edit Packages & Pricing' : '编辑月度套餐计划与价格'}</span>
+              </button>
+            </div>
+          )}
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
             <Sparkles className="w-3.5 h-3.5" />
             <span>{isEn ? 'Official CHILL Healthy Meal Packages' : '潮轻食官方包月健康餐配套'}</span>
@@ -315,8 +331,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       </span>
                       <span>
                         {isEn
-                          ? `Delivers ${plan.mealsPerDay} meal${plan.mealsPerDay > 1 ? 's' : ''} per day to 1 address (10:00 AM – 2:00 PM)`
-                          : `一天送${plan.mealsPerDay === 1 ? '一' : plan.mealsPerDay === 2 ? '两' : plan.mealsPerDay === 3 ? '三' : plan.mealsPerDay === 4 ? '四' : '六'}餐一个地址（10:00 AM – 2:00 PM）`}
+                          ? `Delivers ${plan.mealsPerDay} meal${plan.mealsPerDay > 1 ? 's' : ''} per day to 1 address (10:00 AM – 5:00 PM)`
+                          : `一天送${plan.mealsPerDay === 1 ? '一' : plan.mealsPerDay === 2 ? '两' : plan.mealsPerDay === 3 ? '三' : plan.mealsPerDay === 4 ? '四' : '六'}餐一个地址（10:00 AM – 5:00 PM）`}
                       </span>
                     </div>
 

@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle } from 'lucide-react';
+import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle, Edit3 } from 'lucide-react';
 import { Language } from '../types';
 import { DELIVERY_AREAS } from '../data/menuData';
 
 interface DeliverySectionProps {
   language: Language;
+  isEditMode?: boolean;
+  onEditDelivery?: () => void;
 }
 
-export const DeliverySection: React.FC<DeliverySectionProps> = ({ language }) => {
+export const DeliverySection: React.FC<DeliverySectionProps> = ({
+  language,
+  isEditMode = false,
+  onEditDelivery,
+}) => {
   const [postalCode, setPostalCode] = useState('');
   const [postalResult, setPostalResult] = useState<{
     checked: boolean;
@@ -57,6 +63,18 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({ language }) =>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
+          {isEditMode && onEditDelivery && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={onEditDelivery}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs shadow-md border border-amber-300 transition-all cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>{language === 'en' ? 'Edit Delivery Info & Hotline' : '编辑配送区域与咨询专线'}</span>
+              </button>
+            </div>
+          )}
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-3">
             <Truck className="w-3.5 h-3.5" />
             <span>{language === 'en' ? 'Fresh Daily Delivery' : '巴生河流域准时配送'}</span>
@@ -121,8 +139,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({ language }) =>
                 {postalResult.covered && (
                   <p className="text-emerald-700 font-semibold mt-1">
                     {language === 'en'
-                      ? '✓ Daily Lunch delivery slot: 11:30 AM – 12:45 PM'
-                      : '✓ 支持午餐与晚餐派送，中午12:45前准时送达'}
+                      ? '✓ Lunch: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm'
+                      : '✓ 午餐派送：10:00 AM – 2:00 PM ｜ 晚餐派送：3:00pm - 7:00pm'}
                   </p>
                 )}
               </div>
@@ -150,7 +168,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({ language }) =>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-400">
-                    {language === 'en' ? 'Lunch Arrival:' : '午餐预计到达:'}
+                    {language === 'en' ? 'Delivery Slots:' : '配送时段:'}
                   </span>
                   <span className="font-medium text-stone-800">{area.time}</span>
                 </div>
@@ -159,21 +177,52 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({ language }) =>
           ))}
         </div>
 
-        {/* Self Pickup Option Notice */}
-        <div className="mt-8 p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 max-w-2xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div className="text-xs text-emerald-950">
-            <span className="font-bold block text-sm">
-              {language === 'en' ? 'Self Pickup Available in Klang Kitchen' : '支持巴生中央厨房自取 (Self Pickup)'}
-            </span>
-            <span className="text-emerald-800">
+        {/* Delivery Schedule & Klang Valley Free Delivery Highlights (No Self Pickup) */}
+        <div className="mt-10 max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200/90 shadow-2xs">
+            <div className="flex items-center gap-2 font-bold text-emerald-950 text-sm mb-1.5">
+              <Clock className="w-4 h-4 text-emerald-700 shrink-0" />
+              <span>{language === 'en' ? 'Delivery Time ｜ 配送时间' : '配送时间 ｜ Delivery Time'}</span>
+            </div>
+            <p className="text-xs text-stone-600 mb-2">
               {language === 'en'
-                ? 'No delivery fee & enjoy RM 2 off per bento box when picking up in person.'
-                : '免除配送费，到店自取每盒再享 RM 2.00 专属折扣。'}
-            </span>
+                ? 'Monday to Friday (Excluding public holidays & weekends)'
+                : 'Monday to Friday (Excluding public holidays & weekends)'}
+            </p>
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+                <span className="font-semibold text-emerald-900">{language === 'en' ? 'Lunch Delivery:' : '午餐配送：'}</span>
+                <span className="font-bold text-emerald-700">10:00 AM – 2:00 PM</span>
+              </div>
+              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+                <span className="font-semibold text-amber-900">{language === 'en' ? 'Dinner Delivery:' : '晚餐配送：'}</span>
+                <span className="font-bold text-amber-700">3:00pm - 7:00pm</span>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-stone-500">
+              {language === 'en'
+                ? 'Daily lunch delivered fresh. Daily meal selection cutoff before 5:00 PM.'
+                : '每日新鲜现做送达。隔天餐点请在每天下午 5:00 前完成选择。'}
+            </p>
           </div>
-          <span className="px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-xs font-bold whitespace-nowrap">
-            {language === 'en' ? 'Mon – Sat 11am–7pm' : '周一至周六 11:00-19:00'}
-          </span>
+
+          <div className="p-5 rounded-2xl bg-sky-50/80 border border-sky-200/90 shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-sky-950 text-sm mb-1.5">
+                <Truck className="w-4 h-4 text-sky-700 shrink-0" />
+                <span>{language === 'en' ? 'Klang Valley Free Delivery' : '巴生谷全境免运费配送'}</span>
+              </div>
+              <p className="text-xs text-stone-700 leading-relaxed">
+                {language === 'en'
+                  ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses. one day deliver one address for each account.'
+                  : '覆盖整个巴生河流域免运费。1 个账户支持最多 2 个地址，每个账户一天派送一个地址。'}
+              </p>
+            </div>
+            <div className="mt-3 pt-2.5 border-t border-sky-200/60 flex items-center gap-1.5 text-[11px] font-semibold text-sky-800">
+              <Check className="w-3.5 h-3.5 text-sky-600" />
+              <span>{language === 'en' ? 'Daily lunch delivered fresh' : '每日新鲜午餐现做准时配送'}</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>

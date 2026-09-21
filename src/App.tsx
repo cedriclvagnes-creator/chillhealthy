@@ -322,7 +322,7 @@ export default function App() {
         id: cleanPhone,
         memberNumber: cleanPhone, // Member login number same as handphone number
         name: rawInput.includes('@') ? rawInput.split('@')[0] : `Member ${cleanPhone}`,
-        email: rawInput.includes('@') ? rawInput : `${cleanPhone}@customer.chillhealthy.com`,
+        email: rawInput.includes('@') ? rawInput : `${cleanPhone}@customer.chill-healthy.com`,
         phone: cleanPhone,
         password: '123456', // Default 123456
         address: 'Bandar Bukit Tinggi, Klang',
@@ -374,7 +374,7 @@ export default function App() {
       id: cleanPhone,
       memberNumber: cleanPhone, // Member login number same as handphone number
       name: newMemberData.name || 'New Member',
-      email: newMemberData.email || `${cleanPhone}@customer.chillhealthy.com`,
+      email: newMemberData.email || `${cleanPhone}@customer.chill-healthy.com`,
       phone: cleanPhone,
       password: newMemberData.password || '123456', // Default password 123456
       address: newMemberData.address || '',
@@ -590,7 +590,7 @@ export default function App() {
       const newMember: MemberAccount = {
         id: `MEM-${Date.now().toString().slice(-4)}`,
         name: customer.name,
-        email: `${customer.phone.replace(/\D/g, '')}@customer.chillhealthy.com`,
+        email: `${customer.phone.replace(/\D/g, '')}@customer.chill-healthy.com`,
         phone: customer.phone,
         address: customer.address,
         area: customer.area,

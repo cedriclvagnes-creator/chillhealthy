@@ -146,6 +146,26 @@ export interface SiteSettings {
   kitchenHours: string;
   instagramHandle?: string;
   instagramUrl?: string;
+  facebookUrl?: string;
+}
+
+export interface HomepageContent {
+  heroTagEn: string;
+  heroTagZh: string;
+  heroHeadlineEn: string;
+  heroHeadlineZh: string;
+  heroDescriptionEn: string;
+  heroDescriptionZh: string;
+  heroImage?: string;
+  storyTagEn: string;
+  storyTagZh: string;
+  storyHeadlineEn: string;
+  storyHeadlineZh: string;
+  storySubtitleEn: string;
+  storySubtitleZh: string;
+  storyDescriptionEn: string;
+  storyDescriptionZh: string;
+  kitchenPhotoUrl?: string;
 }
 
 export interface MemberAccount {

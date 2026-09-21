@@ -27,6 +27,7 @@ export interface AlaCarteGridItem {
 interface AlaCarteCombinationPhotoProps {
   language: Language;
   onExploreMenu?: () => void;
+  allowEdit?: boolean;
 }
 
 const STORAGE_KEY_PHOTO = 'chillhealthy_hero_combo_photo';
@@ -80,6 +81,7 @@ const SPREAD_PHOTO = 'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?
 export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> = ({
   language,
   onExploreMenu,
+  allowEdit = false,
 }) => {
   const [customPhoto, setCustomPhoto] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'spread'>('grid');
@@ -215,17 +217,19 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
 
       {/* Top action controls bar */}
       <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-stone-900/85 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20 shadow-md">
-        {/* Quick Edit Ala Carte Items (Editable Photo, Name, Protein & Description) */}
-        <button
-          onClick={() => handleOpenEditModal(2)}
-          title={language === 'en' ? 'Edit Ala Carte Items & Photos' : '编辑单点菜品、照片、蛋白质与介绍'}
-          className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 hover:text-white px-2 py-0.5 rounded-full bg-emerald-950/70 hover:bg-emerald-800 border border-emerald-500/30 transition-colors cursor-pointer"
-        >
-          <Edit3 className="w-3 h-3" />
-          <span>{language === 'en' ? 'Edit Dishes' : '编辑菜品'}</span>
-        </button>
+        {/* Quick Edit Ala Carte Items (Only available in Admin Mode) */}
+        {allowEdit && (
+          <button
+            onClick={() => handleOpenEditModal(2)}
+            title={language === 'en' ? 'Edit Ala Carte Items & Photos' : '编辑单点菜品、照片、蛋白质与介绍'}
+            className="flex items-center gap-1 text-[11px] font-bold text-emerald-300 hover:text-white px-2 py-0.5 rounded-full bg-emerald-950/70 hover:bg-emerald-800 border border-emerald-500/30 transition-colors cursor-pointer"
+          >
+            <Edit3 className="w-3 h-3" />
+            <span>{language === 'en' ? 'Edit Dishes' : '编辑菜品'}</span>
+          </button>
+        )}
 
-        {customPhoto ? (
+        {customPhoto && allowEdit ? (
           <button
             onClick={handleResetPhoto}
             title={language === 'en' ? 'Reset to combination photo' : '还原组合照片'}
@@ -263,14 +267,16 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
           </>
         )}
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title={language === 'en' ? 'Upload Custom Ala Carte Photo' : '上传自定义单点组合照'}
-          className="flex items-center gap-1 text-[11px] font-medium text-amber-300 hover:text-amber-200 px-2 py-0.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer border-l border-white/20 ml-0.5"
-        >
-          <Camera className="w-3 h-3" />
-          <span className="hidden sm:inline">{language === 'en' ? 'Upload' : '上传'}</span>
-        </button>
+        {allowEdit && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title={language === 'en' ? 'Upload Custom Ala Carte Photo' : '上传自定义单点组合照'}
+            className="flex items-center gap-1 text-[11px] font-medium text-amber-300 hover:text-amber-200 px-2 py-0.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer border-l border-white/20 ml-0.5"
+          >
+            <Camera className="w-3 h-3" />
+            <span className="hidden sm:inline">{language === 'en' ? 'Upload' : '上传'}</span>
+          </button>
+        )}
       </div>
 
       {/* Main Image Container */}
@@ -293,9 +299,21 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
             {alaCarteItems.map((item, index) => (
               <div
                 key={item.id}
-                onClick={() => handleOpenEditModal(index)}
-                className="relative w-full h-full overflow-hidden group/item bg-stone-800 cursor-pointer"
-                title={language === 'en' ? `Click to edit ${item.name}` : `点击编辑 ${item.nameZh}`}
+                onClick={() => {
+                  if (allowEdit) {
+                    handleOpenEditModal(index);
+                  } else if (onExploreMenu) {
+                    onExploreMenu();
+                  }
+                }}
+                className={`relative w-full h-full overflow-hidden group/item bg-stone-800 ${
+                  allowEdit || onExploreMenu ? 'cursor-pointer' : ''
+                }`}
+                title={
+                  allowEdit
+                    ? (language === 'en' ? `Click to edit ${item.name}` : `点击编辑 ${item.nameZh}`)
+                    : (language === 'en' ? `View Menu for ${item.name}` : `浏览菜单 ${item.nameZh}`)
+                }
               >
                 <img
                   src={item.image}
@@ -304,12 +322,20 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
                 />
 
                 {/* Hover overlay hint */}
-                <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                  <span className="px-2 py-1 rounded-lg bg-stone-900/85 text-[11px] font-bold text-white flex items-center gap-1">
-                    <Edit3 className="w-3 h-3 text-emerald-400" />
-                    <span>{language === 'en' ? 'Edit' : '编辑'}</span>
-                  </span>
-                </div>
+                {allowEdit ? (
+                  <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <span className="px-2 py-1 rounded-lg bg-stone-900/85 text-[11px] font-bold text-white flex items-center gap-1">
+                      <Edit3 className="w-3 h-3 text-emerald-400" />
+                      <span>{language === 'en' ? 'Edit' : '编辑'}</span>
+                    </span>
+                  </div>
+                ) : onExploreMenu ? (
+                  <div className="absolute inset-0 bg-stone-900/20 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <span className="px-2 py-1 rounded-lg bg-stone-900/80 text-[10px] font-bold text-white">
+                      {language === 'en' ? 'View Menu' : '查看菜单'}
+                    </span>
+                  </div>
+                ) : null}
 
                 {/* Dish badge & protein */}
                 <div className="absolute top-2 left-2 pointer-events-none flex flex-col gap-1 items-start">
@@ -391,7 +417,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
           ALA CARTE EDIT MODAL (PHOTO, NAME, PROTEIN, DESCRIPTION EDITABLE)
           Allows editing any item, specifically the last two ala carte items!
          ========================================================================= */}
-      {isEditModalOpen && (
+      {allowEdit && isEditModalOpen && (
         <div className="fixed inset-0 z-50 bg-stone-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 text-stone-900">
           <div className="bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
             {/* Modal Header */}
