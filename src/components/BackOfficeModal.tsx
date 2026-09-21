@@ -37,9 +37,11 @@ import {
   Filter,
   ArrowLeft,
   Store,
+  CalendarOff,
+  RotateCcw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount } from '../types';
+import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount, MealDeletionRefundRecord } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
 import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
@@ -60,11 +62,14 @@ interface BackOfficeModalProps {
   onUpdateMemberCredits: (memberId: string, deltaMeals: number) => void;
   initialTab?: 'settings' | 'packages' | 'menu' | 'redemptions' | 'members';
   onUpdateRedemptionOrder?: (order: MealRedemption) => void;
+  onDeleteRedemptionOrder?: (id: string, reason?: string) => boolean;
+  onToggleDisabledDeliveryDate?: (dateStr: string) => void;
   onUpdateMemberAccount?: (member: MemberAccount) => void;
   onAddMemberAccount?: (member: MemberAccount) => void;
   onDeleteMemberAccount?: (memberId: string) => void;
   onEnterLiveEditMode?: () => void;
   onAdminAuthChange?: (isAuthenticated: boolean) => void;
+  refundRecords?: MealDeletionRefundRecord[];
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -83,11 +88,14 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateMemberCredits,
   initialTab = 'settings',
   onUpdateRedemptionOrder,
+  onDeleteRedemptionOrder,
+  onToggleDisabledDeliveryDate,
   onUpdateMemberAccount,
   onAddMemberAccount,
   onDeleteMemberAccount,
   onEnterLiveEditMode,
   onAdminAuthChange,
+  refundRecords = [],
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -131,7 +139,15 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [kitchenSearch, setKitchenSearch] = useState('');
   const [kitchenDateFilter, setKitchenDateFilter] = useState('all');
   const [kitchenSlotFilter, setKitchenSlotFilter] = useState<'all' | 'lunch' | 'dinner'>('all');
+  const [kitchenStatusFilter, setKitchenStatusFilter] = useState<'all' | 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered'>('all');
   const [editingOrder, setEditingOrder] = useState<MealRedemption | null>(null);
+  const [customTurnOffDate, setCustomTurnOffDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Redemptions Sub-view: Active orders vs Deleted order refund records audit
+  const [redemptionSubView, setRedemptionSubView] = useState<'active' | 'refunds'>('active');
+  const [orderToDelete, setOrderToDelete] = useState<MealRedemption | null>(null);
+  const [deletionReasonInput, setDeletionReasonInput] = useState<string>('Kitchen maintenance / Customer requested schedule cancellation. Restored quota to package balance.');
+  const [refundSearch, setRefundSearch] = useState<string>('');
 
   // Local editable copy of Site Settings
   const [formSettings, setFormSettings] = useState<SiteSettings>({ ...siteSettings });
@@ -166,6 +182,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
   // Customer Member Package Management state
   const [memberSearch, setMemberSearch] = useState('');
+  const [memberStatusFilter, setMemberStatusFilter] = useState<'all' | 'active' | 'exhausted' | 'low'>('all');
+  const [memberAreaFilter, setMemberAreaFilter] = useState('all');
   const [editingMember, setEditingMember] = useState<MemberAccount | null>(null);
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [revealedMemberPasswords, setRevealedMemberPasswords] = useState<{ [id: string]: boolean }>({});
@@ -194,6 +212,89 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3500);
+  };
+
+  const handleExportMembersExcel = (filteredList: MemberAccount[]) => {
+    try {
+      const dataToExport = filteredList.map((m, index) => {
+        const activePkg = m.activePackage;
+        const statusStr = !activePkg
+          ? 'No Package'
+          : activePkg.remainingMeals > 0
+          ? `Active (${activePkg.remainingMeals} Left)`
+          : 'Exhausted (0 Left)';
+
+        return {
+          'No.': index + 1,
+          'Member ID': m.id,
+          'Full Name': m.name,
+          'Login Phone (Account)': m.phone,
+          'Email Address': m.email || '',
+          'Account Password': m.password || '123456',
+          'Active Package Plan': activePkg ? activePkg.planName : 'None',
+          'Total Meals in Plan': activePkg ? activePkg.totalMeals : 0,
+          'Remaining Meals Balance': activePkg ? activePkg.remainingMeals : 0,
+          'Package Status': statusStr,
+          'Plan Purchase Date': activePkg ? activePkg.purchasedDate : '',
+          'Plan Expiry Date': activePkg ? activePkg.expiryDate : '',
+          'Primary Address 1': m.address || '',
+          'Area 1': m.area || '',
+          'Postal Code 1': m.postalCode || '',
+          'Secondary Address 2': m.address2 || 'N/A',
+          'Area 2': m.area2 || 'N/A',
+          'Postal Code 2': m.postalCode2 || 'N/A',
+          'Dietary / Health Notes': m.dietaryPreferences || 'None',
+          'Total Redemptions Count': redemptions.filter((r) => r.memberId === m.id || r.memberPhone === m.phone).length,
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Member Accounts');
+      const fileName = `CHILL_Member_Accounts_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      triggerToast(`✓ Exported ${filteredList.length} Member Accounts to ${fileName}`);
+    } catch (err) {
+      console.error('Member export error:', err);
+      triggerToast('Excel export failed, generating CSV fallback.');
+      handleExportMembersCSV(filteredList);
+    }
+  };
+
+  const handleExportMembersCSV = (filteredList: MemberAccount[]) => {
+    const headers = [
+      'No,Member ID,Name,Phone,Email,Password,Plan,Total Meals,Remaining Meals,Status,Address 1,Area 1,Postal 1,Address 2,Area 2,Postal 2,Dietary',
+    ];
+    const rows = filteredList.map((m, i) =>
+      [
+        i + 1,
+        `"${m.id}"`,
+        `"${m.name}"`,
+        `"${m.phone}"`,
+        `"${m.email || ''}"`,
+        `"${m.password || '123456'}"`,
+        `"${m.activePackage?.planName || 'None'}"`,
+        m.activePackage?.totalMeals || 0,
+        m.activePackage?.remainingMeals || 0,
+        `"${m.activePackage && m.activePackage.remainingMeals > 0 ? 'Active' : 'Exhausted'}"`,
+        `"${(m.address || '').replace(/"/g, '""')}"`,
+        `"${m.area || ''}"`,
+        `"${m.postalCode || ''}"`,
+        `"${(m.address2 || '').replace(/"/g, '""')}"`,
+        `"${m.area2 || ''}"`,
+        `"${m.postalCode2 || ''}"`,
+        `"${(m.dietaryPreferences || '').replace(/"/g, '""')}"`,
+      ].join(',')
+    );
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers, ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `CHILL_Member_Accounts_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerToast(`✓ Exported CSV for ${filteredList.length} Member Accounts`);
   };
 
   const handleExportDaily5pmReport = (targetDate?: string) => {
@@ -275,6 +376,44 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     } catch (err) {
       console.error('5PM Excel generation error:', err);
       triggerToast('Error generating Excel report.');
+    }
+  };
+
+  const handleExportRefundAuditReport = () => {
+    try {
+      const recordsToUse = refundRecords;
+      if (!recordsToUse || recordsToUse.length === 0) {
+        triggerToast(language === 'en' ? 'No refund records to export.' : '暂无退款返还记录可导出。');
+        return;
+      }
+
+      const rows = recordsToUse.map((rec, index) => ({
+        'No.': index + 1,
+        'Refund Log ID': rec.id,
+        'Cancelled Order ID': rec.orderId,
+        'Member Customer Name': rec.memberName,
+        'Member Phone / ID': rec.memberPhone,
+        'Cancelled Meal Name': rec.mealName,
+        'Meal Name (Chinese)': rec.mealNameZh,
+        'Scheduled Delivery Date': rec.deliveryDate,
+        'Delivery Time Slot': rec.deliverySlot,
+        'Quantity Refunded (Meals)': rec.quantityRefunded,
+        'Balance Before Refund': rec.balanceBeforeRefund,
+        'Balance After Refund': rec.balanceAfterRefund,
+        'Deletion & Refund Timestamp': rec.deletedAt,
+        'Reason / Notes': rec.reason,
+        'Operator': rec.operator,
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, 'Deleted Orders & Refund Log');
+      const fileName = `CHILL_Meal_Deletion_Refund_Audit_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      triggerToast(`✓ Exported ${recordsToUse.length} Deletion & Refund Records to ${fileName}`);
+    } catch (err) {
+      console.error('Refund export error:', err);
+      triggerToast('Excel export failed.');
     }
   };
 
@@ -2000,7 +2139,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     kitchenDateFilter === 'all' ||
                     red.deliveryDate === kitchenDateFilter;
 
-                  return matchSearch && matchSlot && matchDate;
+                  const matchStatus =
+                    kitchenStatusFilter === 'all' ||
+                    red.status === kitchenStatusFilter;
+
+                  return matchSearch && matchSlot && matchDate && matchStatus;
                 });
 
                 const uniqueDates = Array.from(new Set(redemptions.map((r) => r.deliveryDate))).sort();
@@ -2079,10 +2222,97 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   setEditingOrder(null);
                 };
 
+                const filteredRefundRecords = (refundRecords || []).filter((rec) => {
+                  const q = refundSearch.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    rec.orderId.toLowerCase().includes(q) ||
+                    rec.memberName.toLowerCase().includes(q) ||
+                    rec.memberPhone.includes(q) ||
+                    rec.mealName.toLowerCase().includes(q) ||
+                    (rec.mealNameZh && rec.mealNameZh.toLowerCase().includes(q)) ||
+                    rec.deliveryDate.includes(q) ||
+                    (rec.reason && rec.reason.toLowerCase().includes(q))
+                  );
+                });
+
+                const totalRefundedMeals = (refundRecords || []).reduce(
+                  (sum, r) => sum + (r.quantityRefunded || 1),
+                  0
+                );
+
                 return (
                   <div className="space-y-4">
-                    {/* Daily 5:00 PM Member Order Status Excel Report Card */}
-                    <div className="bg-emerald-950 text-white p-5 rounded-3xl border border-emerald-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* Top Sub-view Navigation: Active Deliveries vs Deleted Order Refund Records */}
+                    <div className="bg-white p-3 rounded-2xl border border-stone-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRedemptionSubView('active')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            redemptionSubView === 'active'
+                              ? 'bg-emerald-700 text-white shadow-xs'
+                              : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                          }`}
+                        >
+                          <Utensils className="w-3.5 h-3.5" />
+                          <span>{language === 'en' ? 'Active Delivery Orders' : '当前生效配送订单'}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              redemptionSubView === 'active'
+                                ? 'bg-emerald-800 text-white'
+                                : 'bg-stone-200 text-stone-700'
+                            }`}
+                          >
+                            {redemptions.length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setRedemptionSubView('refunds')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                            redemptionSubView === 'refunds'
+                              ? 'bg-emerald-700 text-white shadow-xs'
+                              : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                          }`}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>{language === 'en' ? 'Deleted Orders & Refund Audit' : '删单还餐存证与退款记录'}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              redemptionSubView === 'refunds'
+                                ? 'bg-emerald-800 text-white'
+                                : 'bg-stone-200 text-stone-700'
+                            }`}
+                          >
+                            {refundRecords.length}
+                          </span>
+                        </button>
+                      </div>
+
+                      {redemptionSubView === 'refunds' ? (
+                        <button
+                          type="button"
+                          onClick={handleExportRefundAuditReport}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                          <span>{language === 'en' ? 'Export Refund Log (.xlsx)' : '导出删单退还存证 (.xlsx)'}</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-stone-500 hidden sm:inline">
+                          {language === 'en'
+                            ? 'Deleting an order automatically refunds meal balance to customer with audit record.'
+                            : '删单将自动把餐券加回顾客套餐账户，并生成留底存证记录。'}
+                        </span>
+                      )}
+                    </div>
+
+                    {redemptionSubView === 'active' ? (
+                      <>
+                        {/* Daily 5:00 PM Member Order Status Excel Report Card */}
+                        <div className="bg-emerald-950 text-white p-5 rounded-3xl border border-emerald-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="space-y-1.5 max-w-xl">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-[11px] border border-emerald-500/30">
@@ -2135,6 +2365,116 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Admin Emergency / Advance Delivery Date Blackout Control */}
+                    <div className="bg-amber-950/5 border border-amber-300/60 bg-amber-50/50 p-4 rounded-2xl shadow-2xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <CalendarOff className="w-4 h-4 text-amber-700 shrink-0" />
+                          <h5 className="font-heading font-extrabold text-sm text-stone-900">
+                            {language === 'en'
+                              ? 'Turn Off Delivery Dates (Advance / Same Day Suspension)'
+                              : '关闭停送送餐日期 (提前/当天停送管理)'}
+                          </h5>
+                        </div>
+                        <span className="text-[11px] text-amber-800 font-bold bg-amber-100/90 px-2.5 py-0.5 rounded-full border border-amber-300">
+                          {siteSettings.disabledDeliveryDates && siteSettings.disabledDeliveryDates.length > 0
+                            ? `${siteSettings.disabledDeliveryDates.length} ${language === 'en' ? 'Dates Suspended' : '个日期已设为停送'}`
+                            : language === 'en' ? 'All Delivery Days Active' : '所有工作日正常配送'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-stone-600">
+                        {language === 'en'
+                          ? 'Turn off any delivery date in advance or same day due to unforeseen circumstances or kitchen maintenance. Customers cannot select disabled dates. If meals need cancellation, deleting them below automatically refunds customer package quota.'
+                          : '管理员可因突发情况或厨房休整，随时关闭提前或当天送餐日期。被关闭日期会员无法预订。若需取消已订餐品，点击订单下方“删单还餐”将自动把配额加回会员账户。'}
+                      </p>
+
+                      {/* Quick Upcoming Days Toggle */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[11px] font-bold text-stone-700 block">
+                          {language === 'en' ? 'Quick Toggle Upcoming Days (Click to Turn Off / Re-enable):' : '快速切换未来日期 (点击停送/恢复)：'}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Array.from({ length: 7 }, (_, i) => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + i);
+                            const dateStr = d.toISOString().split('T')[0];
+                            const isOff = siteSettings.disabledDeliveryDates?.includes(dateStr);
+                            const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                            const label = d.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                              weekday: 'short',
+                              month: 'numeric',
+                              day: 'numeric',
+                            });
+
+                            return (
+                              <button
+                                key={dateStr}
+                                type="button"
+                                onClick={() => {
+                                  if (onToggleDisabledDeliveryDate) {
+                                    onToggleDisabledDeliveryDate(dateStr);
+                                    triggerToast(
+                                      isOff
+                                        ? `✓ Restored delivery for ${dateStr}`
+                                        : `⚠️ Disabled delivery for ${dateStr} (Customers cannot order)`
+                                    );
+                                  }
+                                }}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  isOff
+                                    ? 'bg-red-600 text-white border-red-700 shadow-2xs'
+                                    : 'bg-white text-stone-700 border-stone-300 hover:border-amber-400 hover:bg-amber-50/50'
+                                }`}
+                              >
+                                {isOff ? <CalendarOff className="w-3 h-3 text-white" /> : <Calendar className="w-3 h-3 text-emerald-600" />}
+                                <span>{label}</span>
+                                {isOff && <span className="text-[10px] bg-red-800/80 px-1.5 py-0.2 rounded font-black">OFF</span>}
+                                {isWeekend && !isOff && <span className="text-[10px] text-stone-400">(W/E)</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Custom Date Input for any future date */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/60">
+                        <span className="text-xs font-bold text-stone-700">
+                          {language === 'en' ? 'Specific Date Suspension:' : '指定具体停送日期：'}
+                        </span>
+                        <input
+                          type="date"
+                          value={customTurnOffDate}
+                          onChange={(e) => setCustomTurnOffDate(e.target.value)}
+                          className="text-xs px-2.5 py-1.5 bg-white rounded-xl border border-stone-300 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!customTurnOffDate) return;
+                            if (onToggleDisabledDeliveryDate) {
+                              onToggleDisabledDeliveryDate(customTurnOffDate);
+                              const isNowOff = !siteSettings.disabledDeliveryDates?.includes(customTurnOffDate);
+                              triggerToast(
+                                isNowOff
+                                  ? `⚠️ Turned OFF delivery for ${customTurnOffDate}`
+                                  : `✓ Re-enabled delivery for ${customTurnOffDate}`
+                              );
+                            }
+                          }}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer border ${
+                            siteSettings.disabledDeliveryDates?.includes(customTurnOffDate)
+                              ? 'bg-stone-700 hover:bg-stone-800 text-white border-stone-700'
+                              : 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600'
+                          }`}
+                        >
+                          {siteSettings.disabledDeliveryDates?.includes(customTurnOffDate)
+                            ? (language === 'en' ? 'Re-enable Date' : '恢复该日期送餐')
+                            : (language === 'en' ? 'Turn Off Date' : '设为停送日期')}
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Header & Export Controls */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-2xs">
                       <div>
@@ -2162,7 +2502,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           title="Generate Excel (.xlsx) form with all order details"
                         >
                           <FileSpreadsheet className="w-4 h-4" />
-                          <span>{language === 'en' ? 'Export General Excel' : '生成后厨Excel备餐表'}</span>
+                          <span>{language === 'en' ? 'Export Orders (.xlsx)' : '导出订单Excel (.xlsx)'}</span>
                         </button>
 
                         <button
@@ -2177,7 +2517,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     </div>
 
                     {/* Filter & Search Toolbar */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
                       {/* Search */}
                       <div className="relative">
                         <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -2218,6 +2558,26 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           <option value="all">{language === 'en' ? 'All Slots (Lunch & Dinner)' : '全部餐段 (午餐 & 晚餐)'}</option>
                           <option value="lunch">{language === 'en' ? 'Lunch Only (11:30 AM – 1:30 PM)' : '仅午餐 (11:30 AM – 1:30 PM)'}</option>
                           <option value="dinner">{language === 'en' ? 'Dinner Only (5:00 PM – 7:00 PM)' : '仅晚餐 (5:00 PM – 7:00 PM)'}</option>
+                        </select>
+                      </div>
+
+                      {/* Status Filter */}
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={kitchenStatusFilter}
+                          onChange={(e) =>
+                            setKitchenStatusFilter(
+                              e.target.value as 'all' | 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered'
+                            )
+                          }
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50 font-bold"
+                        >
+                          <option value="all">{language === 'en' ? 'All Statuses' : '所有订单状态'}</option>
+                          <option value="Pending">Pending Review</option>
+                          <option value="Prepping in Kitchen">Prepping in Kitchen</option>
+                          <option value="Out for Delivery">Out for Delivery</option>
+                          <option value="Delivered">Delivered ✓</option>
                         </select>
                       </div>
                     </div>
@@ -2326,6 +2686,24 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 <MessageCircle className="w-3.5 h-3.5" />
                                 <span>WhatsApp</span>
                               </a>
+
+                              {/* Delete Meal & Automatically Restore Quota */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOrderToDelete(red);
+                                  setDeletionReasonInput(
+                                    language === 'en'
+                                      ? `Delivery cancelled by admin for ${red.deliveryDate} (${red.deliverySlot}). Quota +${red.quantity || 1} restored to customer balance.`
+                                      : `管理员取消 ${red.deliveryDate} (${red.deliverySlot}) 送餐，+${red.quantity || 1} 餐配额已全额返还至顾客账户余额。`
+                                  );
+                                }}
+                                className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-red-200"
+                                title="Delete meal order and automatically restore quota to customer account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                                <span>{language === 'en' ? 'Delete & Restore' : '删单还餐'}</span>
+                              </button>
                             </div>
                           </div>
                         ))
@@ -2531,26 +2909,401 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 type="submit"
                                 className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
                               >
-                                <Save className="w-4 h-4" />
-                                <span>{language === 'en' ? 'Save Changes' : '保存修改'}</span>
-                              </button>
+                              <Save className="w-4 h-4" />
+                              <span>{language === 'en' ? 'Save Changes' : '保存修改'}</span>
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* =========================================================
+                      SUB-MODAL: CONFIRM ORDER DELETION & QUOTA REFUND
+                      ========================================================= */}
+                  {orderToDelete && (() => {
+                    const targetMemberForDelete = members.find(
+                      (m) => m.id === orderToDelete.memberId || m.phone === orderToDelete.memberPhone
+                    );
+                    const currentBal = targetMemberForDelete?.activePackage?.remainingMeals ?? 0;
+                    const refundAmt = orderToDelete.quantity || 1;
+                    const afterBal = currentBal + refundAmt;
+
+                    return (
+                      <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 space-y-4 max-h-[90vh] overflow-y-auto">
+                          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+                                <AlertTriangle className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h5 className="font-heading font-black text-base text-stone-900">
+                                  {language === 'en'
+                                    ? 'Delete Order & Refund Balance'
+                                    : '删除订单并返还餐券余额'}
+                                </h5>
+                                <p className="text-xs text-stone-500">
+                                  {language === 'en'
+                                    ? 'Automatic quota restoration with permanent audit record'
+                                    : '全自动配额退回与系统存证流水留底'}
+                                </p>
+                              </div>
                             </div>
-                          </form>
+                            <button
+                              type="button"
+                              onClick={() => setOrderToDelete(null)}
+                              className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Order summary box */}
+                          <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-stone-500">{language === 'en' ? 'Order ID' : '订单编号'}:</span>
+                              <span className="font-mono font-bold text-stone-800">#{orderToDelete.id}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-stone-500">{language === 'en' ? 'Customer' : '顾客会员'}:</span>
+                              <span className="font-bold text-stone-900">
+                                {orderToDelete.memberName} ({orderToDelete.memberPhone})
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-stone-500">{language === 'en' ? 'Meal to Cancel' : '取消餐品'}:</span>
+                              <span className="font-bold text-emerald-800">
+                                {orderToDelete.mealName} {orderToDelete.mealNameZh ? `(${orderToDelete.mealNameZh})` : ''}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-stone-500">{language === 'en' ? 'Scheduled Date' : '原定送餐日期'}:</span>
+                              <span className="font-bold text-stone-700">
+                                📅 {orderToDelete.deliveryDate} · {orderToDelete.deliverySlot}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Balance Refund Preview Callout */}
+                          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-xs">
+                              <RotateCcw className="w-4 h-4 text-emerald-700 shrink-0" />
+                              <span>
+                                {language === 'en'
+                                  ? `Automatic Meal Quota Refund (+${refundAmt} Meal)`
+                                  : `自动餐券返还 (+${refundAmt} 餐)`}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                              <div className="p-2 rounded-xl bg-white/80 border border-emerald-100">
+                                <div className="text-[10px] text-stone-500 font-bold uppercase">{language === 'en' ? 'Current Balance' : '当前余额'}</div>
+                                <div className="text-sm font-black text-stone-800">{currentBal} {language === 'en' ? 'Meals' : '餐'}</div>
+                              </div>
+                              <div className="p-2 rounded-xl bg-emerald-100/90 border border-emerald-200">
+                                <div className="text-[10px] text-emerald-800 font-bold uppercase">{language === 'en' ? 'Refunded' : '退还入账'}</div>
+                                <div className="text-sm font-black text-emerald-700">+{refundAmt} {language === 'en' ? 'Meal' : '餐'}</div>
+                              </div>
+                              <div className="p-2 rounded-xl bg-white/80 border border-emerald-100">
+                                <div className="text-[10px] text-stone-500 font-bold uppercase">{language === 'en' ? 'New Balance' : '退还后余额'}</div>
+                                <div className="text-sm font-black text-emerald-900">{afterBal} {language === 'en' ? 'Meals' : '餐'}</div>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-emerald-800/80 leading-relaxed">
+                              {language === 'en'
+                                ? `✓ +${refundAmt} meal will be credited back immediately to the customer account and recorded in both admin audit records and customer portal.`
+                                : `✓ 系统将立即向该会员账户加回 +${refundAmt} 餐，并在后台对账存证及会员中心流水中生成清晰记录。`}
+                            </p>
+                          </div>
+
+                          {/* Reason for Deletion & Refund */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-stone-700 block">
+                              {language === 'en' ? 'Reason / Audit Log Note' : '删单退还原因 / 存证备注'} *
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={deletionReasonInput}
+                              onChange={(e) => setDeletionReasonInput(e.target.value)}
+                              className="w-full text-xs p-3 rounded-xl border border-stone-300 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                              placeholder="Enter reason for cancelling and refunding..."
+                            />
+                            <div className="flex items-center justify-between text-[11px] text-stone-500">
+                              <span>{language === 'en' ? 'Operator' : '经办操作员'}: <strong className="text-stone-700">Owner Admin (#admin)</strong></span>
+                              <span>{language === 'en' ? 'Status' : '状态'}: <strong className="text-emerald-700">Auto Refund Quota</strong></span>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-3 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setOrderToDelete(null)}
+                              className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-100 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              {language === 'en' ? 'Keep Order' : '保留订单'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onDeleteRedemptionOrder && orderToDelete) {
+                                  const success = onDeleteRedemptionOrder(orderToDelete.id, deletionReasonInput);
+                                  if (success) {
+                                    triggerToast(
+                                      language === 'en'
+                                        ? `✓ Order #${orderToDelete.id} deleted. +${refundAmt} meal refunded to ${orderToDelete.memberName} with audit record!`
+                                        : `✓ 订单 #${orderToDelete.id} 已删除，+${refundAmt} 餐配额已自动退还至 ${orderToDelete.memberName} 账户并生成存证记录！`
+                                    );
+                                    setOrderToDelete(null);
+                                  }
+                                }
+                              }}
+                              className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black transition-colors cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>
+                                {language === 'en'
+                                  ? `Delete & Refund +${refundAmt} Meal`
+                                  : `确认删单并退还 +${refundAmt} 餐`}
+                              </span>
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    );
+                  })()}
+                </>
+              ) : (
+                /* =========================================================
+                    SUB-VIEW: DELETED ORDERS & MEAL BALANCE REFUND AUDIT LOG
+                    ========================================================= */
+                <div className="space-y-4">
+                  {/* Audit Log Banner */}
+                  <div className="bg-stone-900 text-white p-5 rounded-3xl border border-stone-800 shadow-md space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[11px] border border-emerald-500/30 flex items-center gap-1">
+                            <RotateCcw className="w-3 h-3" />
+                            <span>{language === 'en' ? 'Audit Trail & Quota Balance Log' : '餐券返还存证对账'}</span>
+                          </span>
+                          <span className="text-xs text-stone-400">
+                            {language === 'en' ? 'Real-time record of all deletions & refunds' : '删单返餐全量审计流水'}
+                          </span>
+                        </div>
+                        <h4 className="font-heading font-black text-lg text-white">
+                          {language === 'en'
+                            ? 'Deleted Orders & Restored Meal Balance Audit Records'
+                            : '删单还餐记录与餐券退还明细存证'}
+                        </h4>
+                        <p className="text-xs text-stone-400 leading-relaxed max-w-2xl">
+                          {language === 'en'
+                            ? 'Every deleted meal redemption automatically restores the customer meal package balance and generates a permanent financial audit log here.'
+                            : '每当后厨或客服因停送或顾客要求删除已订餐品时，系统均自动将对应餐数返还至会员账户，并在此生成永久不可篡改的存证流水。'}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleExportRefundAuditReport}
+                        className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer shrink-0"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-stone-950 shrink-0" />
+                        <span>{language === 'en' ? 'Export Audit Report (.xlsx)' : '导出删单退还对账单 (.xlsx)'}</span>
+                      </button>
+                    </div>
+
+                    {/* Quick Summary Metrics */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-stone-800/80">
+                      <div className="bg-stone-800/60 p-3 rounded-2xl border border-stone-700/60">
+                        <div className="text-[11px] text-stone-400 font-bold">
+                          {language === 'en' ? 'Total Cancelled Orders' : '已删除订单总数'}
+                        </div>
+                        <div className="text-xl font-black text-white mt-0.5">
+                          {refundRecords.length} <span className="text-xs font-normal text-stone-400">{language === 'en' ? 'Orders' : '笔'}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-emerald-950/40 p-3 rounded-2xl border border-emerald-700/40">
+                        <div className="text-[11px] text-emerald-400 font-bold">
+                          {language === 'en' ? 'Total Meal Quota Restored' : '已自动退还顾客餐券'}
+                        </div>
+                        <div className="text-xl font-black text-emerald-400 mt-0.5">
+                          +{totalRefundedMeals} <span className="text-xs font-normal text-emerald-300/80">{language === 'en' ? 'Meals' : '餐'}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-stone-800/60 p-3 rounded-2xl border border-stone-700/60">
+                        <div className="text-[11px] text-stone-400 font-bold">
+                          {language === 'en' ? 'Audit Status' : '审计合规状态'}
+                        </div>
+                        <div className="text-xs font-bold text-emerald-400 mt-1 flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          <span>{language === 'en' ? '100% Synced With Member Balances' : '100% 实时同步会员余额'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search Filter for Refund Records */}
+                  <div className="bg-white p-3 rounded-2xl border border-stone-200 shadow-2xs flex items-center gap-3">
+                    <Search className="w-4 h-4 text-stone-400 shrink-0 ml-1" />
+                    <input
+                      type="text"
+                      placeholder={
+                        language === 'en'
+                          ? 'Search by Customer Name, Phone, Order ID, Dish, or Reason...'
+                          : '搜索顾客姓名、手机号、订单号、菜品或删单原因...'
+                      }
+                      value={refundSearch}
+                      onChange={(e) => setRefundSearch(e.target.value)}
+                      className="w-full text-xs bg-transparent focus:outline-none text-stone-800"
+                    />
+                    {refundSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setRefundSearch('')}
+                        className="text-stone-400 hover:text-stone-600 text-xs font-bold shrink-0"
+                      >
+                        {language === 'en' ? 'Clear' : '清空'}
+                      </button>
                     )}
                   </div>
-                );
-              })()}
+
+                  {/* Records List */}
+                  <div className="space-y-3">
+                    {filteredRefundRecords.length === 0 ? (
+                      <div className="text-center py-16 bg-white rounded-2xl border border-stone-200 space-y-2">
+                        <RotateCcw className="w-8 h-8 mx-auto text-stone-300" />
+                        <h5 className="font-bold text-stone-700 text-sm">
+                          {refundSearch
+                            ? (language === 'en' ? 'No matching refund records found.' : '没有找到匹配的删单退款记录。')
+                            : (language === 'en' ? 'No deleted orders or refund records yet.' : '暂无已删除订单与退款记录。')}
+                        </h5>
+                        <p className="text-xs text-stone-400">
+                          {language === 'en'
+                            ? 'When you delete a redemption order under "Active Delivery Orders", the refund log will appear here.'
+                            : '在“当前生效配送订单”中点击“删单还餐”后，流水记录将自动汇总于此。'}
+                        </p>
+                      </div>
+                    ) : (
+                      filteredRefundRecords.map((rec) => (
+                        <div
+                          key={rec.id}
+                          className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs hover:border-emerald-300 transition-all space-y-3"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-100 pb-2.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-stone-800 bg-stone-100 px-2.5 py-1 rounded-lg">
+                                #{rec.orderId}
+                              </span>
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center gap-1 border border-emerald-200">
+                                <RotateCcw className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>+{rec.quantityRefunded || 1} {language === 'en' ? 'Meal Quota Restored' : '餐配额已退还'}</span>
+                              </span>
+                              <span className="text-[11px] text-stone-500 font-medium">
+                                {rec.deletedAt}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-stone-500 font-bold">
+                                {language === 'en' ? 'Operator' : '经办'}:
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-mono text-[11px] font-bold">
+                                {rec.operator || 'Owner Admin (#admin)'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                            {/* Member Info */}
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-bold text-stone-500 uppercase">
+                                {language === 'en' ? 'Member Customer' : '顾客信息'}
+                              </div>
+                              <div className="font-bold text-stone-900 text-sm">
+                                {rec.memberName}
+                              </div>
+                              <div className="text-stone-600 font-mono flex items-center gap-2">
+                                <span>{rec.memberPhone}</span>
+                                <a
+                                  href={buildWhatsAppUrl(
+                                    rec.memberPhone,
+                                    `Hi ${rec.memberName}, your CHILL Healthy order #${rec.orderId} was cancelled and +${rec.quantityRefunded || 1} meal quota has been restored to your balance.`
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-0.5"
+                                >
+                                  <MessageCircle className="w-3 h-3" />
+                                  <span>WhatsApp</span>
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Cancelled Meal Info */}
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-bold text-stone-500 uppercase">
+                                {language === 'en' ? 'Cancelled Meal & Schedule' : '被取消餐品与原定班次'}
+                              </div>
+                              <div className="font-bold text-emerald-900">
+                                {rec.mealName} {rec.mealNameZh ? `(${rec.mealNameZh})` : ''}
+                              </div>
+                              <div className="text-stone-600">
+                                📅 {rec.deliveryDate} · {rec.deliverySlot}
+                              </div>
+                            </div>
+
+                            {/* Balance impact */}
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-bold text-stone-500 uppercase">
+                                {language === 'en' ? 'Balance Adjustment' : '账户餐券余额变动'}
+                              </div>
+                              <div className="font-bold text-stone-900 flex items-center gap-1.5">
+                                <span className="text-stone-500 line-through">{rec.balanceBeforeRefund}</span>
+                                <span className="text-stone-400">➔</span>
+                                <span className="text-emerald-700 font-extrabold text-sm">{rec.balanceAfterRefund} {language === 'en' ? 'Meals' : '餐'}</span>
+                                <span className="text-[11px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md font-bold">
+                                  (+{rec.quantityRefunded || 1})
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-stone-500">
+                                {language === 'en' ? 'Log ID' : '流水单号'}: <span className="font-mono text-stone-700">{rec.id}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Reason / Notes */}
+                          <div className="pt-2 border-t border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                            <div className="flex items-start gap-1.5 text-stone-600">
+                              <span className="font-bold text-stone-700 shrink-0">
+                                {language === 'en' ? 'Reason / Audit Note' : '删单退还说明'}:
+                              </span>
+                              <span>{rec.reason}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 self-start sm:self-auto shrink-0">
+                              ✓ {language === 'en' ? 'Refund Completed' : '已全额退还入账'}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
               {/* =========================================================
                   TAB 5: CUSTOMER MEAL PACKAGE ORDERS & MEMBER INFO
                   ========================================================= */}
               {activeTab === 'members' && (() => {
                 const filteredMembers = members.filter((m) => {
-                  if (!memberSearch.trim()) return true;
-                  const q = memberSearch.toLowerCase();
-                  return (
+                  const q = memberSearch.trim().toLowerCase();
+                  const matchSearch =
+                    !q ||
                     m.name.toLowerCase().includes(q) ||
                     m.phone.includes(q) ||
                     (m.email && m.email.toLowerCase().includes(q)) ||
@@ -2558,9 +3311,27 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     (m.address && m.address.toLowerCase().includes(q)) ||
                     (m.address2 && m.address2.toLowerCase().includes(q)) ||
                     (m.area && m.area.toLowerCase().includes(q)) ||
-                    (m.activePackage && m.activePackage.planName.toLowerCase().includes(q))
-                  );
+                    (m.area2 && m.area2.toLowerCase().includes(q)) ||
+                    (m.activePackage && m.activePackage.planName.toLowerCase().includes(q));
+
+                  const remaining = m.activePackage?.remainingMeals || 0;
+                  const matchStatus =
+                    memberStatusFilter === 'all' ||
+                    (memberStatusFilter === 'active' && remaining > 0) ||
+                    (memberStatusFilter === 'exhausted' && remaining === 0) ||
+                    (memberStatusFilter === 'low' && remaining > 0 && remaining <= 3);
+
+                  const matchArea =
+                    memberAreaFilter === 'all' ||
+                    (m.area && m.area.toLowerCase().includes(memberAreaFilter.toLowerCase())) ||
+                    (m.area2 && m.area2.toLowerCase().includes(memberAreaFilter.toLowerCase()));
+
+                  return matchSearch && matchStatus && matchArea;
                 });
+
+                const uniqueAreas = Array.from(
+                  new Set(members.map((m) => m.area).filter(Boolean))
+                ).sort() as string[];
 
                 const totalMealsInCirculation = members.reduce(
                   (sum, m) => sum + (m.activePackage?.remainingMeals || 0),
@@ -2652,11 +3423,31 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleExportMembersExcel(filteredMembers)}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                          title="Export customer meal package orders and member accounts to Excel"
+                        >
+                          <FileSpreadsheet className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Export Members (.xlsx)' : '导出会员与套餐 (.xlsx)'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleExportMembersCSV(filteredMembers)}
+                          className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                          title="Export CSV"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>CSV</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => setIsAddingMember(true)}
-                          className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                         >
                           <Plus className="w-4 h-4" />
                           <span>{language === 'en' ? 'Register Customer Package' : '录入新会员套餐'}</span>
@@ -2699,25 +3490,83 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Search Bar */}
-                    <div className="bg-white p-3 rounded-2xl border border-stone-200 flex items-center gap-2">
-                      <Search className="w-4 h-4 text-stone-400 shrink-0" />
-                      <input
-                        type="text"
-                        placeholder={language === 'en' ? 'Search customer by name, login phone, package, or address...' : '搜索会员姓名、登录手机、套餐或送餐地址...'}
-                        value={memberSearch}
-                        onChange={(e) => setMemberSearch(e.target.value)}
-                        className="w-full text-xs bg-transparent focus:outline-none text-stone-800"
-                      />
-                      {memberSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setMemberSearch('')}
-                          className="text-stone-400 hover:text-stone-600 text-xs px-2"
+                    {/* Filter & Search Toolbar */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder={language === 'en' ? 'Search name, phone, address...' : '搜索姓名、手机、地址...'}
+                          value={memberSearch}
+                          onChange={(e) => setMemberSearch(e.target.value)}
+                          className="w-full pl-9 pr-7 py-2 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        />
+                        {memberSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setMemberSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Package Balance Status Filter */}
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={memberStatusFilter}
+                          onChange={(e) =>
+                            setMemberStatusFilter(e.target.value as 'all' | 'active' | 'exhausted' | 'low')
+                          }
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50 font-bold"
                         >
-                          ✕
-                        </button>
-                      )}
+                          <option value="all">{language === 'en' ? 'All Package Statuses' : '所有套餐状态'}</option>
+                          <option value="active">{language === 'en' ? 'Active Packages (>0 Meals)' : '有效套餐 (>0餐)'}</option>
+                          <option value="low">{language === 'en' ? 'Low Balance (≤3 Meals Left)' : '余额偏低 (≤3餐)'}</option>
+                          <option value="exhausted">{language === 'en' ? 'Exhausted (0 Meals Left)' : '已用尽 (0餐剩余)'}</option>
+                        </select>
+                      </div>
+
+                      {/* Area Filter */}
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={memberAreaFilter}
+                          onChange={(e) => setMemberAreaFilter(e.target.value)}
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50"
+                        >
+                          <option value="all">{language === 'en' ? 'All Delivery Areas' : '全部配送地区'}</option>
+                          {uniqueAreas.map((area) => (
+                            <option key={area} value={area}>
+                              📍 {area}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filter stats count & reset */}
+                      <div className="flex items-center justify-between px-3 py-2 bg-stone-50 rounded-xl border border-stone-200 text-xs">
+                        <span className="font-bold text-stone-600">
+                          {language === 'en' ? 'Showing:' : '显示：'}{' '}
+                          <span className="text-emerald-700 font-extrabold">{filteredMembers.length}</span> / {members.length}
+                        </span>
+                        {(memberSearch || memberStatusFilter !== 'all' || memberAreaFilter !== 'all') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMemberSearch('');
+                              setMemberStatusFilter('all');
+                              setMemberAreaFilter('all');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline cursor-pointer"
+                          >
+                            {language === 'en' ? 'Reset Filters' : '重置筛选'}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Customer Member Cards */}

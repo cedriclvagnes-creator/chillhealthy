@@ -144,6 +144,7 @@ export interface SiteSettings {
   announcementZh: string;
   kitchenAddress: string;
   kitchenHours: string;
+  disabledDeliveryDates?: string[];
   instagramHandle?: string;
   instagramUrl?: string;
   facebookUrl?: string;
@@ -220,4 +221,23 @@ export interface MealRedemption {
   dietaryNotes?: string;
   createdAt: string;
   redeemedAt?: string;
+  recipeStandard?: 'Standard Chef Recipe' | 'Customized Ala Carte';
+}
+
+export interface MealDeletionRefundRecord {
+  id: string;
+  orderId: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  mealName: string;
+  mealNameZh?: string;
+  deliveryDate: string;
+  deliverySlot: string;
+  quantityRefunded: number;
+  balanceBeforeRefund: number;
+  balanceAfterRefund: number;
+  deletedAt: string;
+  reason: string;
+  operator: string;
 }

@@ -23,6 +23,7 @@ import {
   SiteSettings,
   MemberAccount,
   MealRedemption,
+  MealDeletionRefundRecord,
 } from './types';
 import { MEAL_ITEMS, MEAL_PLANS } from './data/menuData';
 import {
@@ -134,6 +135,16 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Audit records of deleted meal orders and automatic quota refunds
+  const [refundRecords, setRefundRecords] = useState<MealDeletionRefundRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('chillhealthy_refund_records');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -452,6 +463,7 @@ export default function App() {
       id: `RED-${Date.now().toString().slice(-6)}`,
       status: 'Pending',
       createdAt: new Date().toISOString(),
+      recipeStandard: redemptionData.recipeStandard || 'Standard Chef Recipe',
     };
 
     // Deduct credits
@@ -491,6 +503,7 @@ export default function App() {
       id: `RED-${Date.now().toString().slice(-5)}${i}`,
       status: 'Pending',
       createdAt: new Date().toISOString(),
+      recipeStandard: r.recipeStandard || 'Standard Chef Recipe',
     }));
 
     const updatedMember: MemberAccount = {
@@ -692,6 +705,164 @@ export default function App() {
     }
   };
 
+  // Delete / Cancel meal order with automatic quota restore for customer WITH RECORD
+  const handleDeleteRedemptionOrder = (redemptionId: string, reason?: string): boolean => {
+    const target = redemptions.find((r) => r.id === redemptionId);
+    if (!target) return false;
+
+    const refundQty = target.quantity || 1;
+    const targetMember = members.find((m) => m.id === target.memberId || m.phone === target.memberPhone);
+    const balanceBefore = targetMember?.activePackage?.remainingMeals || 0;
+    const balanceAfter = balanceBefore + refundQty;
+
+    const deletionTimestamp = new Date().toLocaleString('en-MY', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+
+    // 1. Create audit refund record
+    const newRecord: MealDeletionRefundRecord = {
+      id: `ref-${Date.now()}`,
+      orderId: target.id,
+      memberId: target.memberId,
+      memberName: target.memberName,
+      memberPhone: target.memberPhone,
+      mealName: target.mealName,
+      mealNameZh: target.mealNameZh,
+      deliveryDate: target.deliveryDate,
+      deliverySlot: target.deliverySlot,
+      quantityRefunded: refundQty,
+      balanceBeforeRefund: balanceBefore,
+      balanceAfterRefund: balanceAfter,
+      deletedAt: deletionTimestamp,
+      reason: reason || 'Admin cancelled meal delivery & automatically restored quota to customer account',
+      operator: 'Owner Admin (#admin)',
+    };
+
+    setRefundRecords((prev) => {
+      const updated = [newRecord, ...prev];
+      try {
+        localStorage.setItem('chillhealthy_refund_records', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // 2. Remove from redemptions state and localStorage
+    setRedemptions((prev) => {
+      const next = prev.filter((r) => r.id !== redemptionId);
+      try {
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // 3. Automatically restore quota to member account with detailed record
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === target.memberId || m.phone === target.memberPhone) {
+          const currentRemaining = m.activePackage?.remainingMeals || 0;
+          const totalMeals = m.activePackage?.totalMeals || (currentRemaining + refundQty);
+          const updated: MemberAccount = {
+            ...m,
+            activePackage: m.activePackage
+              ? {
+                  ...m.activePackage,
+                  remainingMeals: currentRemaining + refundQty,
+                }
+              : {
+                  planId: 'restored-quota',
+                  planName: 'Restored Meal Quota',
+                  planNameZh: '已返还餐券配额',
+                  totalMeals: totalMeals,
+                  remainingMeals: refundQty,
+                  purchasedDate: new Date().toISOString().split('T')[0],
+                  expiryDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+                },
+            creditsHistory: [
+              {
+                id: `cr-refund-${Date.now()}`,
+                date: new Date().toISOString().split('T')[0],
+                type: 'refund' as const,
+                amount: refundQty,
+                note: `Quota Refund: Order #${target.id} (${target.mealName} for ${target.deliveryDate}) cancelled. +${refundQty} meal restored to package balance (New balance: ${balanceAfter} meals).`,
+              },
+              ...(m.creditsHistory || []),
+            ],
+          };
+
+          if (currentMember?.id === m.id) {
+            setCurrentMember(updated);
+            try {
+              localStorage.setItem('chillhealthy_current_member', JSON.stringify(updated));
+            } catch {}
+          }
+          return updated;
+        }
+        return m;
+      })
+    );
+
+    return true;
+  };
+
+  // Toggle delivery dates disabled/enabled by admin (advance or same day)
+  const handleToggleDisabledDeliveryDate = (dateStr: string) => {
+    setSiteSettings((prev) => {
+      const current = prev.disabledDeliveryDates || [];
+      const exists = current.includes(dateStr);
+      const updated = exists ? current.filter((d) => d !== dateStr) : [...current, dateStr].sort();
+      const nextSettings = { ...prev, disabledDeliveryDates: updated };
+      try {
+        localStorage.setItem('chillhealthy_sitesettings', JSON.stringify(nextSettings));
+      } catch {}
+      return nextSettings;
+    });
+  };
+
+  // Reset password by handphone (for WhatsApp TAC verification)
+  const handleResetPasswordByPhone = (phoneOrNum: string, newPass: string): boolean => {
+    const clean = phoneOrNum.replace(/\D/g, '');
+    let updatedAny = false;
+    setMembers((prev) =>
+      prev.map((m) => {
+        const mClean = m.phone.replace(/\D/g, '');
+        const numClean = (m.memberNumber || '').replace(/\D/g, '');
+        if (mClean === clean || numClean === clean || m.phone === phoneOrNum) {
+          updatedAny = true;
+          const updated = { ...m, password: newPass };
+          if (currentMember?.id === m.id) {
+            setCurrentMember(updated);
+          }
+          return updated;
+        }
+        return m;
+      })
+    );
+    return updatedAny;
+  };
+
+  // Quick add portion upsize to cart (+RM 3.50)
+  const handleAddUpsizePortion = () => {
+    const upsizeItem: CartItem = {
+      cartItemId: `upsize-${Date.now()}`,
+      type: 'meal',
+      title: language === 'en' ? '⚡ Upsize Portion (+80g Lean Protein & Greens)' : '⚡ 升级大份量 (+80g 优质蛋白与双倍时蔬)',
+      titleZh: '⚡ 升级大份量 (+80g 优质蛋白与双倍时蔬)',
+      price: 3.5,
+      quantity: 1,
+      image: 'https://admin.chillhealthy.com/uploads/d1j2uwbv4mgowsccow.jpg',
+      calories: 120,
+      protein: 18,
+      notes: 'Portion Upsize booster',
+    };
+    handleAddToCart(upsizeItem);
+  };
+
   // Cart operations
   const handleAddToCart = (newItem: CartItem) => {
     setCart((prevCart) => {
@@ -888,6 +1059,13 @@ export default function App() {
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onProceedToCheckout={handleProceedToCheckout}
+          onBrowsePlans={() => {
+            const plansEl = document.getElementById('plans');
+            if (plansEl) {
+              plansEl.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}
+          onAddUpsize={handleAddUpsizePortion}
         />
       )}
 
@@ -919,6 +1097,7 @@ export default function App() {
           onBatchRedeemMeals={handleBatchRedeemMeals}
           onUpdateMemberAddresses={handleUpdateMemberAddresses}
           onUpdateMemberPassword={handleUpdateMemberPassword}
+          onResetPasswordByPhone={handleResetPasswordByPhone}
           menuItems={menuItems}
           packages={packages}
           allRedemptions={redemptions}
@@ -968,11 +1147,14 @@ export default function App() {
           redemptions={redemptions}
           onUpdateRedemptionStatus={handleUpdateRedemptionStatus}
           onUpdateRedemptionOrder={handleUpdateRedemptionOrder}
+          onDeleteRedemptionOrder={handleDeleteRedemptionOrder}
+          onToggleDisabledDeliveryDate={handleToggleDisabledDeliveryDate}
           members={members}
           onUpdateMemberCredits={handleUpdateMemberCredits}
           onUpdateMemberAccount={handleUpdateMemberAccount}
           onAddMemberAccount={handleAddMemberAccount}
           onDeleteMemberAccount={handleDeleteMemberAccount}
+          refundRecords={refundRecords}
           initialTab={backOfficeTab}
         />
       )}

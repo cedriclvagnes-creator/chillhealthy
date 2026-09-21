@@ -371,6 +371,73 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
           })}
         </div>
 
+        {/* Dinner & Lunch Delivery Time Timetable (Directly After Meal Plan Selection) */}
+        <div className="mt-10 mb-8 max-w-5xl mx-auto">
+          <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 rounded-3xl p-6 sm:p-8 border border-emerald-500/30 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isEn ? 'Daily Delivery Schedule · Monday to Friday' : '每日送餐时段 · 周一至周五'}</span>
+                </div>
+                <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-white">
+                  {isEn ? 'Flexible Lunch & Dinner Delivery Hours' : '午餐与晚餐双时段灵活配送'}
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+                  {isEn
+                    ? 'All CHILL Healthy meal plans support both Lunch and Dinner delivery options. Easily assign your preferred time slot each day in your Member Portal before the 5:00 PM cutoff.'
+                    : '潮轻食所有健康餐配套均支持【午餐】及【晚餐】双时段配送。会员可自由在会员中心为每个工作日指定送达时段，每天下午 5:00 前完成隔日选餐。'}
+                </p>
+              </div>
+
+              {/* Delivery Slots Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full md:w-auto shrink-0">
+                {/* Lunch Slot */}
+                <div className="p-4 rounded-2xl bg-stone-800/90 border border-stone-700/80 flex items-center gap-3.5 min-w-[220px]">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-xl">
+                    🍱
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
+                      {isEn ? 'Lunch Slot' : '午餐时段'}
+                    </span>
+                    <span className="font-heading font-extrabold text-base text-white block">
+                      10:00am - 2:00pm
+                    </span>
+                    <span className="text-[11px] text-stone-400">
+                      {isEn ? 'Fresh office & home lunch' : '准时送达写字楼/住家'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dinner Slot */}
+                <div className="p-4 rounded-2xl bg-stone-800/90 border border-amber-500/40 flex items-center gap-3.5 min-w-[220px] relative">
+                  <span className="absolute -top-2 right-3 px-2 py-0.5 rounded-full bg-amber-500 text-stone-950 font-black text-[10px]">
+                    {isEn ? 'Popular for Dinner' : '晚饭/健身热门'}
+                  </span>
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold text-xl">
+                    🍲
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                      {isEn ? 'Dinner Slot' : '晚餐时段'}
+                    </span>
+                    <span className="font-heading font-extrabold text-base text-white block">
+                      3:00pm - 7:00pm
+                    </span>
+                    <span className="text-[11px] text-stone-400">
+                      {isEn ? 'Fresh warm dinner & post-workout' : '下班享用热餐·低卡无负担'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Value Guarantees footer */}
         <div className="bg-stone-800/60 rounded-3xl p-6 sm:p-8 border border-stone-700/80 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
           <div className="space-y-1.5">
@@ -382,8 +449,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
             </h4>
             <p className="text-xs text-stone-400">
               {isEn
-                ? 'Mon–Fri schedule. Outstation or busy? Pause anytime via WhatsApp.'
-                : '工作日送达，公假及周末除外。出差聚餐可随时在 WhatsApp 报备顺延。'}
+                ? 'Monday to Friday only. Outstation or busy? Pause anytime via WhatsApp.'
+                : '仅限周一至周五工作日送达，公假除外。出差聚餐可随时在会员中心顺延。'}
             </p>
           </div>
 
@@ -392,12 +459,12 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
               <Clock className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-white text-sm">
-              {isEn ? 'Lunch: 10:00 AM – 2:00 PM' : '午餐配送：10:00 AM – 2:00 PM'}
+              {isEn ? 'Lunch (10am–2pm) & Dinner (3pm–7pm)' : '午餐 (10am–2pm) & 晚餐 (3pm–7pm)'}
             </h4>
             <p className="text-xs text-stone-400">
               {isEn
-                ? 'Daily lunch delivered fresh. Daily meal selection cutoff before 5:00 PM.'
-                : '每日健康午餐准时送达。每天请在下午 5:00 前完成隔天餐点选择。'}
+                ? 'Daily dinner: 3:00pm - 7:00pm. Daily lunch: 10:00am - 2:00pm. Daily cutoff at 5:00 PM.'
+                : '晚餐配送：3:00pm - 7:00pm，午餐：10:00am - 2:00pm。每天请于 5:00 PM 前确定次日餐点。'}
             </p>
           </div>
 

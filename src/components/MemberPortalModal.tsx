@@ -31,6 +31,8 @@ import {
   Filter,
   Gift,
   Send,
+  RotateCcw,
+  ShieldCheck,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings } from '../types';
 import { ChillLogo } from './ChillLogo';
@@ -50,6 +52,7 @@ interface MemberPortalModalProps {
     address2?: { address2: string; area2: string; postalCode2: string }
   ) => void;
   onUpdateMemberPassword?: (newPassword: string) => boolean;
+  onResetPasswordByPhone?: (phone: string, newPassword: string) => boolean;
   menuItems: MealItem[];
   packages: MealPlan[];
   allRedemptions: MealRedemption[];
@@ -96,17 +99,94 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onBatchRedeemMeals,
   onUpdateMemberAddresses,
   onUpdateMemberPassword,
+  onResetPasswordByPhone,
   menuItems,
   packages,
   allRedemptions,
   siteSettings,
   onSelectPackageToBuy,
 }) => {
-  // Login / Register state
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  // Login / Register / Forgot Password state
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  // Forgot Password via WhatsApp TAC
+  const [forgotPhone, setForgotPhone] = useState('');
+  const [forgotTacInput, setForgotTacInput] = useState('');
+  const [generatedTac, setGeneratedTac] = useState('');
+  const [isTacSent, setIsTacSent] = useState(false);
+  const [tacTimer, setTacTimer] = useState(0);
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotConfirmPass, setForgotConfirmPass] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
+
+  useEffect(() => {
+    if (tacTimer > 0) {
+      const interval = setInterval(() => setTacTimer((prev) => prev - 1), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [tacTimer]);
+
+  const handleSendWhatsAppTac = () => {
+    setForgotError('');
+    setForgotSuccess('');
+    const raw = forgotPhone.replace(/\D/g, '');
+    if (!raw || raw.length < 8) {
+      setForgotError(language === 'en' ? 'Please enter a valid registered handphone number.' : '请输入有效的注册手机号码。');
+      return;
+    }
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedTac(code);
+    setIsTacSent(true);
+    setTacTimer(300);
+
+    const msg = `Hi CHILL Healthy, I am requesting a password reset TAC for my member account (${forgotPhone}). My 6-digit WhatsApp TAC code is: *${code}*.`;
+    const targetWa = siteSettings.whatsappNumber ? siteSettings.whatsappNumber.replace(/\D/g, '') : '60126189919';
+    const waUrl = `https://wa.me/${targetWa}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+
+    setForgotSuccess(
+      language === 'en'
+        ? `✓ 6-Digit TAC [ ${code} ] generated & forwarded to WhatsApp! Please enter the TAC below to set your new password.`
+        : `✓ 6位验证码 [ ${code} ] 已生成并同步至 WhatsApp！请在下方输入验证码并设置新密码。`
+    );
+  };
+
+  const handleVerifyTacAndReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    if (!isTacSent || !generatedTac) {
+      setForgotError(language === 'en' ? 'Please click "Send TAC to WhatsApp" first.' : '请先点击“发送 WhatsApp 验证码”。');
+      return;
+    }
+    if (forgotTacInput.trim() !== generatedTac.trim()) {
+      setForgotError(language === 'en' ? 'Incorrect TAC code. Please verify the code sent to WhatsApp.' : '验证码不正确，请核对 WhatsApp 验证码。');
+      return;
+    }
+    if (!forgotNewPass || forgotNewPass.length < 4) {
+      setForgotError(language === 'en' ? 'Password must be at least 4 characters.' : '新密码长度至少需要 4 位。');
+      return;
+    }
+    if (forgotNewPass !== forgotConfirmPass) {
+      setForgotError(language === 'en' ? 'Passwords do not match.' : '两次输入的密码不一致。');
+      return;
+    }
+
+    if (onResetPasswordByPhone) {
+      onResetPasswordByPhone(forgotPhone, forgotNewPass);
+    }
+    setLoginEmail(forgotPhone);
+    setLoginPass(forgotNewPass);
+    alert(
+      language === 'en'
+        ? '✓ Password reset successfully! You can now log in with your new password.'
+        : '✓ 密码重置成功！已为您自动填入新密码，请点击立即登录。'
+    );
+    setAuthMode('login');
+  };
 
   // Register state
   const [regName, setRegName] = useState('');
@@ -151,6 +231,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   // Meal Search & Filter state
   const [mealSearchQuery, setMealSearchQuery] = useState('');
   const [selectedMealCategory, setSelectedMealCategory] = useState<string>('all');
+
+  // History sub-tab: 'deliveries' (meal deliveries) or 'refunds' (quota refund & balance records)
+  const [historySubTab, setHistorySubTab] = useState<'deliveries' | 'refunds'>('deliveries');
 
   // Advance Multi-Day Planner state
   const upcomingWorkdays = useMemo(() => getUpcomingWorkdays(5), []);
@@ -396,10 +479,58 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     setSelectedAddressSlot(2);
   };
 
+  const handleDateChange = (dateVal: string) => {
+    if (!dateVal) return;
+    const dateObj = new Date(dateVal + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay();
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      alert(
+        language === 'en'
+          ? '⚠️ Notice: Deliveries are only available from Monday to Friday (weekdays only). Please choose a Monday–Friday date.'
+          : '⚠️ 提示：健康餐仅在周一至周五工作日配送（周末不送餐）。请选择周一至周五。'
+      );
+      setSelectedDate(getNextWorkday(1));
+      return;
+    }
+
+    if (siteSettings.disabledDeliveryDates?.includes(dateVal)) {
+      alert(
+        language === 'en'
+          ? `⚠️ Notice: ${dateVal} has been turned off by kitchen administration (holiday or off-day). Please select another date.`
+          : `⚠️ 提示：${dateVal} 已被后厨管理关闭（节假日或休厨日）。请选择其他送餐日期。`
+      );
+      setSelectedDate(getNextWorkday(1));
+      return;
+    }
+
+    setSelectedDate(dateVal);
+  };
+
   // Submit Daily Meal Redemption
   const handleRedemptionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentMember) return;
+
+    const dateObj = new Date(selectedDate + 'T00:00:00');
+    const dayOfWeek = dateObj.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      alert(
+        language === 'en'
+          ? '⚠️ Notice: Deliveries are only available from Monday to Friday. Please choose a weekday.'
+          : '⚠️ 提示：会员订餐仅限周一至周五工作日，周末不提供送餐服务。'
+      );
+      return;
+    }
+
+    if (siteSettings.disabledDeliveryDates?.includes(selectedDate)) {
+      alert(
+        language === 'en'
+          ? `⚠️ Notice: The selected date (${selectedDate}) has been turned off by kitchen administration. Please select another date.`
+          : `⚠️ 提示：所选送餐日期 (${selectedDate}) 已由后厨暂停送餐，请选择其他送餐日期。`
+      );
+      return;
+    }
 
     if (!currentMember.activePackage || currentMember.activePackage.remainingMeals < mealQuantity) {
       alert(
@@ -427,6 +558,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       mealImage: chosenMeal.image,
       quantity: mealQuantity,
       dietaryNotes,
+      recipeStandard: 'Standard Chef Recipe' as const,
     });
 
     if (success) {
@@ -473,6 +605,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         mealImage: meal.image,
         quantity: 1,
         dietaryNotes,
+        recipeStandard: 'Standard Chef Recipe' as const,
       };
     });
 
@@ -758,7 +891,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               </div>
 
               {/* Auth Mode Switch */}
-              <div className="grid grid-cols-2 p-1 bg-stone-100 rounded-2xl max-w-xs mx-auto mb-6">
+              <div className="grid grid-cols-3 p-1 bg-stone-100 rounded-2xl max-w-sm mx-auto mb-6 text-center">
                 <button
                   type="button"
                   onClick={() => setAuthMode('login')}
@@ -775,7 +908,16 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     authMode === 'register' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
                   }`}
                 >
-                  {language === 'en' ? 'Register Account' : '新会员注册'}
+                  {language === 'en' ? 'Register' : '注册账号'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMode('forgot')}
+                  className={`py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                    authMode === 'forgot' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
+                  }`}
+                >
+                  {language === 'en' ? 'Reset (TAC)' : '重置密码'}
                 </button>
               </div>
 
@@ -829,11 +971,24 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       placeholder="123456"
                       className="w-full text-xs sm:text-sm px-4 py-3 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
                     />
-                    <p className="text-[11px] text-stone-500 mt-1">
-                      {language === 'en'
-                        ? '💡 Default password is 123456. You can easily change it inside your profile.'
-                        : '💡 所有会员初始密码均为 123456，登录后可在个人中心随时修改。'}
-                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-[11px] text-stone-500">
+                        {language === 'en' ? '💡 Default password is 123456.' : '💡 默认初始密码为 123456。'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForgotPhone(loginEmail);
+                          setForgotError('');
+                          setForgotSuccess('');
+                          setAuthMode('forgot');
+                        }}
+                        className="text-xs text-emerald-700 hover:text-emerald-900 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Forgot Password (TAC)?' : '忘记密码(TAC)?'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   <button
@@ -866,6 +1021,143 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     </div>
                   </div>
                 </form>
+              ) : authMode === 'forgot' ? (
+                /* Forgot Password via WhatsApp TAC Form */
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200">
+                    <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm mb-1">
+                      <KeyRound className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? 'Reset Password via WhatsApp TAC' : '通过 WhatsApp 获取安全验证码重置密码'}</span>
+                    </div>
+                    <p className="text-xs text-emerald-800 leading-relaxed">
+                      {language === 'en'
+                        ? 'Enter your registered handphone number. We will dispatch a 6-digit TAC security code directly to your WhatsApp to verify and reset your password.'
+                        : '请输入您的注册手机号码。系统将向您的 WhatsApp 发送 6 位 TAC 安全验证码，验证后即可设置全新密码。'}
+                    </p>
+                  </div>
+
+                  {forgotError && (
+                    <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{forgotError}</span>
+                    </div>
+                  )}
+
+                  {forgotSuccess && (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-900 font-bold flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{forgotSuccess}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-stone-700 block mb-1">
+                        {language === 'en' ? 'Registered Handphone Number *' : '注册会员手机号码 *'}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="tel"
+                          required
+                          value={forgotPhone}
+                          onChange={(e) => setForgotPhone(e.target.value)}
+                          placeholder="e.g. 0126189919"
+                          className="flex-1 text-xs sm:text-sm px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSendWhatsAppTac}
+                          disabled={tacTimer > 0}
+                          className="px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap disabled:bg-stone-300 disabled:cursor-not-allowed"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>
+                            {tacTimer > 0
+                              ? `${tacTimer}s`
+                              : language === 'en'
+                              ? 'Get WhatsApp TAC'
+                              : '获取 WhatsApp 验证码'}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {isTacSent && (
+                      <form onSubmit={handleVerifyTacAndReset} className="space-y-3 pt-2 border-t border-stone-100">
+                        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-center justify-between">
+                          <span className="font-medium">
+                            {language === 'en' ? 'Your WhatsApp TAC Code is:' : '您的 WhatsApp 验证码为：'}
+                          </span>
+                          <span className="font-mono font-black text-sm text-emerald-800 bg-white px-2.5 py-0.5 rounded border border-amber-300">
+                            {generatedTac}
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Enter 6-Digit WhatsApp TAC Code *' : '输入 WhatsApp 6位验证码 *'}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            maxLength={6}
+                            value={forgotTacInput}
+                            onChange={(e) => setForgotTacInput(e.target.value)}
+                            placeholder="6-digit TAC code"
+                            className="w-full tracking-widest font-mono text-center text-sm font-bold px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'New Password *' : '设置新密码 *'}
+                            </label>
+                            <input
+                              type="password"
+                              required
+                              value={forgotNewPass}
+                              onChange={(e) => setForgotNewPass(e.target.value)}
+                              placeholder="min. 4 characters"
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'Confirm New Password *' : '确认新密码 *'}
+                            </label>
+                            <input
+                              type="password"
+                              required
+                              value={forgotConfirmPass}
+                              onChange={(e) => setForgotConfirmPass(e.target.value)}
+                              placeholder="re-enter password"
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Verify TAC & Reset Password' : '验证 TAC 并完成重置密码'}</span>
+                        </button>
+                      </form>
+                    )}
+
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode('login')}
+                        className="text-xs text-stone-500 hover:text-stone-800 font-bold hover:underline cursor-pointer"
+                      >
+                        {language === 'en' ? '← Back to Member Login' : '← 返回会员登录'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 /* Register Form */
                 <form onSubmit={handleRegisterSubmit} className="space-y-4">
@@ -1546,7 +1838,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center justify-between">
                             <span className="flex items-center gap-1.5">
                               <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>{language === 'en' ? 'Delivery Date (Mon – Fri only) *' : '送餐日期 (周一至周五) *'}</span>
+                              <span>{language === 'en' ? 'Delivery Date (Monday – Friday Only) *' : '送餐日期 (仅限周一至周五) *'}</span>
+                            </span>
+                            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200">
+                              {language === 'en' ? 'Weekdays Only' : '工作日专送'}
                             </span>
                           </label>
                           <input
@@ -1554,9 +1849,46 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             required
                             min={getNextWorkday(1)}
                             value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
+                            onChange={(e) => handleDateChange(e.target.value)}
                             className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
                           />
+
+                          {/* Quick Workday Selector Buttons */}
+                          <div className="mt-2 space-y-1">
+                            <span className="text-[10px] text-stone-500 block font-medium">
+                              {language === 'en' ? 'Quick select upcoming workdays:' : '快捷选择即将到来的工作日：'}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {upcomingWorkdays.map((wDate) => {
+                                const isSelected = selectedDate === wDate;
+                                const isOff = siteSettings.disabledDeliveryDates?.includes(wDate);
+                                const dObj = new Date(wDate + 'T00:00:00');
+                                const dayName = dObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                                  weekday: 'short',
+                                  month: 'numeric',
+                                  day: 'numeric',
+                                });
+
+                                return (
+                                  <button
+                                    key={wDate}
+                                    type="button"
+                                    disabled={isOff}
+                                    onClick={() => handleDateChange(wDate)}
+                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                        : isOff
+                                        ? 'bg-stone-100 text-stone-400 border-stone-200 line-through cursor-not-allowed'
+                                        : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
+                                    }`}
+                                  >
+                                    {dayName} {isOff && '(Off)'}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
 
                         <div>
@@ -1625,10 +1957,28 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           </div>
                         </div>
 
+                        {/* Standard Recipe Notice for Meal Plan Customers */}
+                        <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-950 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                              <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                              <span>{language === 'en' ? 'Standard Recipe Guarantee' : '标准主厨营养配方出品'}</span>
+                            </div>
+                            <span className="text-[10px] bg-amber-200/90 text-amber-900 px-2 py-0.5 rounded-full font-extrabold uppercase">
+                              {language === 'en' ? 'Standard Portion' : '标准配方'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-800 leading-snug">
+                            {language === 'en'
+                              ? 'Meal plan bentos are prepared according to certified chef standard nutritional proportions. Customization options (cauliflower rice swaps, extra meat) are reserved exclusively for Ala Carte customers.'
+                              : '月度/周期套餐顾客严格按主厨标准科学营养比例出餐（均衡碳水、优质蛋白与蔬菜）。换花椰菜米、加肉等定制选项仅对单点顾客开放。'}
+                          </p>
+                        </div>
+
                         {/* Dietary / Special Kitchen Request */}
                         <div>
                           <label className="text-xs font-bold text-stone-700 block mb-1">
-                            {language === 'en' ? 'Kitchen Preparation Notes (Dietary / Health)' : '厨房备餐要求 (酱汁分开 / 低钠 / 少葱蒜)'}
+                            {language === 'en' ? 'Kitchen Preparation Notes (Allergies / Dressing)' : '厨房备餐要求 (酱汁分开 / 少葱蒜 / 忌口)'}
                           </label>
                           <input
                             type="text"
@@ -1802,8 +2152,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
                             {/* Card Footer: RM0 benefit and select button */}
                             <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between text-xs">
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                {language === 'en' ? 'Included (RM 0)' : '配套内免费兑换'}
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200" title={language === 'en' ? 'Standard Chef Recipe (RM 0)' : '标准主厨配方 (RM 0)'}>
+                                {language === 'en' ? 'Standard (RM 0)' : '标准配方 (RM 0)'}
                               </span>
                               <span
                                 className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
@@ -1956,95 +2306,265 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               </div>
             )}
 
-            {/* Tab 3: DELIVERY LOGS & STATUS TRACKING */}
+            {/* Tab 3: DELIVERY LOGS & STATUS TRACKING & REFUND AUDIT */}
             {portalTab === 'history' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-heading font-extrabold text-sm sm:text-base text-stone-900">
-                    {language === 'en' ? 'Your Meal Deliveries' : '您的餐品配送记录'}
-                  </h4>
-                  <span className="text-xs text-stone-500 font-semibold">
-                    {memberRedemptions.length} {language === 'en' ? 'orders total' : '次兑换记录'}
-                  </span>
+                {/* Sub-tabs for Deliveries vs Refund Audit */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setHistorySubTab('deliveries')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        historySubTab === 'deliveries'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      <Utensils className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Meal Deliveries' : '餐品配送记录'}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                        historySubTab === 'deliveries' ? 'bg-emerald-800 text-white' : 'bg-stone-200 text-stone-700'
+                      }`}>
+                        {memberRedemptions.length}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHistorySubTab('refunds')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        historySubTab === 'refunds'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Quota Refund & Balance Logs' : '退款返还与餐券明细'}</span>
+                      {currentMember?.creditsHistory?.some((c) => c.type === 'refund') && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-black animate-pulse">
+                          {currentMember.creditsHistory.filter((c) => c.type === 'refund').length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {currentMember?.activePackage && (
+                    <div className="text-xs font-bold text-emerald-900 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5 shrink-0">
+                      <span>{language === 'en' ? 'Active Balance:' : '当前可用餐券:'}</span>
+                      <strong className="text-emerald-700 font-extrabold text-sm">{currentMember.activePackage.remainingMeals}</strong>
+                      <span>{language === 'en' ? 'meals' : '餐'}</span>
+                    </div>
+                  )}
                 </div>
 
-                {memberRedemptions.length === 0 ? (
-                  <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 text-stone-400 text-xs">
-                    {language === 'en'
-                      ? 'No meal redemptions yet. Click "Daily Next-Day Meal" to schedule your lunch!'
-                      : '暂无订餐记录。请点击“每天选择隔天餐点”开始您的健康轻食之旅！'}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {memberRedemptions.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-4 rounded-2xl border border-stone-200 bg-white hover:border-stone-300 transition-all space-y-3 shadow-2xs"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <img
-                              src={r.mealImage}
-                              alt={r.mealName}
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
-                              }}
-                              className="w-12 h-12 rounded-xl object-cover shrink-0 shadow-2xs"
-                            />
-                            <div>
-                              <h5 className="font-heading font-bold text-xs sm:text-sm text-stone-900">
-                                {language === 'en' ? r.mealName : r.mealNameZh}
-                                {r.quantity && r.quantity > 1 ? ` x${r.quantity}` : ''}
-                              </h5>
-                              <div className="text-[11px] text-stone-500 flex items-center gap-2 mt-0.5">
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-emerald-700" />
-                                  <span>{r.deliveryDate}</span>
+                {/* Sub-view 1: Meal Deliveries */}
+                {historySubTab === 'deliveries' && (
+                  <div>
+                    {memberRedemptions.length === 0 ? (
+                      <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 text-stone-400 text-xs">
+                        {language === 'en'
+                          ? 'No meal redemptions yet. Click "Daily Next-Day Meal" to schedule your lunch!'
+                          : '暂无订餐记录。请点击“每天选择隔天餐点”开始您的健康轻食之旅！'}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {memberRedemptions.map((r) => (
+                          <div
+                            key={r.id}
+                            className="p-4 rounded-2xl border border-stone-200 bg-white hover:border-stone-300 transition-all space-y-3 shadow-2xs"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={r.mealImage}
+                                  alt={r.mealName}
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                                  }}
+                                  className="w-12 h-12 rounded-xl object-cover shrink-0 shadow-2xs"
+                                />
+                                <div>
+                                  <h5 className="font-heading font-bold text-xs sm:text-sm text-stone-900">
+                                    {language === 'en' ? r.mealName : r.mealNameZh}
+                                    {r.quantity && r.quantity > 1 ? ` x${r.quantity}` : ''}
+                                  </h5>
+                                  <div className="text-[11px] text-stone-500 flex items-center gap-2 mt-0.5">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 text-emerald-700" />
+                                      <span>{r.deliveryDate}</span>
+                                    </span>
+                                    <span>·</span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-emerald-700" />
+                                      <span>10:00 AM – 2:00 PM</span>
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span
+                                  className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                                    r.status === 'Delivered'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : r.status === 'Out for Delivery'
+                                      ? 'bg-sky-100 text-sky-800 animate-pulse'
+                                      : r.status === 'Prepping in Kitchen'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-stone-100 text-stone-700'
+                                  }`}
+                                >
+                                  {r.status === 'Pending' && (language === 'en' ? 'Pending' : '待制作')}
+                                  {r.status === 'Prepping in Kitchen' && (language === 'en' ? 'In Kitchen' : '厨房制作中')}
+                                  {r.status === 'Out for Delivery' && (language === 'en' ? 'Out for Delivery' : '骑手配送中')}
+                                  {r.status === 'Delivered' && (language === 'en' ? 'Delivered' : '已送达')}
                                 </span>
-                                <span>·</span>
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-emerald-700" />
-                                  <span>10:00 AM – 2:00 PM</span>
+                                <span className="text-[9px] px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 font-semibold border border-stone-200">
+                                  {r.recipeStandard || 'Standard Chef Recipe'}
                                 </span>
                               </div>
                             </div>
+
+                            <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center justify-between text-[11px] text-stone-500 gap-2">
+                              <span className="truncate max-w-xs">
+                                📍 {r.deliveryAddress}, {r.area}
+                              </span>
+                              <a
+                                href={`https://wa.me/${whatsappLinkNumber}?text=Hi%20CHILL%20Healthy,%20I%20want%20to%20check%20or%20pause%20my%20delivery%20${r.id}%20for%20${r.deliveryDate}.`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                <span>{language === 'en' ? 'Modify on WhatsApp' : '更改送餐/暂停 (WhatsApp)'}</span>
+                              </a>
+                            </div>
                           </div>
-
-                          <span
-                            className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider shrink-0 ${
-                              r.status === 'Delivered'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.status === 'Out for Delivery'
-                                ? 'bg-sky-100 text-sky-800 animate-pulse'
-                                : r.status === 'Prepping in Kitchen'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-stone-100 text-stone-700'
-                            }`}
-                          >
-                            {r.status === 'Pending' && (language === 'en' ? 'Pending' : '待制作')}
-                            {r.status === 'Prepping in Kitchen' && (language === 'en' ? 'In Kitchen' : '厨房制作中')}
-                            {r.status === 'Out for Delivery' && (language === 'en' ? 'Out for Delivery' : '骑手配送中')}
-                            {r.status === 'Delivered' && (language === 'en' ? 'Delivered' : '已送达')}
-                          </span>
-                        </div>
-
-                        <div className="pt-2 border-t border-stone-100 flex flex-wrap items-center justify-between text-[11px] text-stone-500 gap-2">
-                          <span className="truncate max-w-xs">
-                            📍 {r.deliveryAddress}, {r.area}
-                          </span>
-                          <a
-                            href={`https://wa.me/${whatsappLinkNumber}?text=Hi%20CHILL%20Healthy,%20I%20want%20to%20check%20or%20pause%20my%20delivery%20${r.id}%20for%20${r.deliveryDate}.`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-700 font-bold hover:underline flex items-center gap-1"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                            <span>{language === 'en' ? 'Modify on WhatsApp' : '更改送餐/暂停 (WhatsApp)'}</span>
-                          </a>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                  </div>
+                )}
+
+                {/* Sub-view 2: Quota Refund & Balance Records Audit Log */}
+                {historySubTab === 'refunds' && (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-stone-900 block">
+                          {language === 'en' ? 'Meal Balance & Refund Guarantee Record' : '餐券明细与自动返还记录'}
+                        </span>
+                        <span className="text-[11px] text-stone-500">
+                          {language === 'en'
+                            ? 'Whenever an order is deleted or cancelled, meals are automatically refunded back to your balance.'
+                            : '当订单被取消或删除时，餐券将自动全额返还至您的账户余额，全程系统存证。'}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-stone-500 uppercase font-bold block">
+                          {language === 'en' ? 'Current Balance' : '实时剩余餐数'}
+                        </span>
+                        <span className="text-base font-extrabold text-emerald-700">
+                          {currentMember?.activePackage?.remainingMeals || 0} {language === 'en' ? 'meals' : '餐'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {!currentMember?.creditsHistory || currentMember.creditsHistory.length === 0 ? (
+                      <div className="text-center py-12 bg-white rounded-3xl border border-stone-200 text-stone-400 text-xs">
+                        {language === 'en' ? 'No balance adjustments or refund logs yet.' : '暂无餐券变动或退款记录。'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {currentMember.creditsHistory.map((item) => {
+                          const isRefund = item.type === 'refund';
+                          const isRedeem = item.type === 'redeem';
+                          const isPurchase = item.type === 'purchase';
+
+                          return (
+                            <div
+                              key={item.id}
+                              className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                                isRefund
+                                  ? 'bg-emerald-50/60 border-emerald-300 ring-1 ring-emerald-500/20 shadow-2xs'
+                                  : 'bg-white border-stone-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                    isRefund
+                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                      : isRedeem
+                                      ? 'bg-stone-100 text-stone-700'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {isRefund ? (
+                                    <RotateCcw className="w-4 h-4" />
+                                  ) : isRedeem ? (
+                                    <Utensils className="w-4 h-4" />
+                                  ) : (
+                                    <Sparkles className="w-4 h-4" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-xs font-bold ${
+                                        isRefund
+                                          ? 'text-emerald-950 font-extrabold'
+                                          : 'text-stone-900'
+                                      }`}
+                                    >
+                                      {isRefund
+                                        ? language === 'en'
+                                          ? 'Meal Quota Restored / Refunded'
+                                          : '已退单并返还餐券配额'
+                                        : isRedeem
+                                        ? language === 'en'
+                                          ? 'Meal Redeemed'
+                                          : '兑换餐品'
+                                        : language === 'en'
+                                        ? 'Package Subscribed'
+                                        : '套餐充值'}
+                                    </span>
+                                    {isRefund && (
+                                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 uppercase">
+                                        {language === 'en' ? 'Auto-Restored' : '已自动返还'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-stone-600 line-clamp-1 mt-0.5">
+                                    {item.note}
+                                  </p>
+                                  <span className="text-[10px] text-stone-400 block mt-0.5">
+                                    {item.date}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span
+                                  className={`text-sm font-black ${
+                                    isRefund || isPurchase
+                                      ? 'text-emerald-700'
+                                      : 'text-stone-700'
+                                  }`}
+                                >
+                                  {item.amount > 0 ? `+${item.amount}` : item.amount}{' '}
+                                  <span className="text-[11px] font-semibold">
+                                    {language === 'en' ? 'meals' : '餐'}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

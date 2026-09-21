@@ -432,11 +432,21 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               )}
             </div>
 
-            {/* Customization & Substitutions */}
+            {/* Customization & Substitutions (Ala Carte Exclusive) */}
             <div className="pt-2 border-t border-stone-200 space-y-3">
-              <h4 className="text-sm font-bold text-stone-900">
-                {language === 'en' ? 'Custom Adjustments' : '个性化定制选项'}
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                  <span>{language === 'en' ? 'Customize Meal Options' : '个性化定制选项'}</span>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wide">
+                    {language === 'en' ? 'Ala Carte Exclusive' : '仅限单点顾客'}
+                  </span>
+                </h4>
+              </div>
+              <p className="text-[11px] text-stone-500 leading-snug">
+                {language === 'en'
+                  ? 'Custom adjustments are available for Ala Carte orders. (Meal plan package customers remain on certified chef standard balanced nutrition).'
+                  : '个性化定制选项仅对单点顾客开放（月度/周期套餐顾客严格按主厨标准科学配比出品，不设定制）。'}
+              </p>
 
               {/* Low carb base swap */}
               <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors">

@@ -126,26 +126,19 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>{language === 'en' ? 'Member Portal · Redeem Meals' : '会员中心 · 兑换每日餐盒'}</span>
                 </button>
 
-                <a
-                  href="#kitchen"
-                  onClick={() => {
-                    window.location.hash = '#kitchen';
-                    if (onOpenBackOffice) onOpenBackOffice();
-                  }}
-                  className="hover:text-amber-400 text-stone-400 transition-colors text-left text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Clock className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{language === 'en' ? 'Kitchen Orders & Excel Report' : '后厨调度与Excel报表 (#kitchen)'}</span>
-                </a>
-
                 {onOpenBackOffice && (
-                  <button
-                    onClick={onOpenBackOffice}
-                    className="hover:text-stone-300 text-stone-500 transition-colors text-left text-[11px] flex items-center gap-1.5 cursor-pointer"
+                  <a
+                    href="#admin"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.location.hash = '#admin';
+                      onOpenBackOffice();
+                    }}
+                    className="hover:text-amber-400 text-stone-400 transition-colors text-left text-xs flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Shield className="w-3 h-3 text-stone-500" />
+                    <Shield className="w-3.5 h-3.5 text-amber-500" />
                     <span>{language === 'en' ? 'Owner Admin (#admin)' : '店主后台 (#admin)'}</span>
-                  </button>
+                  </a>
                 )}
               </li>
             </ul>
