@@ -37,6 +37,15 @@ import {
   findMemberByReferralCode,
   MIN_REFERRAL_PLAN_PRICE,
 } from './utils/referral';
+import {
+  getPlanValidityDays,
+  calculateMonFriExpiryDate,
+  getEffectivePackageExpiry,
+  checkPlanAutoReviveEligibility,
+  activatePackageOnFirstOrder,
+  evaluateMemberPackageExpiration,
+  getTodayStr,
+} from './utils/packageExpiry';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -230,6 +239,25 @@ export default function App() {
       // ignore
     }
   }, [cart]);
+
+  // Evaluate package expirations against current date and suspended dates
+  useEffect(() => {
+    const suspended = siteSettings.disabledDeliveryDates || [];
+    let membersChanged = false;
+    const evaluatedMembers = members.map((m) => {
+      const { updatedMember, didBurn } = evaluateMemberPackageExpiration(m, suspended);
+      if (didBurn) membersChanged = true;
+      return updatedMember;
+    });
+
+    if (membersChanged) {
+      setMembers(evaluatedMembers);
+      if (currentMember) {
+        const foundCur = evaluatedMembers.find((m) => m.id === currentMember.id);
+        if (foundCur) setCurrentMember(foundCur);
+      }
+    }
+  }, [siteSettings.disabledDeliveryDates]);
 
   // Private Admin Route & Back Office / Kitchen / Portal Detection
   useEffect(() => {
@@ -440,6 +468,21 @@ export default function App() {
       return false;
     }
 
+    const suspendedDates = siteSettings.disabledDeliveryDates || [];
+
+    // Check if package is expired / burned
+    const expiryInfo = getEffectivePackageExpiry(currentMember.activePackage, suspendedDates);
+    if (expiryInfo.isActivated && expiryInfo.isExpired) {
+      return false;
+    }
+
+    // Activate package validity on first meal order if not yet activated!
+    const isFirstOrder = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
+    const firstMealDate = redemptionData.deliveryDate || getTodayStr();
+    const activatedPkg = isFirstOrder
+      ? activatePackageOnFirstOrder(currentMember.activePackage, firstMealDate, suspendedDates)
+      : currentMember.activePackage;
+
     // Create redemption ticket
     const newRedemption: MealRedemption = {
       ...redemptionData,
@@ -453,8 +496,8 @@ export default function App() {
     const updatedMember: MemberAccount = {
       ...currentMember,
       activePackage: {
-        ...currentMember.activePackage,
-        remainingMeals: Math.max(0, currentMember.activePackage.remainingMeals - qty),
+        ...activatedPkg,
+        remainingMeals: Math.max(0, activatedPkg.remainingMeals - qty),
       },
       creditsHistory: [
         {
@@ -462,7 +505,11 @@ export default function App() {
           date: new Date().toISOString().split('T')[0],
           type: 'redeem',
           amount: -qty,
-          note: `Redeemed ${qty}x ${redemptionData.mealName} for ${redemptionData.deliveryDate}`,
+          note: `Redeemed ${qty}x ${redemptionData.mealName} for ${redemptionData.deliveryDate}${
+            isFirstOrder
+              ? ` (First meal order · Package validity activated until ${activatedPkg.expiryDate})`
+              : ''
+          }`,
         },
         ...currentMember.creditsHistory,
       ],
@@ -481,6 +528,21 @@ export default function App() {
     const totalDeduct = redemptionsList.reduce((sum, r) => sum + (r.quantity || 1), 0);
     if (currentMember.activePackage.remainingMeals < totalDeduct) return false;
 
+    const suspendedDates = siteSettings.disabledDeliveryDates || [];
+
+    // Check if package is expired / burned
+    const expiryInfo = getEffectivePackageExpiry(currentMember.activePackage, suspendedDates);
+    if (expiryInfo.isActivated && expiryInfo.isExpired) {
+      return false;
+    }
+
+    // Activate package validity on first meal order if not yet activated!
+    const isFirstOrder = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
+    const firstMealDate = redemptionsList[0]?.deliveryDate || getTodayStr();
+    const activatedPkg = isFirstOrder
+      ? activatePackageOnFirstOrder(currentMember.activePackage, firstMealDate, suspendedDates)
+      : currentMember.activePackage;
+
     const newTickets: MealRedemption[] = redemptionsList.map((r, i) => ({
       ...r,
       id: `RED-${Date.now().toString().slice(-5)}${i}`,
@@ -492,8 +554,8 @@ export default function App() {
     const updatedMember: MemberAccount = {
       ...currentMember,
       activePackage: {
-        ...currentMember.activePackage,
-        remainingMeals: Math.max(0, currentMember.activePackage.remainingMeals - totalDeduct),
+        ...activatedPkg,
+        remainingMeals: Math.max(0, activatedPkg.remainingMeals - totalDeduct),
       },
       creditsHistory: [
         {
@@ -501,7 +563,11 @@ export default function App() {
           date: new Date().toISOString().split('T')[0],
           type: 'redeem',
           amount: -totalDeduct,
-          note: `Batch redeemed ${redemptionsList.length} advance workdays schedule`,
+          note: `Batch redeemed ${redemptionsList.length} advance workdays schedule${
+            isFirstOrder
+              ? ` (First meal order · Package validity activated until ${activatedPkg.expiryDate})`
+              : ''
+          }`,
         },
         ...currentMember.creditsHistory,
       ],
@@ -584,7 +650,44 @@ export default function App() {
       isNewAccount &&
       planPrice >= MIN_REFERRAL_PLAN_PRICE;
 
+    const planValidity = getPlanValidityDays(pkg);
+    const today = getTodayStr();
+    const suspendedDates = siteSettings.disabledDeliveryDates || [];
+    const tentativeExpiry = calculateMonFriExpiryDate(today, planValidity, suspendedDates);
+
+    // Auto-revive check: if customer had expired unredeemed meals on this same plan
+    const reviveCheck = checkPlanAutoReviveEligibility(currentMember, pkg.id);
+    const autoRevivedCount = reviveCheck.canRevive ? reviveCheck.revivedMeals : 0;
+
     if (currentMember) {
+      const existingUnburned =
+        currentMember.activePackage && !currentMember.activePackage.isBurned
+          ? currentMember.activePackage.remainingMeals
+          : 0;
+
+      const newRemaining = existingUnburned + totalMealsToAdd + autoRevivedCount;
+      const newTotalMeals = totalMealsToAdd + autoRevivedCount;
+
+      const newCreditsEntries: MemberAccount['creditsHistory'] = [
+        {
+          id: `cr-${Date.now()}`,
+          date: today,
+          type: 'purchase',
+          amount: totalMealsToAdd,
+          note: `Ordered package: ${pkg.title} (${totalMealsToAdd} meals · ${planValidity} Mon-Fri weekdays validity)`,
+        },
+      ];
+
+      if (autoRevivedCount > 0) {
+        newCreditsEntries.push({
+          id: `cr-revive-${Date.now()}`,
+          date: today,
+          type: 'revive' as const,
+          amount: autoRevivedCount,
+          note: `🎉 Auto-revived ${autoRevivedCount} unredeemed meals from previous expired ${pkg.title}!`,
+        });
+      }
+
       const updated: MemberAccount = {
         ...currentMember,
         address: customer.address || currentMember.address,
@@ -602,19 +705,26 @@ export default function App() {
           planId: pkg.id,
           planName: pkg.title,
           planNameZh: pkg.titleZh,
-          totalMeals: totalMealsToAdd,
-          remainingMeals: (currentMember.activePackage?.remainingMeals || 0) + totalMealsToAdd,
-          purchasedDate: new Date().toISOString().split('T')[0],
-          expiryDate: new Date(Date.now() + 35 * 86400000).toISOString().split('T')[0],
+          totalMeals: newTotalMeals,
+          remainingMeals: newRemaining,
+          purchasedDate: today,
+          expiryDate: tentativeExpiry,
+          validityDays: planValidity,
+          isActivated: false, // Expiry count starts taking effect on first day of meal ordering
+          firstRedeemedDate: undefined,
+          autoRevivedMeals: autoRevivedCount > 0 ? autoRevivedCount : undefined,
+          isBurned: false,
+          price: planPrice,
         },
+        lastExpiredPackage: reviveCheck.canRevive && currentMember.lastExpiredPackage
+          ? {
+              ...currentMember.lastExpiredPackage,
+              isRevived: true,
+              revivedAt: today,
+            }
+          : currentMember.lastExpiredPackage,
         creditsHistory: [
-          {
-            id: `cr-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
-            type: 'purchase',
-            amount: totalMealsToAdd,
-            note: `Ordered package: ${pkg.title}`,
-          },
+          ...newCreditsEntries,
           ...currentMember.creditsHistory,
         ],
       };
@@ -642,16 +752,21 @@ export default function App() {
           planNameZh: pkg.titleZh,
           totalMeals: totalMealsToAdd,
           remainingMeals: totalMealsToAdd,
-          purchasedDate: new Date().toISOString().split('T')[0],
-          expiryDate: new Date(Date.now() + 35 * 86400000).toISOString().split('T')[0],
+          purchasedDate: today,
+          expiryDate: tentativeExpiry,
+          validityDays: planValidity,
+          isActivated: false, // Starts on first day of meal ordering
+          firstRedeemedDate: undefined,
+          isBurned: false,
+          price: planPrice,
         },
         creditsHistory: [
           {
             id: `cr-${Date.now()}`,
-            date: new Date().toISOString().split('T')[0],
+            date: today,
             type: 'purchase',
             amount: totalMealsToAdd,
-            note: `Online purchase: ${pkg.title}`,
+            note: `Online purchase: ${pkg.title} (${totalMealsToAdd} meals · ${planValidity} Mon-Fri weekdays validity)`,
           },
         ],
       };

@@ -197,14 +197,31 @@ export interface MemberAccount {
     totalMeals: number;
     remainingMeals: number;
     purchasedDate: string;
-    expiryDate: string;
+    expiryDate: string; // The effective expiry date (calculated counting Mon-Fri weekdays & extended by suspended dates)
     price?: number;
+    validityDays?: number; // Total weekdays validity (e.g. 14, 20, 30 Mon-Fri weekdays)
+    firstRedeemedDate?: string; // The first date a meal was redeemed/ordered (activates the countdown clock)
+    isActivated?: boolean; // false until the member places their first meal order
+    autoRevivedMeals?: number; // Number of meals auto-revived from previous expired plan
+    isBurned?: boolean; // true if expired without full redemption
+  } | null;
+  lastExpiredPackage?: {
+    planId: string;
+    planName: string;
+    planNameZh?: string;
+    unredeemedMeals: number;
+    expiredAt: string;
+    purchasedDate?: string;
+    firstRedeemedDate?: string;
+    validityDays?: number;
+    isRevived?: boolean;
+    revivedAt?: string;
   } | null;
   officialReceipts?: OfficialReceipt[];
   creditsHistory: Array<{
     id: string;
     date: string;
-    type: 'purchase' | 'redeem' | 'bonus' | 'refund';
+    type: 'purchase' | 'redeem' | 'bonus' | 'refund' | 'burn' | 'revive';
     amount: number;
     note: string;
     receiptNumber?: string;

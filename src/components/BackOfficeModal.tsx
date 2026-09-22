@@ -61,6 +61,13 @@ import { MEAL_ITEMS } from '../data/menuData';
 import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
 import { OfficialReceiptModal } from './OfficialReceiptModal';
 import { createDefaultOfficialReceipt, generateReceiptNumber } from '../utils/receipt';
+import {
+  getPlanValidityDays,
+  calculateMonFriExpiryDate,
+  getEffectivePackageExpiry,
+  checkPlanAutoReviveEligibility,
+  getTodayStr,
+} from '../utils/packageExpiry';
 
 interface BackOfficeModalProps {
   isOpen: boolean;
@@ -325,12 +332,24 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
       return;
     }
 
-    const mealsToAdd = Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0);
-    const currentRemaining = orderGenMember.activePackage?.remainingMeals || 0;
-    const newRemaining = currentRemaining + mealsToAdd;
+    const validityDays = getPlanValidityDays(orderGenPlanId || orderGenPlanName);
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    const expiryDate = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0];
+    const suspendedDates = siteSettings.disabledDeliveryDates || [];
+    const calculatedExpiry = calculateMonFriExpiryDate(dateStr, validityDays, suspendedDates);
+
+    // Auto-revive check: check if member has unredeemed meals from an expired package of the same plan
+    const reviveCheck = checkPlanAutoReviveEligibility(orderGenMember, orderGenPlanId || '');
+    const autoRevivedCount = reviveCheck.canRevive ? reviveCheck.revivedMeals : 0;
+
+    const baseMealsToAdd = Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0);
+    const totalMealsToAdd = baseMealsToAdd + autoRevivedCount;
+
+    const currentRemaining =
+      orderGenMember.activePackage && !orderGenMember.activePackage.isBurned
+        ? orderGenMember.activePackage.remainingMeals
+        : 0;
+    const newRemaining = currentRemaining + totalMealsToAdd;
 
     // 1. Create Official Receipt
     let createdReceipt: OfficialReceipt | null = null;
@@ -358,6 +377,27 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
       }
     }
 
+    // Credits history entries
+    const newCreditEntries: MemberAccount['creditsHistory'] = [
+      {
+        id: `cr-pkg-${Date.now()}`,
+        date: dateStr,
+        type: 'purchase',
+        amount: baseMealsToAdd,
+        note: `Order Generated: ${orderGenPlanName} (${orderGenTotalMeals} meals${orderGenBonusMeals > 0 ? ` + ${orderGenBonusMeals} bonus` : ''}) · Paid RM ${Number(orderGenPrice).toFixed(2)} [Ref: ${orderGenReferenceNo || 'Verified'}]`,
+      },
+    ];
+
+    if (autoRevivedCount > 0) {
+      newCreditEntries.push({
+        id: `cr-revive-${Date.now()}`,
+        date: dateStr,
+        type: 'revive',
+        amount: autoRevivedCount,
+        note: `🎉 Auto-revived ${autoRevivedCount} unredeemed meals from member's previous expired plan (${orderGenPlanName})!`,
+      });
+    }
+
     // 2. Update Member Account
     const updatedMember: MemberAccount = {
       ...orderGenMember,
@@ -365,19 +405,26 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
         planId: orderGenPlanId || 'custom-plan',
         planName: orderGenPlanName,
         planNameZh: orderGenPlanNameZh || orderGenPlanName,
-        totalMeals: (orderGenMember.activePackage?.totalMeals || 0) + mealsToAdd,
+        totalMeals: (orderGenMember.activePackage && !orderGenMember.activePackage.isBurned ? orderGenMember.activePackage.totalMeals : 0) + totalMealsToAdd,
         remainingMeals: newRemaining,
         purchasedDate: dateStr,
-        expiryDate: expiryDate,
+        expiryDate: calculatedExpiry,
+        validityDays: validityDays,
+        isActivated: false, // Takes effect on first day of meal ordering
+        firstRedeemedDate: undefined,
+        autoRevivedMeals: autoRevivedCount > 0 ? autoRevivedCount : undefined,
+        isBurned: false,
+        price: Number(orderGenPrice),
       },
+      lastExpiredPackage: reviveCheck.canRevive && orderGenMember.lastExpiredPackage
+        ? {
+            ...orderGenMember.lastExpiredPackage,
+            isRevived: true,
+            revivedAt: dateStr,
+          }
+        : orderGenMember.lastExpiredPackage,
       creditsHistory: [
-        {
-          id: `cr-pkg-${Date.now()}`,
-          date: dateStr,
-          type: 'purchase',
-          amount: mealsToAdd,
-          note: `Order Generated: ${orderGenPlanName} (${orderGenTotalMeals} meals${orderGenBonusMeals > 0 ? ` + ${orderGenBonusMeals} bonus` : ''}) · Paid RM ${Number(orderGenPrice).toFixed(2)} [Ref: ${orderGenReferenceNo || 'Verified'}]`,
-        },
+        ...newCreditEntries,
         ...(orderGenMember.creditsHistory || []),
       ],
       officialReceipts: createdReceipt
@@ -390,7 +437,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     }
 
     setIsGeneratingPackageOrder(false);
-    triggerToast(`✓ Generated ${orderGenPlanName} order for ${orderGenMember.name}! +${mealsToAdd} meals added.`);
+    triggerToast(
+      `✓ Generated ${orderGenPlanName} order for ${orderGenMember.name}! +${totalMealsToAdd} meals added${
+        autoRevivedCount > 0 ? ` (including ${autoRevivedCount} auto-revived)` : ''
+      }.`
+    );
 
     if (createdReceipt) {
       setActiveReceiptMember(updatedMember);
@@ -2573,6 +2624,23 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           : '管理员可因突发情况或厨房休整，随时关闭提前或当天送餐日期。被关闭日期会员无法预订。若需取消已订餐品，点击订单下方“删单还餐”将自动把配额加回会员账户。'}
                       </p>
 
+                      {/* Expiry Extension Guarantee Rule Notice */}
+                      <div className="bg-emerald-900/10 border border-emerald-600/30 p-2.5 rounded-xl flex items-start gap-2 text-[11px] text-emerald-950">
+                        <Sparkles className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold block">
+                            {language === 'en'
+                              ? 'Automatic Package Expiry Extension Active'
+                              : '会员套餐有效期自动顺延机制已生效'}
+                          </span>
+                          <span className="text-emerald-900 text-[10px]">
+                            {language === 'en'
+                              ? 'Package validity is calculated strictly on Monday to Friday. If any weekday is suspended due to public holidays or kitchen off-days, each active customer package automatically extends by +1 extra workday so customers never lose ordering days.'
+                              : '套餐有效期按周一至周五计算。若后台将工作日设为公共假期或厨房休业停送，系统将自动为所有生效中的客户套餐顺延 +1 天额外工作日，确保客户订餐权益不受损。'}
+                          </span>
+                        </div>
+                      </div>
+
                       {/* Quick Upcoming Days Toggle */}
                       <div className="space-y-1.5 pt-1">
                         <span className="text-[11px] font-bold text-stone-700 block">
@@ -3833,20 +3901,39 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                               </div>
 
                               {/* Package Info Card */}
-                              <div className="bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100 text-xs space-y-1.5">
-                                <div className="flex justify-between items-center text-stone-700">
-                                  <span className="font-medium text-stone-500">Subscribed Plan:</span>
-                                  <span className="font-bold text-emerald-950 text-right">
-                                    {mem.activePackage ? mem.activePackage.planName : 'No Active Plan'}
-                                  </span>
-                                </div>
-                                {mem.activePackage && (
-                                  <div className="flex justify-between items-center text-stone-500 text-[11px] pt-1 border-t border-emerald-100">
-                                    <span>Purchased: {mem.activePackage.purchasedDate || 'Recent'}</span>
-                                    <span>Expires: {mem.activePackage.expiryDate || '60 Days'}</span>
+                              {(() => {
+                                const expiryInfo = getEffectivePackageExpiry(mem.activePackage, siteSettings.disabledDeliveryDates || []);
+                                return (
+                                  <div className="bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100 text-xs space-y-1.5">
+                                    <div className="flex justify-between items-center text-stone-700">
+                                      <span className="font-medium text-stone-500">Subscribed Plan:</span>
+                                      <span className="font-bold text-emerald-950 text-right">
+                                        {mem.activePackage ? mem.activePackage.planName : 'No Active Plan'}
+                                      </span>
+                                    </div>
+                                    {mem.activePackage && (
+                                      <div className="space-y-1 pt-1 border-t border-emerald-100 text-[11px]">
+                                        <div className="flex justify-between items-center text-stone-500">
+                                          <span>Purchased: {mem.activePackage.purchasedDate || 'Recent'}</span>
+                                          <span className={`font-semibold ${expiryInfo.isExpired ? 'text-red-600' : 'text-emerald-700'}`}>
+                                            {expiryInfo.statusLabelEn}
+                                          </span>
+                                        </div>
+                                        {mem.activePackage.autoRevivedMeals ? (
+                                          <div className="text-[10px] text-amber-700 font-bold bg-amber-100/70 px-2 py-0.5 rounded-md">
+                                            🎉 Includes {mem.activePackage.autoRevivedMeals} auto-revived meals from expired plan
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    )}
+                                    {mem.lastExpiredPackage && !mem.lastExpiredPackage.isRevived && mem.lastExpiredPackage.unredeemedMeals > 0 && (
+                                      <div className="text-[10px] text-purple-700 font-medium bg-purple-50 p-1.5 rounded-lg border border-purple-200">
+                                        ✨ {mem.lastExpiredPackage.unredeemedMeals} unredeemed meals from expired {mem.lastExpiredPackage.planName} can be auto-revived upon subscribing to the same plan.
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
+                                );
+                              })()}
 
                               {/* Delivery Addresses */}
                               <div className="text-[11px] text-stone-600 space-y-1 bg-stone-50/70 p-2.5 rounded-xl border border-stone-200/70">
@@ -4080,8 +4167,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 <span>Meal Package Subscription & Remaining Balance</span>
                               </h5>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div className="sm:col-span-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="sm:col-span-2 lg:col-span-4">
                                   <label className="font-bold text-stone-700 block mb-1">Subscribed Package Plan Name</label>
                                   <input
                                     type="text"
@@ -4093,8 +4180,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         planNameZh: '',
                                         totalMeals: 20,
                                         remainingMeals: 20,
-                                        purchasedDate: new Date().toISOString().split('T')[0],
-                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                        purchasedDate: getTodayStr(),
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: 20,
+                                        isActivated: false,
                                       };
                                       setEditingMember({
                                         ...editingMember,
@@ -4120,8 +4209,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         planNameZh: 'Healthy Meal Plan',
                                         totalMeals: val,
                                         remainingMeals: val,
-                                        purchasedDate: new Date().toISOString().split('T')[0],
-                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                        purchasedDate: getTodayStr(),
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: 20,
+                                        isActivated: false,
                                       };
                                       setEditingMember({
                                         ...editingMember,
@@ -4146,12 +4237,48 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         planNameZh: 'Healthy Meal Plan',
                                         totalMeals: val,
                                         remainingMeals: val,
-                                        purchasedDate: new Date().toISOString().split('T')[0],
-                                        expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                        purchasedDate: getTodayStr(),
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: 20,
+                                        isActivated: false,
                                       };
                                       setEditingMember({
                                         ...editingMember,
                                         activePackage: { ...curPkg, totalMeals: val },
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-bold text-stone-700 block mb-1">Validity (Mon-Fri Days)</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={editingMember.activePackage?.validityDays ?? getPlanValidityDays(editingMember.activePackage?.planId || '')}
+                                    onChange={(e) => {
+                                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                                      const curPkg = editingMember.activePackage || {
+                                        planId: 'custom-pkg',
+                                        planName: 'Healthy Meal Plan',
+                                        planNameZh: 'Healthy Meal Plan',
+                                        totalMeals: 20,
+                                        remainingMeals: 20,
+                                        purchasedDate: getTodayStr(),
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), val, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: val,
+                                        isActivated: false,
+                                      };
+                                      const startDate = curPkg.firstRedeemedDate || curPkg.purchasedDate || getTodayStr();
+                                      const recomputedExpiry = calculateMonFriExpiryDate(startDate, val, siteSettings.disabledDeliveryDates || []);
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: {
+                                          ...curPkg,
+                                          validityDays: val,
+                                          expiryDate: recomputedExpiry,
+                                        },
                                       });
                                     }}
                                     className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
@@ -4170,8 +4297,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         planNameZh: 'Healthy Meal Plan',
                                         totalMeals: 20,
                                         remainingMeals: 20,
-                                        purchasedDate: new Date().toISOString().split('T')[0],
+                                        purchasedDate: getTodayStr(),
                                         expiryDate: e.target.value,
+                                        validityDays: 20,
+                                        isActivated: false,
                                       };
                                       setEditingMember({
                                         ...editingMember,
@@ -4180,6 +4309,63 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                     }}
                                     className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                                   />
+                                </div>
+
+                                {/* Activation Status & First Redeemed Date */}
+                                <div className="sm:col-span-2 lg:col-span-4 p-3 bg-white rounded-xl border border-stone-200 flex flex-wrap items-center justify-between gap-3 text-[11px]">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(editingMember.activePackage?.isActivated)}
+                                      onChange={(e) => {
+                                        if (!editingMember.activePackage) return;
+                                        const isAct = e.target.checked;
+                                        const firstDate = isAct ? (editingMember.activePackage.firstRedeemedDate || getTodayStr()) : undefined;
+                                        const vDays = editingMember.activePackage.validityDays || 20;
+                                        const newExp = isAct
+                                          ? calculateMonFriExpiryDate(firstDate!, vDays, siteSettings.disabledDeliveryDates || [])
+                                          : editingMember.activePackage.expiryDate;
+
+                                        setEditingMember({
+                                          ...editingMember,
+                                          activePackage: {
+                                            ...editingMember.activePackage,
+                                            isActivated: isAct,
+                                            firstRedeemedDate: firstDate,
+                                            expiryDate: newExp,
+                                            isBurned: false,
+                                          },
+                                        });
+                                      }}
+                                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <span className="font-bold text-stone-800">
+                                      Package Activated (Countdown started on 1st meal order: {editingMember.activePackage?.firstRedeemedDate || 'Pending'})
+                                    </span>
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!editingMember.activePackage) return;
+                                      const vDays = editingMember.activePackage.validityDays || getPlanValidityDays(editingMember.activePackage.planId);
+                                      const baseDate = editingMember.activePackage.firstRedeemedDate || getTodayStr();
+                                      const freshExpiry = calculateMonFriExpiryDate(baseDate, vDays, siteSettings.disabledDeliveryDates || []);
+                                      setEditingMember({
+                                        ...editingMember,
+                                        activePackage: {
+                                          ...editingMember.activePackage,
+                                          validityDays: vDays,
+                                          expiryDate: freshExpiry,
+                                          isBurned: false,
+                                        },
+                                      });
+                                      triggerToast(`✓ Recalculated expiry to ${freshExpiry} (${vDays} Mon-Fri workdays)`);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-lg border border-emerald-200 transition-colors cursor-pointer"
+                                  >
+                                    🔄 Recalculate Mon–Fri Expiry (Auto-skip off-days)
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -4716,24 +4902,60 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 </div>
 
                 {/* 4. Live Impact Summary */}
-                <div className="p-3.5 bg-emerald-950 text-white rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div>
-                    <span className="text-emerald-400 block text-[11px] font-bold">ORDER SUMMARY</span>
-                    <span className="font-extrabold text-white text-sm">
-                      {orderGenMember?.name || 'Selected Customer'} · {orderGenPlanName}
-                    </span>
-                    <p className="text-emerald-200 text-[11px] mt-0.5">
-                      Adding +{Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0)} meals (Total new balance:{' '}
-                      {(orderGenMember?.activePackage?.remainingMeals || 0) + Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0)} meals)
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-emerald-400 block text-[11px]">Total Paid Amount</span>
-                    <span className="font-heading font-black text-xl text-emerald-300">
-                      RM {Number(orderGenPrice).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const reviveCheck = checkPlanAutoReviveEligibility(orderGenMember, orderGenPlanId || '');
+                  const autoRevivedCount = reviveCheck.canRevive ? reviveCheck.revivedMeals : 0;
+                  const baseToAdd = Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0);
+                  const grandToAdd = baseToAdd + autoRevivedCount;
+                  const curRemaining = orderGenMember?.activePackage && !orderGenMember.activePackage.isBurned
+                    ? orderGenMember.activePackage.remainingMeals
+                    : 0;
+                  const finalBalance = curRemaining + grandToAdd;
+                  const validityDays = getPlanValidityDays(orderGenPlanId || orderGenPlanName);
+
+                  return (
+                    <div className="space-y-2">
+                      {autoRevivedCount > 0 && (
+                        <div className="p-3 bg-amber-500/15 border border-amber-400 rounded-2xl flex items-start gap-2.5 text-amber-950">
+                          <Sparkles className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-extrabold text-xs block">
+                              {language === 'en'
+                                ? `🎉 Auto-Revive Activated: +${autoRevivedCount} Meals Restored`
+                                : `🎉 自动复活机制生效：恢复 +${autoRevivedCount} 未兑换餐数`}
+                            </span>
+                            <p className="text-[11px] text-amber-900 mt-0.5">
+                              {language === 'en'
+                                ? `This customer has ${autoRevivedCount} unredeemed meals from their expired ${reviveCheck.planName}. Subscribing to the same plan automatically revives all ${autoRevivedCount} meals into their new balance!`
+                                : `该客户上一期 ${reviveCheck.planName} 到期时有 ${autoRevivedCount} 餐未兑换。订购同款套餐将全数自动复活加回，保障客户权益！`}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-3.5 bg-emerald-950 text-white rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div>
+                          <span className="text-emerald-400 block text-[11px] font-bold">ORDER SUMMARY</span>
+                          <span className="font-extrabold text-white text-sm">
+                            {orderGenMember?.name || 'Selected Customer'} · {orderGenPlanName}
+                          </span>
+                          <p className="text-emerald-200 text-[11px] mt-0.5">
+                            Adding +{baseToAdd} meals {autoRevivedCount > 0 ? `+ ${autoRevivedCount} auto-revived = +${grandToAdd} meals` : ''} (Total new balance: {finalBalance} meals)
+                          </p>
+                          <span className="text-[10px] text-emerald-300/80 block mt-1">
+                            📅 Validity: {validityDays} Mon–Fri weekdays from 1st meal order (extended for public holidays & kitchen off-days)
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-emerald-400 block text-[11px]">Total Paid Amount</span>
+                          <span className="font-heading font-black text-xl text-emerald-300">
+                            RM {Number(orderGenPrice).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Footer */}
