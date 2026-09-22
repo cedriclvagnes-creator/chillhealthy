@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   CheckCircle,
@@ -14,9 +14,12 @@ import {
   ShieldCheck,
   Building,
   Home,
+  Gift,
+  Check,
 } from 'lucide-react';
-import { CartItem, Language, SiteSettings } from '../types';
+import { CartItem, Language, SiteSettings, MemberAccount } from '../types';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
+import { getMemberReferralCode, findMemberByReferralCode } from '../utils/referral';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -24,6 +27,8 @@ interface CheckoutModalProps {
   cart: CartItem[];
   language: Language;
   siteSettings: SiteSettings;
+  members?: MemberAccount[];
+  currentMember?: MemberAccount | null;
   onOrderCompleted: () => void;
   onPackageOrdered?: (
     planItem: CartItem,
@@ -36,6 +41,7 @@ interface CheckoutModalProps {
       address2?: string;
       area2?: string;
       postalCode2?: string;
+      referralCode?: string;
     }
   ) => void;
   onOpenMemberPortal?: () => void;
@@ -47,6 +53,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   cart,
   language,
   siteSettings,
+  members = [],
+  currentMember = null,
   onOrderCompleted,
   onPackageOrdered,
   onOpenMemberPortal,
@@ -65,6 +73,84 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [address2, setAddress2] = useState('');
   const [area2, setArea2] = useState('Klang / Bukit Tinggi');
   const [postalCode2, setPostalCode2] = useState('41200');
+
+  // Member Referral Code system
+  const [referralCodeInput, setReferralCodeInput] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('ref') || '';
+    }
+    return '';
+  });
+  const [appliedReferralMember, setAppliedReferralMember] = useState<MemberAccount | null>(null);
+  const [referralError, setReferralError] = useState('');
+
+  // Prefill member details if logged in
+  useEffect(() => {
+    if (currentMember) {
+      if (!name) setName(currentMember.name || '');
+      if (!phone) setPhone(currentMember.phone || '');
+      if (!address) setAddress(currentMember.address || '');
+      if (currentMember.area) setArea(currentMember.area);
+      if (currentMember.postalCode) setPostalCode(currentMember.postalCode);
+      if (currentMember.address2) {
+        setHasAddress2(true);
+        setAddress2(currentMember.address2);
+        if (currentMember.area2) setArea2(currentMember.area2);
+        if (currentMember.postalCode2) setPostalCode2(currentMember.postalCode2);
+      }
+    }
+  }, [currentMember]);
+
+  // Auto-validate referral code on mount if query param exists or entered
+  useEffect(() => {
+    if (referralCodeInput && members && members.length > 0 && !appliedReferralMember) {
+      validateAndApplyReferral(referralCodeInput);
+    }
+  }, [members]);
+
+  const validateAndApplyReferral = (codeToTest: string) => {
+    const raw = codeToTest.trim();
+    if (!raw) {
+      setAppliedReferralMember(null);
+      setReferralError('');
+      return;
+    }
+
+    if (!members || members.length === 0) {
+      return;
+    }
+
+    const matched = findMemberByReferralCode(members, raw);
+    if (!matched) {
+      setAppliedReferralMember(null);
+      setReferralError(
+        language === 'en'
+          ? 'Referral code not found. Please verify with your friend.'
+          : '未找到该推荐码，请与好友核对。'
+      );
+      return;
+    }
+
+    // Check if self-referral
+    const userPhoneClean = (phone || currentMember?.phone || '').replace(/\D/g, '');
+    const matchedPhoneClean = (matched.phone || '').replace(/\D/g, '');
+    if (
+      matched.id === currentMember?.id ||
+      (userPhoneClean && userPhoneClean === matchedPhoneClean)
+    ) {
+      setAppliedReferralMember(null);
+      setReferralError(
+        language === 'en'
+          ? 'You cannot use your own referral code.'
+          : '不能使用您自己的推荐码。'
+      );
+      return;
+    }
+
+    setAppliedReferralMember(matched);
+    setReferralError('');
+  };
 
   const [deliveryDate, setDeliveryDate] = useState(() => {
     // Next workday (Monday - Friday)
@@ -112,6 +198,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         address2: hasAddress2 ? address2 : undefined,
         area2: hasAddress2 ? area2 : undefined,
         postalCode2: hasAddress2 ? postalCode2 : undefined,
+        referralCode: appliedReferralMember
+          ? getMemberReferralCode(appliedReferralMember)
+          : (referralCodeInput.trim().toUpperCase() || undefined),
       });
     }
 
@@ -131,6 +220,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `*Total Amount (总额):* RM ${grandTotal.toFixed(2)}%0A` +
         `*Delivery Address 1 (地址一):* ${address}, ${area} ${postalCode}%0A` +
         (hasAddress2 && address2 ? `*Delivery Address 2 (地址二):* ${address2}, ${area2} ${postalCode2}%0A` : '') +
+        (appliedReferralMember
+          ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (Referrer: ${appliedReferralMember.name})%0A*Referral Reward:* ${appliedReferralMember.name} receives +1 Free Meal Credit upon confirmation!%0A`
+          : referralCodeInput.trim()
+          ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
+          : '') +
         (notes ? `*Dietary Notes (忌口备注):* ${notes}%0A` : '') +
         `*Payment Method:* DuitNow QR (Chill Healthy Trading)%0A` +
         `%0A已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗%0A` +
@@ -181,6 +275,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     `*Registered Name (注册姓名):* ${name}%0A` +
     `*Phone (联系电话):* ${phone}%0A` +
     (planItem ? `*Package (所选配套):* ${planItem.title}%0A` : '') +
+    (appliedReferralMember
+      ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (${appliedReferralMember.name})%0A`
+      : referralCodeInput.trim()
+      ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
+      : '') +
     `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
     `*Total Paid (支付金额):* RM ${grandTotal.toFixed(2)}%0A` +
     `已通过 DuitNow QR 付款给 Chill Healthy Trading，附上付款凭单水单截图，请协助确认！🥗`;
@@ -276,11 +375,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <p className="text-stone-500 mt-0.5">
                       {language === 'en'
-                        ? 'Once confirmed, select your meals daily before 5:00 PM for lunch (10:00 AM – 2:00 PM) or dinner: 3:00pm - 7:00pm.'
-                        : '确认配套后，即可自选每天午餐（10:00 AM – 2:00 PM）或晚餐：3:00pm - 7:00pm，前一天下午 5:00 前选定。'}
+                        ? 'Once confirmed, select your meals daily before 5:00 PM for lunch (10:00 AM – 2:00 PM) or dinner (3:00 PM – 7:00 PM).'
+                        : '确认配套后，即可自选每天午餐（10:00 AM – 2:00 PM）或晚餐（3:00 PM – 7:00 PM），前一天下午 5:00 前选定。'}
                     </p>
                   </div>
                 </div>
+
+                {/* Referral Attribution Notice */}
+                {appliedReferralMember && (
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                      <Gift className="w-4 h-4 text-amber-600" />
+                      <span>{language === 'en' ? '🎁 Referral Reward Activated!' : '🎁 好友推荐奖励已生效！'}</span>
+                    </div>
+                    <p className="text-amber-800 text-[11px] leading-relaxed">
+                      {language === 'en'
+                        ? `Your referrer ${appliedReferralMember.name} (${getMemberReferralCode(appliedReferralMember)}) will receive 1 Free Meal Credit added to their account once this order is confirmed.`
+                        : `您的推荐人 ${appliedReferralMember.name}（推荐码：${getMemberReferralCode(appliedReferralMember)}）在此配套订单确认后，将自动获赠 1 份免费餐券！`}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               /* Receipt Box for Individual Bentos */
@@ -567,8 +681,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <option value="Lunch (10:00 AM – 2:00 PM)">
                     🍱 {language === 'en' ? 'Lunch (10:00 AM – 2:00 PM)' : '午餐配送 (10:00 AM – 2:00 PM)'}
                   </option>
-                  <option value="Dinner: 3:00pm - 7:00pm">
-                    🍲 {language === 'en' ? 'Dinner: 3:00pm - 7:00pm' : '晚餐配送：3:00pm - 7:00pm'}
+                  <option value="Dinner (3:00 PM – 7:00 PM)">
+                    🍲 {language === 'en' ? 'Dinner (3:00 PM – 7:00 PM)' : '晚餐配送 (3:00 PM – 7:00 PM)'}
                   </option>
                   <option value="Both Lunch & Dinner">
                     🍱🍲 {language === 'en' ? 'Both Lunch & Dinner (Split)' : '午餐与晚餐分批送达'}
@@ -593,6 +707,98 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 }
                 className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
               />
+            </div>
+
+            {/* 🎁 Member Referral Code Input Section */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 border border-amber-300/70 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                  <Gift className="w-4 h-4 text-amber-600" />
+                  <span>
+                    {language === 'en' ? "Friend's Referral Code (Optional)" : '好友推荐邀请码 (可选)'}
+                  </span>
+                </label>
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                  {language === 'en' ? 'Earn 1 Free Meal for Referrer' : '为好友赢得 1 份免费餐'}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-stone-600 leading-snug">
+                {language === 'en'
+                  ? 'Referred by a friend or colleague? Enter their referral code or phone number. They will automatically receive 1 Free Meal Credit when your meal plan purchase is confirmed!'
+                  : '受好友或同事推荐订餐？输入好友的专属推荐码或手机号，您的配套订单确认后，推荐人即可自动获赠 1 份免费餐券！'}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={referralCodeInput}
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    setReferralCodeInput(val);
+                    if (!val) {
+                      setAppliedReferralMember(null);
+                      setReferralError('');
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      validateAndApplyReferral(referralCodeInput);
+                    }
+                  }}
+                  placeholder={
+                    language === 'en'
+                      ? 'e.g. CHILL-AGNES9919 or 0126189919'
+                      : '例如：CHILL-AGNES9919 或好友手机号'
+                  }
+                  className="flex-1 text-xs uppercase tracking-wider font-mono font-bold px-3 py-2 rounded-xl border border-stone-300 bg-white placeholder:font-normal placeholder:tracking-normal focus:outline-hidden focus:border-emerald-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => validateAndApplyReferral(referralCodeInput)}
+                  className="px-3.5 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+                >
+                  {language === 'en' ? 'Apply Code' : '验证推荐码'}
+                </button>
+              </div>
+
+              {/* Referral verification feedback */}
+              {appliedReferralMember && (
+                <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-xs text-emerald-950 font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>
+                      {language === 'en' ? (
+                        <>
+                          Referred by <strong className="text-emerald-900">{appliedReferralMember.name}</strong> ({getMemberReferralCode(appliedReferralMember)}) · 1 Free Meal Credit will be credited to them!
+                        </>
+                      ) : (
+                        <>
+                          推荐人：<strong className="text-emerald-900">{appliedReferralMember.name}</strong> ({getMemberReferralCode(appliedReferralMember)}) · 订单确认后自动送 1 份免费餐券！
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReferralCodeInput('');
+                      setAppliedReferralMember(null);
+                      setReferralError('');
+                    }}
+                    className="text-[11px] text-stone-500 hover:text-red-700 font-bold underline cursor-pointer shrink-0"
+                  >
+                    {language === 'en' ? 'Remove' : '取消'}
+                  </button>
+                </div>
+              )}
+
+              {referralError && (
+                <p className="text-[11px] text-red-600 font-medium flex items-center gap-1">
+                  <span>⚠️ {referralError}</span>
+                </p>
+              )}
             </div>
 
             {/* Payment Method: Enforce DuitNow QR with WhatsApp confirmation, NO bank transfer */}

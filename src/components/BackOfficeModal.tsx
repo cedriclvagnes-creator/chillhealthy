@@ -348,8 +348,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
         { 'Summary Field': 'Delivery Target Date', 'Value / Details': exportDate },
         { 'Summary Field': 'Daily 5:00 PM Cutoff Status', 'Value / Details': cutoffStatus },
         { 'Summary Field': 'Total Member Orders', 'Value / Details': ordersToUse.length },
-        { 'Summary Field': 'Lunch Deliveries (11am-1pm)', 'Value / Details': lunchCount },
-        { 'Summary Field': 'Dinner Deliveries (5pm-7pm)', 'Value / Details': dinnerCount },
+        { 'Summary Field': 'Lunch Deliveries (10:00 AM – 2:00 PM)', 'Value / Details': lunchCount },
+        { 'Summary Field': 'Dinner Deliveries (3:00 PM – 7:00 PM)', 'Value / Details': dinnerCount },
         { 'Summary Field': '--- MEAL PORTIONS BREAKDOWN ---', 'Value / Details': '------------------------------' },
         ...Object.entries(dishCounts).map(([dish, count]) => ({
           'Summary Field': dish,

@@ -1218,7 +1218,7 @@ export const MEAL_PLANS: MealPlan[] = [
       '26 gourmet healthy meal choices rotating daily',
       '5 fresh weekday lunches (1 meal/day) delivered to your desk or home',
       'Fix Your Office Lunches · Healthy & Effortless',
-      'Enjoy 5 meals within 14 days, Monday to Friday (excl. holidays & weekends)',
+      'Enjoy 5 meals within 14 days, Monday to Friday (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online system ordering & redemption before 5:00 PM',
       'Optional Portion Upsize upgrade: RM25 / plan (NP: RM30)',
@@ -1236,8 +1236,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 1 meal/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送1餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'emerald',
   },
   {
@@ -1264,7 +1264,7 @@ export const MEAL_PLANS: MealPlan[] = [
       '26 gourmet healthy meal choices rotating daily',
       '10 structured calorie-controlled meals within 20 days (Mon–Fri)',
       'Scientific Calorie Deficit · Clean Delicious Fuel',
-      'Enjoy 10 meals within 20 days, Monday to Friday (excl. holidays & weekends)',
+      'Enjoy 10 meals within 20 days, Monday to Friday (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online system ordering & redemption before 5:00 PM',
       'Optional Portion Upsize upgrade: RM50 / plan (NP: RM60)',
@@ -1282,8 +1282,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 1 meal/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送1餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'teal',
   },
   {
@@ -1308,7 +1308,7 @@ export const MEAL_PLANS: MealPlan[] = [
     bestForZh: '单人月度日常健康饮食、养成健康生活方式、全月控卡性价比之王',
     features: [
       '26 gourmet healthy meal choices rotating daily',
-      'Enjoy 20 meals within 30 days, Monday to Friday (excluding public holidays & weekends)',
+      'Enjoy 20 meals within 30 days, Monday to Friday (Excluding Public Holidays & Weekends)',
       'Build Long-Term Healthy Habits · Maximum Value (Only RM 19.90 / meal)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online computer system ordering & redemption',
@@ -1328,8 +1328,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 1 meal/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送1餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'emerald',
   },
   {
@@ -1354,7 +1354,7 @@ export const MEAL_PLANS: MealPlan[] = [
     bestForZh: '双人情侣、健身搭子、室友或同事共同健康享用工作日午餐',
     features: [
       '26 gourmet healthy meal choices rotating daily',
-      'Enjoy 20 delivery days (40 meals total) within 30 days, Mon–Fri (excl. holidays & weekends)',
+      'Enjoy 20 delivery days (40 meals total) within 30 days, Mon–Fri (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online computer system ordering & redemption',
       'Delivers 2 meals per day to 1 designated address (10:00 AM – 5:00 PM)',
@@ -1372,8 +1372,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 2 meals/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送2餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'amber',
   },
   {
@@ -1397,7 +1397,7 @@ export const MEAL_PLANS: MealPlan[] = [
     bestForZh: '三人项目小分队、工作室伙伴或注重清淡营养的家庭成员',
     features: [
       '26 gourmet healthy meal choices rotating daily',
-      'Enjoy 20 delivery days (60 meals total) within 30 days, Mon–Fri (excl. holidays & weekends)',
+      'Enjoy 20 delivery days (60 meals total) within 30 days, Mon–Fri (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online computer system ordering & redemption',
       'Delivers 3 meals per day to 1 designated address (10:00 AM – 5:00 PM)',
@@ -1415,8 +1415,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 3 meals/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送3餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'teal',
   },
   {
@@ -1440,7 +1440,7 @@ export const MEAL_PLANS: MealPlan[] = [
     bestForZh: '企业部门团购、技术研发小组以及4口之家工作日营养午餐',
     features: [
       '26 gourmet healthy meal choices rotating daily',
-      'Enjoy 20 delivery days (80 meals total) within 30 days, Mon–Fri (excl. holidays & weekends)',
+      'Enjoy 20 delivery days (80 meals total) within 30 days, Mon–Fri (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online computer system ordering & redemption',
       'Delivers 4 meals per day to 1 designated address (10:00 AM – 5:00 PM)',
@@ -1458,8 +1458,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 4 meals/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送4餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'sky',
   },
   {
@@ -1483,7 +1483,7 @@ export const MEAL_PLANS: MealPlan[] = [
     bestForZh: '创业团队、企业员工团餐、多人办公室及大家庭超值健康餐标配',
     features: [
       '26 gourmet healthy meal choices rotating daily',
-      'Enjoy 20 delivery days (120 meals total) within 30 days, Mon–Fri (excl. holidays & weekends)',
+      'Enjoy 20 delivery days (120 meals total) within 30 days, Mon–Fri (Excluding Public Holidays & Weekends)',
       'Includes Klang Valley delivery (1 account supports up to 2 addresses)',
       'Convenient online computer system ordering & redemption',
       'Delivers 6 meals per day to 1 designated address (10:00 AM – 5:00 PM)',
@@ -1501,8 +1501,8 @@ export const MEAL_PLANS: MealPlan[] = [
     ],
     deliveryFrequency: 'Monday to Friday (10:00 AM – 5:00 PM), 6 meals/day',
     deliveryFrequencyZh: '星期一至五（10:00 AM – 5:00 PM），每天送6餐',
-    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm. Daily meal cutoff before 5:00 PM.',
-    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00pm - 7:00pm。每天请在下午 5:00 前完成隔天餐点选择。',
+    deliverySchedule: 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily meal cutoff before 5:00 PM.',
+    deliveryScheduleZh: '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请在下午 5:00 前完成隔天餐点选择。',
     color: 'emerald',
   },
 ];
@@ -1593,11 +1593,11 @@ export const REVIEWS: Review[] = [
 ];
 
 export const DELIVERY_AREAS = [
-  { name: 'Klang (巴生核心区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Shah Alam (莎阿南)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Subang Jaya & USJ (梳邦再也)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Petaling Jaya / Damansara (八打灵 / 白沙罗)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Puchong (蒲种)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Kuala Lumpur CBD / Bangsar / Sentral (吉隆坡市区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
-  { name: 'Cheras / Ampang (蕉赖 / 安邦)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00-14:00 | 晚餐 3:00pm - 7:00pm' },
+  { name: 'Klang (巴生核心区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Shah Alam (莎阿南)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Subang Jaya & USJ (梳邦再也)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Petaling Jaya / Damansara (八打灵 / 白沙罗)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Puchong (蒲种)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Kuala Lumpur CBD / Bangsar / Sentral (吉隆坡市区)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
+  { name: 'Cheras / Ampang (蕉赖 / 安邦)', fee: '<RM100: RM15 | ≥RM100: FREE (免运)', minOrder: 15, time: '午餐 10:00 AM – 2:00 PM | 晚餐 3:00 PM – 7:00 PM' },
 ];

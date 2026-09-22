@@ -11,7 +11,7 @@ interface CartDrawerProps {
   onRemoveItem: (cartItemId: string) => void;
   onProceedToCheckout: () => void;
   onBrowsePlans?: () => void;
-  onAddUpsize?: () => void;
+  onTogglePlanUpsize?: (cartItemId: string) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -23,7 +23,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onProceedToCheckout,
   onBrowsePlans,
-  onAddUpsize,
+  onTogglePlanUpsize,
 }) => {
   if (!isOpen) return null;
 
@@ -134,8 +134,59 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       )}
 
                       {item.planDetails && (
-                        <div className="text-[11px] text-stone-500 mt-0.5">
-                          {item.planDetails.days} Days · {item.planDetails.mealsTotal} Meals total
+                        <div className="space-y-1.5 mt-1">
+                          <div className="text-[11px] text-stone-500">
+                            {item.planDetails.days} Days · {item.planDetails.mealsTotal} Meals total
+                          </div>
+
+                          {/* Interactive Upsize Option for this Specific Plan */}
+                          {onTogglePlanUpsize && (() => {
+                            const mealsTotal = item.planDetails.mealsTotal || 10;
+                            const upsizeCost = item.planDetails.upsizeCost || mealsTotal * 5;
+                            const isUpsized = Boolean(item.planDetails.isUpsized);
+
+                            return (
+                              <div className="pt-0.5">
+                                {isUpsized ? (
+                                  <div className="flex items-center justify-between gap-1.5 p-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                                    <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-850">
+                                      <span className="text-xs">⚡</span>
+                                      <span>
+                                        {language === 'en'
+                                          ? `Upsized (+RM ${upsizeCost.toFixed(2)} for ${mealsTotal} meals · +80g Protein)`
+                                          : `已升级大份量 (+RM ${upsizeCost.toFixed(2)} / ${mealsTotal} 餐 · +80g 肉量时蔬)`}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => onTogglePlanUpsize(item.cartItemId)}
+                                      className="text-[10px] text-stone-500 hover:text-red-600 underline font-medium cursor-pointer shrink-0"
+                                    >
+                                      {language === 'en' ? 'Remove' : '取消'}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => onTogglePlanUpsize(item.cartItemId)}
+                                    className="w-full flex items-center justify-between p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-[11px] text-amber-950 font-bold transition-all cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs">⚡</span>
+                                      <span>
+                                        {language === 'en'
+                                          ? `Add Upsize (+RM ${upsizeCost.toFixed(2)} for ${mealsTotal} Meals)`
+                                          : `升级大份量 (+RM ${upsizeCost.toFixed(2)} / ${mealsTotal} 餐)`}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded-md font-extrabold">
+                                      +80g Protein
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
 
@@ -173,54 +224,138 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
                 ))}
 
-                {/* Upsize Portion Suggestion Box */}
-                <div className="pt-4 border-t border-amber-200/80">
-                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-base">⚡</span>
-                        <h5 className="font-bold text-xs text-amber-950">
-                          {language === 'en' ? 'Suggest Upsize Portion (+RM 3.50)' : '推荐升级大份量 (+RM 3.50)'}
-                        </h5>
+                {/* Plan-specific Upsize Suggestion Box */}
+                {(() => {
+                  const planItems = cart.filter((i) => i.type === 'plan' || Boolean(i.planDetails));
+                  const nonUpsizedPlans = planItems.filter((i) => !i.planDetails?.isUpsized);
+
+                  // Case 1: There are meal plans in cart that are NOT upsized yet
+                  if (nonUpsizedPlans.length > 0) {
+                    const targetPlan = nonUpsizedPlans[0];
+                    const mealsTotal = targetPlan.planDetails?.mealsTotal || 10;
+                    const upsizeCost = targetPlan.planDetails?.upsizeCost || mealsTotal * 5;
+
+                    return (
+                      <div className="pt-4 border-t border-amber-200/80">
+                        <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-base">⚡</span>
+                              <h5 className="font-bold text-xs text-amber-950">
+                                {language === 'en'
+                                  ? `Suggest Upsize Portion (+RM ${upsizeCost.toFixed(2)} for ${mealsTotal} Meals Plan)`
+                                  : `推荐升级大份量 (+RM ${upsizeCost.toFixed(2)} / ${mealsTotal} 餐配套)`}
+                              </h5>
+                            </div>
+                            <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded-full">
+                              +80g Protein
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-amber-900/85 leading-relaxed">
+                            {language === 'en'
+                              ? `Need more protein or higher satiety? Upsize all ${mealsTotal} meals in ${targetPlan.title} with +80g extra lean grilled chicken/salmon & garden greens (only RM 5.00/meal upgrade)!`
+                              : `增肌减脂或食量较大？为【${targetPlan.title}】的全部 ${mealsTotal} 餐升级大份量，每餐加码 +80g 优质低脂肉类及双倍纤维时蔬（每餐仅 RM 5.00），饱腹感倍增！`}
+                          </p>
+
+                          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                            {onTogglePlanUpsize && (
+                              <button
+                                type="button"
+                                onClick={() => onTogglePlanUpsize(targetPlan.cartItemId)}
+                                className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>
+                                  {language === 'en'
+                                    ? `Add Upsize Portion (+RM ${upsizeCost.toFixed(2)} for ${mealsTotal} Meals Plan)`
+                                    : `升级配套大份量 (+RM ${upsizeCost.toFixed(2)} / ${mealsTotal} 餐)`}
+                                </span>
+                              </button>
+                            )}
+
+                            {onBrowsePlans && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onBrowsePlans();
+                                }}
+                                className="py-2 px-3 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs transition-colors cursor-pointer text-center"
+                              >
+                                {language === 'en' ? 'Browse More Plans' : '浏览更多套餐'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-[10px] bg-amber-200 text-amber-900 font-extrabold px-2 py-0.5 rounded-full">
-                        +80g Protein
-                      </span>
+                    );
+                  }
+
+                  // Case 2: There are meal plans in cart, and ALL of them are already upsized
+                  if (planItems.length > 0) {
+                    return (
+                      <div className="pt-4 border-t border-emerald-200/80">
+                        <div className="p-3 rounded-2xl bg-emerald-50/90 border border-emerald-200 flex items-start gap-2.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            <h5 className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                              <span>⚡</span>
+                              <span>
+                                {language === 'en'
+                                  ? 'All Meal Plans Upsized (+80g Lean Protein & Greens Active)'
+                                  : '配套大份量已全部生效 (+80g 优质蛋白质与双倍时蔬)'}
+                              </span>
+                            </h5>
+                            <p className="text-[11px] text-emerald-800 leading-relaxed">
+                              {language === 'en'
+                                ? 'Your meal plans will each include +80g extra lean grilled chicken/salmon & garden greens with every daily box.'
+                                : '您所选购的健康餐配套将为每一份餐盒加码 +80g 优质低脂肉类及双倍蔬菜，健康饱腹！'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Case 3: No meal plans in cart (Ala carte items only)
+                  // Notice: "upsize plan can't buy stand alone" & "no Add Upsize Portion (+RM 3.50)"
+                  return (
+                    <div className="pt-4 border-t border-stone-200">
+                      <div className="p-3 rounded-2xl bg-stone-100/90 border border-stone-200 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-base">⚡</span>
+                            <h5 className="font-bold text-xs text-stone-800">
+                              {language === 'en' ? 'Meal Plan Portion Upsize (+80g Protein)' : '健康餐配套大份量升级 (+80g 蛋白)'}
+                            </h5>
+                          </div>
+                          <span className="text-[10px] bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full">
+                            {language === 'en' ? 'Plan Perk Only' : '配套专享'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-600 leading-relaxed">
+                          {language === 'en'
+                            ? 'Need more protein or higher satiety? Portion upsize (e.g. +RM 50 for 10 meals plan, +RM 100 for 20 meals plan) is an exclusive benefit for CHILL Meal Plans and cannot be purchased standalone. Subscribe to a meal plan to enjoy daily fresh delivery & upsize options!'
+                            : '增肌减脂或食量较大？大份量升级（如 10 餐配套 +RM 50，20 餐配套 +RM 100）为健康餐配套专享福利，不可单独购买。选购健康餐配套即可享受每日鲜送与加量特权！'}
+                        </p>
+                        {onBrowsePlans && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onBrowsePlans();
+                            }}
+                            className="w-full py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                          >
+                            <span>{language === 'en' ? 'Browse Meal Plans (From RM398)' : '浏览健康餐配套 (RM398起)'}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <p className="text-[11px] text-amber-900/80 leading-relaxed">
-                      {language === 'en'
-                        ? 'Need more protein or higher satiety? Upsize with +80g extra lean grilled chicken/salmon & garden greens!'
-                        : '增肌减脂或食量较大？升级大份量加码 +80g 优质低脂肉类及双倍纤维时蔬，饱腹感倍增！'}
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                      {onAddUpsize && (
-                        <button
-                          type="button"
-                          onClick={onAddUpsize}
-                          className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>{language === 'en' ? 'Add Upsize Portion (+RM 3.50)' : '加购大份量 (+RM 3.50)'}</span>
-                        </button>
-                      )}
-
-                      {onBrowsePlans && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClose();
-                            onBrowsePlans();
-                          }}
-                          className="py-2 px-3 rounded-xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs transition-colors cursor-pointer text-center"
-                        >
-                          {language === 'en' ? 'Browse More Plans' : '浏览更多套餐'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </>
             )}
           </div>

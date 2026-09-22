@@ -48,16 +48,33 @@ export const INITIAL_MEMBERS: MemberAccount[] = [
     postalCode2: '41200',
     activeAddressSlot: 1,
     dietaryPreferences: 'No spicy, dressing on side',
+    referralCode: 'CHILL-AGNES9919',
+    referralsCount: 2,
+    referralBonusMealsEarned: 2,
     activePackage: {
       planId: 'plan-20-day-transformation',
       planName: '20-Day Lifestyle Transformation',
       planNameZh: '20天健康生活蜕变月度计划（单人）',
-      totalMeals: 20,
-      remainingMeals: 15,
+      totalMeals: 22, // 20 base + 2 referral bonus meals
+      remainingMeals: 17, // 15 + 2 bonus meals
       purchasedDate: '2026-09-01',
       expiryDate: '2026-10-15',
     },
     creditsHistory: [
+      {
+        id: 'cred-ref-2',
+        date: '2026-09-18',
+        type: 'bonus',
+        amount: 1,
+        note: '🎁 Referral Reward: +1 Free Meal Credit (Friend Sarah Wong subscribed to 10-Day Kickstart)',
+      },
+      {
+        id: 'cred-ref-1',
+        date: '2026-09-15',
+        type: 'bonus',
+        amount: 1,
+        note: '🎁 Referral Reward: +1 Free Meal Credit (Friend Jason Lee subscribed to 20-Day Transformation)',
+      },
       {
         id: 'cred-1',
         date: '2026-09-01',
@@ -113,6 +130,10 @@ export const INITIAL_MEMBERS: MemberAccount[] = [
     area: 'Petaling Jaya / Damansara',
     postalCode: '47400',
     dietaryPreferences: 'High protein focus, no beef',
+    referralCode: 'CHILL-MARCUS4556',
+    referredBy: 'CHILL-AGNES9919',
+    referralsCount: 0,
+    referralBonusMealsEarned: 0,
     activePackage: {
       planId: 'plan-10-day-kickstart',
       planName: '10-Day Fat-Loss Kickstart',

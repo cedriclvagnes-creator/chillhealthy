@@ -34,8 +34,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
 
   const handleSubscribe = (plan: MealPlan) => {
     const isUpsized = Boolean(upsizeSelections[plan.id]);
-    const upsizeCost = isUpsized && plan.upsizePrice ? plan.upsizePrice : 0;
-    const finalPrice = plan.totalPrice + upsizeCost;
+    const planUpsizeRate = plan.upsizePrice || plan.mealsTotal * 5;
+    const finalPrice = plan.totalPrice + (isUpsized ? planUpsizeRate : 0);
 
     const cartItem: CartItem = {
       cartItemId: `plan-${plan.id}-${Date.now()}`,
@@ -53,9 +53,11 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
         deliveryTime: 'lunch',
         persons: plan.persons,
         isUpsized,
-        upsizeCost,
+        upsizeCost: planUpsizeRate,
+        basePrice: plan.totalPrice,
+        planId: plan.id,
       },
-      notes: isUpsized ? 'Portion Upsized (+RM' + upsizeCost + ')' : undefined,
+      notes: isUpsized ? `Portion Upsized (+RM${planUpsizeRate})` : undefined,
     };
     onAddPlanToCart(cartItem);
   };
@@ -298,7 +300,7 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       </span>
                       <span>
                         {isEn
-                          ? `Enjoy ${plan.mealsTotal} meals within ${plan.validityDays} days (Mon–Fri, excl. public holidays & weekends)`
+                          ? `Enjoy ${plan.mealsTotal} meals within ${plan.validityDays} days (Mon–Fri, excluding Public Holidays & Weekends)`
                           : `${plan.validityDays} 天内享用 ${plan.mealsTotal} 餐，星期一至五（公假周末除外）`}
                       </span>
                     </div>
@@ -405,7 +407,7 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       {isEn ? 'Lunch Slot' : '午餐时段'}
                     </span>
                     <span className="font-heading font-extrabold text-base text-white block">
-                      10:00am - 2:00pm
+                      10:00 AM – 2:00 PM
                     </span>
                     <span className="text-[11px] text-stone-400">
                       {isEn ? 'Fresh office & home lunch' : '准时送达写字楼/住家'}
@@ -426,7 +428,7 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       {isEn ? 'Dinner Slot' : '晚餐时段'}
                     </span>
                     <span className="font-heading font-extrabold text-base text-white block">
-                      3:00pm - 7:00pm
+                      3:00 PM – 7:00 PM
                     </span>
                     <span className="text-[11px] text-stone-400">
                       {isEn ? 'Fresh warm dinner & post-workout' : '下班享用热餐·低卡无负担'}
@@ -459,12 +461,12 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
               <Clock className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-white text-sm">
-              {isEn ? 'Lunch (10am–2pm) & Dinner (3pm–7pm)' : '午餐 (10am–2pm) & 晚餐 (3pm–7pm)'}
+              {isEn ? 'Lunch (10:00 AM – 2:00 PM) & Dinner (3:00 PM – 7:00 PM)' : '午餐 (10:00 AM – 2:00 PM) & 晚餐 (3:00 PM – 7:00 PM)'}
             </h4>
             <p className="text-xs text-stone-400">
               {isEn
-                ? 'Daily dinner: 3:00pm - 7:00pm. Daily lunch: 10:00am - 2:00pm. Daily cutoff at 5:00 PM.'
-                : '晚餐配送：3:00pm - 7:00pm，午餐：10:00am - 2:00pm。每天请于 5:00 PM 前确定次日餐点。'}
+                ? 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily cutoff before 5:00 PM.'
+                : '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请于 5:00 PM 前确定次日餐点。'}
             </p>
           </div>
 

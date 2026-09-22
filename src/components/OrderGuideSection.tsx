@@ -219,7 +219,7 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
                     <strong className="text-white">
                       {isEn ? 'Monday to Friday' : '星期一至星期五'}
                     </strong>{' '}
-                    ({isEn ? 'Excluding public holidays & weekends' : '公假及周末除外'})
+                    ({isEn ? 'Excluding Public Holidays & Weekends' : '公假及周末除外'})
                   </span>
                 </div>
 
@@ -236,13 +236,13 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
                     <Clock className="w-5 h-5 text-amber-400 shrink-0" />
                     <span>
                       <strong className="text-white">
-                        {isEn ? 'Dinner Delivery: 3:00pm - 7:00pm' : '🍲 晚餐配送：3:00pm - 7:00pm'}
+                        {isEn ? 'Dinner Delivery: 3:00 PM – 7:00 PM' : '🍲 晚餐配送：3:00 PM – 7:00 PM'}
                       </strong>
                     </span>
                   </div>
                   <p className="text-xs text-stone-400 pl-8">
                     {isEn
-                      ? 'Daily lunch delivered fresh. Daily meal selection cutoff before 5:00 PM.'
+                      ? 'Daily meals delivered fresh. Daily meal selection cutoff before 5:00 PM.'
                       : '每日新鲜现做配送。隔天餐点请在每天下午 5:00 前完成选择。'}
                   </p>
                 </div>

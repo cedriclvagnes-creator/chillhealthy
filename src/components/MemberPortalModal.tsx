@@ -33,9 +33,17 @@ import {
   Send,
   RotateCcw,
   ShieldCheck,
+  Copy,
+  Share2,
+  Users,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings } from '../types';
 import { ChillLogo } from './ChillLogo';
+import {
+  getMemberReferralCode,
+  buildReferralShareUrl,
+  buildReferralWhatsAppMessage,
+} from '../utils/referral';
 
 interface MemberPortalModalProps {
   isOpen: boolean;
@@ -216,8 +224,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [passwordChangeError, setPasswordChangeError] = useState('');
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
 
-  // Member Portal active tabs: 'redeem' (Daily Meal), 'planner' (Advance Multi-Day), 'history' (Delivery Logs), 'renew' (Packages)
-  const [portalTab, setPortalTab] = useState<'redeem' | 'planner' | 'history' | 'renew'>('redeem');
+  // Member Portal active tabs: 'redeem' (Daily Meal), 'planner' (Advance Multi-Day), 'history' (Delivery Logs), 'referral' (Refer Friends), 'renew' (Packages)
+  const [portalTab, setPortalTab] = useState<'redeem' | 'planner' | 'history' | 'referral' | 'renew'>('redeem');
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Delivery Address 1 vs 2 switcher (1 account 2 addresses)
   const [selectedAddressSlot, setSelectedAddressSlot] = useState<1 | 2>(1);
@@ -1639,6 +1649,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         <Utensils className="w-3.5 h-3.5 text-emerald-400" />
                         <span>{language === 'en' ? 'Redeem Meal' : '每日选餐'}</span>
                       </button>
+
+                      {/* Refer Friends Quick Button */}
+                      <button
+                        onClick={() => setPortalTab('referral')}
+                        className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600/30 to-amber-500/20 hover:from-amber-600/40 hover:to-amber-500/30 text-amber-300 text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-amber-400/40"
+                      >
+                        <Gift className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{language === 'en' ? 'Refer Friends (+1 Free Meal)' : '邀请好友 (送1餐)'}</span>
+                      </button>
                     </div>
                   ) : (
                     <button
@@ -1705,6 +1724,25 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 <span>
                   {language === 'en' ? 'Delivery Logs' : '订餐派送记录'} ({memberRedemptions.length})
                 </span>
+              </button>
+
+              <button
+                onClick={() => setPortalTab('referral')}
+                className={`py-2.5 px-3.5 sm:px-5 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                  portalTab === 'referral'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                }`}
+              >
+                <Gift className="w-4 h-4 text-amber-500" />
+                <span>
+                  {language === 'en' ? 'Refer Friends (+1 Free Meal)' : '邀请好友 (送免费餐)'}
+                </span>
+                {(currentMember.referralBonusMealsEarned || currentMember.referralsCount) ? (
+                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-400 text-stone-900 shadow-2xs">
+                    +{currentMember.referralBonusMealsEarned || currentMember.referralsCount}
+                  </span>
+                ) : null}
               </button>
 
               <button
@@ -1938,18 +1976,18 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                   : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
                               }`}
                             >
-                              🍱 {language === 'en' ? 'Lunch (10am–2pm)' : '午餐 (10am–2pm)'}
+                              🍱 {language === 'en' ? 'Lunch (10:00 AM – 2:00 PM)' : '午餐 (10:00 AM – 2:00 PM)'}
                             </button>
                             <button
                               type="button"
-                              onClick={() => setSelectedSlot('Dinner: 3:00pm - 7:00pm')}
+                              onClick={() => setSelectedSlot('Dinner (3:00 PM – 7:00 PM)')}
                               className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
                                 selectedSlot.includes('Dinner')
                                   ? 'bg-amber-700 text-white border-amber-700 shadow-xs ring-2 ring-amber-600/30'
                                   : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
                               }`}
                             >
-                              🍲 {language === 'en' ? 'Dinner: 3:00pm - 7:00pm' : '晚餐：3:00pm - 7:00pm'}
+                              🍲 {language === 'en' ? 'Dinner (3:00 PM – 7:00 PM)' : '晚餐 (3:00 PM – 7:00 PM)'}
                             </button>
                           </div>
                         </div>
@@ -2599,6 +2637,250 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Tab 3.5: REFERRAL REWARDS PROGRAM */}
+            {portalTab === 'referral' && (
+              <div className="space-y-5">
+                {/* Hero Referral Banner */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-amber-500/15 via-emerald-500/10 to-teal-500/15 border border-amber-300/80 shadow-xs relative overflow-hidden">
+                  <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="space-y-1.5 max-w-xl">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold">
+                        <Gift className="w-3.5 h-3.5 text-amber-700" />
+                        <span>{language === 'en' ? 'Exclusive Member Referral Benefit' : '会员专属推荐特权'}</span>
+                      </div>
+                      <h3 className="font-heading text-xl sm:text-2xl font-extrabold text-stone-900">
+                        {language === 'en'
+                          ? 'Get 1 Free Meal Credit for Every Friend You Refer!'
+                          : '每成功推荐 1 位好友购买配套，即送 1 份免费餐券！'}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+                        {language === 'en'
+                          ? 'Invite colleagues and friends to eat clean and live healthy. Whenever someone purchases any meal plan using your Referral Code, 1 Free Meal Credit is automatically credited to your active package!'
+                          : '邀请同事与好友一起健康享用营养低卡轻食。每当好友使用您的专属推荐码购买任何餐点配套，您的账户将自动入账 1 份免费餐券（永久累计、自动抵扣）。'}
+                      </p>
+                    </div>
+
+                    {/* Quick Stats in Hero */}
+                    <div className="grid grid-cols-2 gap-3 shrink-0 w-full sm:w-auto">
+                      <div className="p-3.5 rounded-2xl bg-white/90 border border-amber-200 shadow-2xs text-center min-w-[120px]">
+                        <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
+                          {language === 'en' ? 'Friends Referred' : '成功推荐人数'}
+                        </span>
+                        <span className="font-heading text-2xl font-black text-amber-700 mt-0.5 block">
+                          {currentMember.referralsCount || 0}
+                        </span>
+                        <span className="text-[10px] text-stone-400 font-medium">
+                          {language === 'en' ? 'friends joined' : '位好友已加入'}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-2xl bg-white/90 border border-emerald-200 shadow-2xs text-center min-w-[120px]">
+                        <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
+                          {language === 'en' ? 'Free Meals Earned' : '已赚取免费餐券'}
+                        </span>
+                        <span className="font-heading text-2xl font-black text-emerald-700 mt-0.5 block">
+                          +{currentMember.referralBonusMealsEarned || 0}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-bold">
+                          {language === 'en' ? 'free meal credits' : '份免单奖励'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Referral Code & Direct Share Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1: Your Exclusive Code */}
+                  <div className="p-5 rounded-3xl bg-white border border-stone-200 shadow-2xs space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+                          {language === 'en' ? 'Your Exclusive Referral Code' : '您的专属邀请码'}
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          {language === 'en' ? 'Unique ID' : '终身有效'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        {language === 'en'
+                          ? 'Share this code with friends to enter at checkout cart.'
+                          : '好友在结账付款页面输入此推荐码即可为您绑定奖励。'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-stone-50 border border-dashed border-amber-300 flex items-center justify-between gap-3">
+                      <span className="font-mono text-base sm:text-lg font-black tracking-wider text-amber-900 select-all">
+                        {getMemberReferralCode(currentMember)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(getMemberReferralCode(currentMember));
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2500);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-black text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer shrink-0"
+                      >
+                        {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedCode ? (language === 'en' ? 'Copied!' : '已复制') : (language === 'en' ? 'Copy Code' : '复制推荐码')}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Instant WhatsApp Share Link */}
+                  <div className="p-5 rounded-3xl bg-white border border-stone-200 shadow-2xs space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
+                          {language === 'en' ? 'One-Click WhatsApp Share' : '一键 WhatsApp 好友分享'}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                          {language === 'en' ? 'Fastest' : '一键直达'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        {language === 'en'
+                          ? 'Send an inviting message with your link straight to friends or work chat groups.'
+                          : '自动生成精美邀请文案与专属订餐链接，直接发送给好友或公司微信/WhatsApp群。'}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <a
+                        href={`https://wa.me/?text=${buildReferralWhatsAppMessage(currentMember.name, getMemberReferralCode(currentMember), language)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{language === 'en' ? 'Share via WhatsApp' : '立即通过 WhatsApp 分享'}</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = buildReferralShareUrl(getMemberReferralCode(currentMember));
+                          navigator.clipboard.writeText(url);
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2500);
+                        }}
+                        className="py-2.5 px-3.5 rounded-xl border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5 text-stone-500" />}
+                        <span>{copiedLink ? (language === 'en' ? 'Link Copied!' : '链接已复制') : (language === 'en' ? 'Copy Link' : '复制订餐链接')}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* How It Works (3 Steps) */}
+                <div className="p-5 rounded-3xl bg-stone-50 border border-stone-200/80 space-y-3">
+                  <h4 className="font-heading font-extrabold text-sm sm:text-base text-stone-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>{language === 'en' ? 'How the Referral Reward Works' : '好友推荐奖励规则说明'}</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 rounded-2xl bg-white border border-stone-200/80 space-y-1">
+                      <div className="w-6 h-6 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center mb-1.5">
+                        1
+                      </div>
+                      <p className="text-xs font-bold text-stone-900">
+                        {language === 'en' ? 'Share Your Code' : '分享您的专属推荐码'}
+                      </p>
+                      <p className="text-[11px] text-stone-500 leading-relaxed">
+                        {language === 'en'
+                          ? 'Send your code or link to friends, colleagues, or fitness buddies.'
+                          : '将您的推荐码或专属链接分享给同事、家人或运动伙伴。'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-white border border-stone-200/80 space-y-1">
+                      <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center mb-1.5">
+                        2
+                      </div>
+                      <p className="text-xs font-bold text-stone-900">
+                        {language === 'en' ? 'Friend Subscribes' : '好友订购任何健康餐配套'}
+                      </p>
+                      <p className="text-[11px] text-stone-500 leading-relaxed">
+                        {language === 'en'
+                          ? 'Your friend purchases any 10, 20, 40, or group meal plan with free delivery.'
+                          : '好友订购 10、20、40 或多人健康餐配套并在结账输入您的推荐码。'}
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-white border border-stone-200/80 space-y-1">
+                      <div className="w-6 h-6 rounded-full bg-teal-600 text-white font-black text-xs flex items-center justify-center mb-1.5">
+                        3
+                      </div>
+                      <p className="text-xs font-bold text-stone-900">
+                        {language === 'en' ? 'Get +1 Free Meal' : '您立得 +1 份免费餐券'}
+                      </p>
+                      <p className="text-[11px] text-stone-500 leading-relaxed">
+                        {language === 'en'
+                          ? 'Once their order is confirmed, 1 Free Meal Credit is added to your account instantly.'
+                          : '好友订单一经确认，您的账户即时获赠 1 份免费餐券，可随时选餐！'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Referral Bonus Credits History */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-heading font-extrabold text-sm text-stone-900 flex items-center gap-2">
+                      <History className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? 'Your Referral Rewards History' : '推荐奖励入账明细'}</span>
+                    </h4>
+                    <span className="text-xs text-stone-500">
+                      {language === 'en' ? 'Total Bonus Meals:' : '累计奖励餐券:'}{' '}
+                      <strong className="text-emerald-700">+{currentMember.referralBonusMealsEarned || 0}</strong>
+                    </span>
+                  </div>
+
+                  {(() => {
+                    const bonusItems = (currentMember.creditsHistory || []).filter(
+                      (c) => c.type === 'bonus' || (c.note && c.note.toLowerCase().includes('referral'))
+                    );
+
+                    if (bonusItems.length === 0) {
+                      return (
+                        <div className="text-center py-8 bg-white rounded-3xl border border-stone-200 text-stone-400 text-xs">
+                          {language === 'en'
+                            ? 'No referral rewards claimed yet. Share your code above to start earning free meals!'
+                            : '暂无推荐奖励记录。快将上方推荐码分享给好友，开启免费餐券奖励吧！'}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        {bonusItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200 flex items-center justify-between gap-3 shadow-2xs"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                                🎁
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-stone-900">{item.note}</p>
+                                <span className="text-[10px] text-stone-500">{item.date}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                                +{item.amount} {language === 'en' ? 'Free Meal' : '免费餐'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 

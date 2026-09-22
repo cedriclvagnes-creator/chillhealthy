@@ -139,8 +139,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
                 {postalResult.covered && (
                   <p className="text-emerald-700 font-semibold mt-1">
                     {language === 'en'
-                      ? '✓ Lunch: 10:00 AM – 2:00 PM | Dinner: 3:00pm - 7:00pm'
-                      : '✓ 午餐派送：10:00 AM – 2:00 PM ｜ 晚餐派送：3:00pm - 7:00pm'}
+                      ? '✓ Lunch: 10:00 AM – 2:00 PM | Dinner: 3:00 PM – 7:00 PM'
+                      : '✓ 午餐派送：10:00 AM – 2:00 PM ｜ 晚餐派送：3:00 PM – 7:00 PM'}
                   </p>
                 )}
               </div>
@@ -186,8 +186,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             </div>
             <p className="text-xs text-stone-600 mb-2">
               {language === 'en'
-                ? 'Monday to Friday (Excluding public holidays & weekends)'
-                : 'Monday to Friday (Excluding public holidays & weekends)'}
+                ? 'Monday to Friday (Excluding Public Holidays & Weekends)'
+                : '星期一至星期五（公假及周末除外）'}
             </p>
             <div className="space-y-1 text-xs">
               <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
@@ -196,12 +196,12 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
               </div>
               <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
                 <span className="font-semibold text-amber-900">{language === 'en' ? 'Dinner Delivery:' : '晚餐配送：'}</span>
-                <span className="font-bold text-amber-700">3:00pm - 7:00pm</span>
+                <span className="font-bold text-amber-700">3:00 PM – 7:00 PM</span>
               </div>
             </div>
             <p className="mt-2 text-[11px] text-stone-500">
               {language === 'en'
-                ? 'Daily lunch delivered fresh. Daily meal selection cutoff before 5:00 PM.'
+                ? 'Daily meals delivered fresh. Daily meal selection cutoff before 5:00 PM.'
                 : '每日新鲜现做送达。隔天餐点请在每天下午 5:00 前完成选择。'}
             </p>
           </div>
@@ -214,13 +214,13 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
               </div>
               <p className="text-xs text-stone-700 leading-relaxed">
                 {language === 'en'
-                  ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses. one day deliver one address for each account.'
+                  ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses. One day deliver one address for each account.'
                   : '覆盖整个巴生河流域免运费。1 个账户支持最多 2 个地址，每个账户一天派送一个地址。'}
               </p>
             </div>
             <div className="mt-3 pt-2.5 border-t border-sky-200/60 flex items-center gap-1.5 text-[11px] font-semibold text-sky-800">
               <Check className="w-3.5 h-3.5 text-sky-600" />
-              <span>{language === 'en' ? 'Daily lunch delivered fresh' : '每日新鲜午餐现做准时配送'}</span>
+              <span>{language === 'en' ? 'Daily meals delivered fresh' : '每日新鲜午餐现做准时配送'}</span>
             </div>
           </div>
         </div>

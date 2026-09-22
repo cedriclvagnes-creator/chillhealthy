@@ -31,6 +31,7 @@ import {
   INITIAL_MEMBERS,
   INITIAL_REDEMPTIONS,
 } from './data/initialStore';
+import { getMemberReferralCode, findMemberByReferralCode } from './utils/referral';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -131,11 +132,19 @@ export default function App() {
     }
   });
 
-  // Cart state persisted with localStorage
+  // Cart state persisted with localStorage (purges any legacy standalone upsize items)
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_cart');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed: CartItem[] = JSON.parse(saved);
+      // Ensure no standalone upsize items exist
+      const hasPlan = parsed.some((i) => i.type === 'plan' || Boolean(i.planDetails));
+      return parsed.filter((i) => {
+        if (i.cartItemId.startsWith('upsize-')) return false;
+        if (!hasPlan && i.title.toLowerCase().includes('upsize')) return false;
+        return true;
+      });
     } catch {
       return [];
     }
@@ -530,10 +539,26 @@ export default function App() {
       address2?: string;
       area2?: string;
       postalCode2?: string;
+      referralCode?: string;
     }
   ) => {
     const pkg = packages.find((p) => p.id === planItem.cartItemId.replace(/^plan-/, '').split('-')[0]) || packages[0];
     const totalMealsToAdd = planItem.planDetails?.mealsTotal || pkg.mealsTotal || 20;
+
+    // Check referral reward eligibility:
+    // If a referral code was entered and matches an existing member (not the buyer)
+    let matchedReferrer: MemberAccount | undefined;
+    if (customer.referralCode) {
+      const candidate = findMemberByReferralCode(members, customer.referralCode);
+      const customerPhoneClean = customer.phone.replace(/\D/g, '');
+      if (
+        candidate &&
+        candidate.id !== currentMember?.id &&
+        candidate.phone.replace(/\D/g, '') !== customerPhoneClean
+      ) {
+        matchedReferrer = candidate;
+      }
+    }
 
     if (currentMember) {
       const updated: MemberAccount = {
@@ -546,6 +571,9 @@ export default function App() {
           area2: customer.area2 || currentMember.area,
           postalCode2: customer.postalCode2 || currentMember.postalCode,
         } : {}),
+        referredBy:
+          currentMember.referredBy ||
+          (matchedReferrer ? getMemberReferralCode(matchedReferrer) : customer.referralCode || undefined),
         activePackage: {
           planId: pkg.id,
           planName: pkg.title,
@@ -580,6 +608,10 @@ export default function App() {
         address2: customer.address2,
         area2: customer.area2,
         postalCode2: customer.postalCode2,
+        referralCode: getMemberReferralCode({ name: customer.name, phone: customer.phone }),
+        referredBy: matchedReferrer ? getMemberReferralCode(matchedReferrer) : (customer.referralCode || undefined),
+        referralsCount: 0,
+        referralBonusMealsEarned: 0,
         activePackage: {
           planId: pkg.id,
           planName: pkg.title,
@@ -601,6 +633,50 @@ export default function App() {
       };
       setMembers((prev) => [newMember, ...prev]);
       setCurrentMember(newMember);
+    }
+
+    // Award +1 Free Meal Credit to the Referrer!
+    if (matchedReferrer) {
+      const referrerId = matchedReferrer.id;
+      setMembers((prev) =>
+        prev.map((m) => {
+          if (m.id !== referrerId) return m;
+
+          const currentPkg = m.activePackage;
+          const updatedPkg = currentPkg
+            ? {
+                ...currentPkg,
+                totalMeals: currentPkg.totalMeals + 1,
+                remainingMeals: currentPkg.remainingMeals + 1,
+              }
+            : {
+                planId: 'referral-bonus-plan',
+                planName: 'Referral Reward Meal Credit',
+                planNameZh: '好友推荐免费餐券',
+                totalMeals: 1,
+                remainingMeals: 1,
+                purchasedDate: new Date().toISOString().split('T')[0],
+                expiryDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+              };
+
+          return {
+            ...m,
+            referralsCount: (m.referralsCount || 0) + 1,
+            referralBonusMealsEarned: (m.referralBonusMealsEarned || 0) + 1,
+            activePackage: updatedPkg,
+            creditsHistory: [
+              {
+                id: `cr-ref-${Date.now()}`,
+                date: new Date().toISOString().split('T')[0],
+                type: 'bonus',
+                amount: 1,
+                note: `🎁 Referral Reward: +1 Free Meal Credit (Friend ${customer.name} subscribed to ${pkg.title})`,
+              },
+              ...m.creditsHistory,
+            ],
+          };
+        })
+      );
     }
   };
 
@@ -815,21 +891,41 @@ export default function App() {
     return updatedAny;
   };
 
-  // Quick add portion upsize to cart (+RM 3.50)
-  const handleAddUpsizePortion = () => {
-    const upsizeItem: CartItem = {
-      cartItemId: `upsize-${Date.now()}`,
-      type: 'meal',
-      title: language === 'en' ? '⚡ Upsize Portion (+80g Lean Protein & Greens)' : '⚡ 升级大份量 (+80g 优质蛋白与双倍时蔬)',
-      titleZh: '⚡ 升级大份量 (+80g 优质蛋白与双倍时蔬)',
-      price: 3.5,
-      quantity: 1,
-      image: 'https://admin.chillhealthy.com/uploads/d1j2uwbv4mgowsccow.jpg',
-      calories: 120,
-      protein: 18,
-      notes: 'Portion Upsize booster',
-    };
-    handleAddToCart(upsizeItem);
+  // Toggle Portion Upsize on a specific Meal Plan in the cart (e.g. +RM 50 for 10 meals, +RM 100 for 20 meals)
+  const handleTogglePlanUpsize = (cartItemId: string) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.cartItemId === cartItemId && (item.type === 'plan' || Boolean(item.planDetails))) {
+          const mealsTotal = item.planDetails?.mealsTotal || 10;
+          const upsizeRate = item.planDetails?.upsizeCost || mealsTotal * 5;
+          const currentlyUpsized = Boolean(item.planDetails?.isUpsized);
+          const nextUpsized = !currentlyUpsized;
+          const priceDelta = nextUpsized ? upsizeRate : -upsizeRate;
+          const newPrice = Math.max(0, item.price + priceDelta);
+
+          // Clean up titles
+          const cleanTitleEn = item.title.replace(/\s*\(Upsized Portion\)/g, '').trim();
+          const cleanTitleZh = item.titleZh.replace(/（加大分量版）/g, '').trim();
+
+          const updatedTitle = nextUpsized ? `${cleanTitleEn} (Upsized Portion)` : cleanTitleEn;
+          const updatedTitleZh = nextUpsized ? `${cleanTitleZh}（加大分量版）` : cleanTitleZh;
+
+          return {
+            ...item,
+            title: language === 'en' ? updatedTitle : updatedTitleZh,
+            titleZh: updatedTitleZh,
+            price: newPrice,
+            planDetails: {
+              ...item.planDetails!,
+              isUpsized: nextUpsized,
+              upsizeCost: upsizeRate,
+            },
+            notes: nextUpsized ? `Portion Upsized (+RM${upsizeRate})` : undefined,
+          };
+        }
+        return item;
+      })
+    );
   };
 
   // Cart operations
@@ -887,8 +983,19 @@ export default function App() {
     );
   };
 
+  // If user deletes a main plan, its upsize portion is deleted automatically
+  // Standalone upsize cannot exist without a plan
   const handleRemoveItem = (cartItemId: string) => {
-    setCart((prev) => prev.filter((item) => item.cartItemId !== cartItemId));
+    setCart((prev) => {
+      const nextCart = prev.filter(
+        (item) => item.cartItemId !== cartItemId && !item.cartItemId.startsWith('upsize-')
+      );
+      const hasPlan = nextCart.some((i) => i.type === 'plan' || Boolean(i.planDetails));
+      if (!hasPlan) {
+        return nextCart.filter((i) => !i.title.toLowerCase().includes('upsize'));
+      }
+      return nextCart;
+    });
   };
 
   const handleProceedToCheckout = () => {
@@ -1048,7 +1155,7 @@ export default function App() {
               plansEl.scrollIntoView({ behavior: 'smooth' });
             }
           }}
-          onAddUpsize={handleAddUpsizePortion}
+          onTogglePlanUpsize={handleTogglePlanUpsize}
         />
       )}
 
@@ -1060,6 +1167,8 @@ export default function App() {
           cart={cart}
           language={language}
           siteSettings={siteSettings}
+          members={members}
+          currentMember={currentMember}
           onOrderCompleted={handleOrderCompleted}
           onPackageOrdered={handlePackageOrdered}
           onOpenMemberPortal={() => setIsMemberPortalOpen(true)}

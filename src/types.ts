@@ -104,6 +104,8 @@ export interface CartItem {
     persons?: number;
     isUpsized?: boolean;
     upsizeCost?: number;
+    basePrice?: number;
+    planId?: string;
   };
   notes?: string;
 }
@@ -184,6 +186,10 @@ export interface MemberAccount {
   postalCode2?: string;
   activeAddressSlot?: 1 | 2;
   dietaryPreferences?: string;
+  referralCode?: string; // Unique referral code, e.g. CHILL-AGNES9919
+  referredBy?: string; // Code of the member who referred this account
+  referralsCount?: number; // Total number of successful meal plan referrals
+  referralBonusMealsEarned?: number; // Total free meal credits earned through referrals
   activePackage: {
     planId: string;
     planName: string;
