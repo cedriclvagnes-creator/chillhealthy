@@ -60,26 +60,26 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       {/* Top Notification Announcement Bar */}
-      <div id="top-announcement-bar" className="bg-stone-900 text-stone-200 text-xs py-2 px-4 border-b border-stone-800">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">
+      <div id="top-announcement-bar" className="bg-stone-900 text-stone-200 text-xs py-2 px-4 sm:px-6 lg:px-8 border-b border-stone-800">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               {language === 'en' ? 'Daily Fresh Prep' : '每日新鲜现做'}
             </span>
-            <span className="hidden sm:inline text-stone-400">|</span>
-            <span className="hidden sm:inline text-stone-300">
+            <span className="hidden sm:inline text-stone-500">|</span>
+            <span className="hidden sm:inline text-stone-300 truncate max-w-xs md:max-w-md lg:max-w-xl text-[11px]">
               {language === 'en' ? siteSettings.announcementEn : siteSettings.announcementZh}
             </span>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium">
+          <div className="flex items-center gap-2.5 sm:gap-4 text-xs font-medium shrink-0">
             <a
               id="instagram-top-link"
               href="https://www.instagram.com/chillhealthybox/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer"
+              className="hidden md:flex items-center gap-1.5 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer whitespace-nowrap"
               title="Instagram @chillhealthybox"
             >
               <Instagram className="w-3.5 h-3.5" />
@@ -91,17 +91,17 @@ export const Header: React.FC<HeaderProps> = ({
               href={`${waBaseUrl}?text=Hello%20CHILL%20Healthy%20team,%20I%20would%20like%20to%20inquire%20about%20meal%20orders!`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer whitespace-nowrap"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>WhatsApp: {siteSettings.whatsappDisplay}</span>
+              <span className="hidden xs:inline">WhatsApp: </span><span>{siteSettings.whatsappDisplay}</span>
             </a>
 
             {/* Language switch button */}
             <button
               id="lang-toggle-btn"
               onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors cursor-pointer whitespace-nowrap"
               title="Switch Language / 切换语言"
             >
               <Globe className="w-3 h-3 text-stone-400" />
@@ -114,35 +114,35 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Main Sticky Navigation */}
       <header id="main-header" className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex items-center justify-between h-20 gap-3 sm:gap-4">
             {/* Logo */}
             <div
               id="brand-logo-container"
               onClick={() => scrollToSection('hero')}
-              className="flex items-center gap-3 cursor-pointer group"
+              className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group shrink-0"
             >
               <ChillLogo variant="badge" size="md" className="group-hover:scale-105 transition-transform shrink-0" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-heading font-black text-2xl tracking-tight text-stone-900">
+                  <span className="font-heading font-black text-xl sm:text-2xl tracking-tight text-stone-900 whitespace-nowrap">
                     CHILL<span className="text-[#3b6026]">HEALTHY</span>
                   </span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold tracking-wider">
+                  <span className="text-[10px] sm:text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold tracking-wider shrink-0">
                     潮轻食
                   </span>
                 </div>
-                <span className="text-[11px] text-stone-500 font-medium tracking-wide">
+                <span className="hidden sm:block text-[11px] text-stone-500 font-medium tracking-wide whitespace-nowrap">
                   {language === 'en' ? 'Clean Eating · High Protein · Zero MSG' : '科学营养 · 低卡高蛋白 · 0添加'}
                 </span>
               </div>
             </div>
 
             {/* Desktop Navigation Links */}
-            <nav id="desktop-nav" className="hidden lg:flex items-center gap-1 xl:gap-2">
+            <nav id="desktop-nav" className="hidden xl:flex items-center gap-0.5 2xl:gap-1.5 shrink min-w-0 justify-center">
               <button
                 id="nav-link-menu"
                 onClick={() => scrollToSection('menu')}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                className={`px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'menu' ? 'text-emerald-800 bg-emerald-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
@@ -152,12 +152,12 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="nav-link-plans"
                 onClick={() => scrollToSection('plans')}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer relative ${
+                className={`flex items-center gap-1 px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'plans' ? 'text-emerald-800 bg-emerald-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
-                <span>{language === 'en' ? 'Meal Plans (1–6 Persons)' : '健康餐配套 (1-6人)'}</span>
-                <span className="absolute -top-1 right-0 text-[10px] bg-amber-500 text-white font-bold px-1.5 py-0.2 rounded-full">
+                <span>{language === 'en' ? 'Meal Plans' : '健康餐配套'}</span>
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded-full">
                   {language === 'en' ? 'From RM398' : 'RM398起'}
                 </span>
               </button>
@@ -165,17 +165,17 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="nav-link-order-guide"
                 onClick={() => scrollToSection('order-guide')}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                className={`px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'order-guide' ? 'text-emerald-800 bg-emerald-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
-                {language === 'en' ? 'Confirm Order Guide' : '订单确认指南'}
+                {language === 'en' ? 'Order Guide' : '订单指南'}
               </button>
 
               <button
                 id="nav-link-calculator"
                 onClick={onOpenCalorieModal}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100/80 transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100/80 whitespace-nowrap transition-colors cursor-pointer"
                 title={
                   hasPurchasedMealPlan
                     ? language === 'en'
@@ -186,10 +186,10 @@ export const Header: React.FC<HeaderProps> = ({
                     : '热量规划计算器 (健康餐配套订购会员专属)'
                 }
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{language === 'en' ? 'Calorie Matcher' : '热量规划计算器'}</span>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{language === 'en' ? 'Calorie Matcher' : '热量规划'}</span>
                 <span
-                  className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 ${
+                  className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold flex items-center gap-0.5 ${
                     hasPurchasedMealPlan
                       ? 'bg-emerald-200/80 text-emerald-800'
                       : 'bg-amber-100 text-amber-800 border border-amber-200/80'
@@ -200,7 +200,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ) : (
                     <>
                       <Lock className="w-2.5 h-2.5" />
-                      <span>{language === 'en' ? 'Plan Perk' : '配套专属'}</span>
+                      <span>{language === 'en' ? 'VIP' : '专属'}</span>
                     </>
                   )}
                 </span>
@@ -209,7 +209,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="nav-link-story"
                 onClick={() => scrollToSection('story')}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                className={`px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'story' ? 'text-emerald-800 bg-emerald-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
@@ -219,7 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="nav-link-delivery"
                 onClick={() => scrollToSection('delivery')}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                className={`px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'delivery' ? 'text-emerald-800 bg-emerald-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
@@ -229,57 +229,49 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="nav-link-instagram"
                 onClick={() => scrollToSection('instagram')}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 2xl:px-3 py-1.5 rounded-lg text-xs 2xl:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                   activeSection === 'instagram' ? 'text-pink-700 bg-pink-50' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
                 }`}
               >
-                <Instagram className="w-3.5 h-3.5 text-pink-600" />
-                <span>{language === 'en' ? 'IG Posts' : 'IG 动态'}</span>
-                <span className="text-[10px] bg-pink-100 text-pink-700 font-bold px-1.5 py-0.2 rounded-full hidden xl:inline">
-                  @chillhealthybox
-                </span>
+                <Instagram className="w-3.5 h-3.5 text-pink-600 shrink-0" />
+                <span>{language === 'en' ? 'IG Posts' : 'IG动态'}</span>
               </button>
             </nav>
 
             {/* Right Action Icons: Member Portal, Cart & WhatsApp */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 xl:gap-3 shrink-0">
               {/* Member Login & Meal Balance Monitor Button */}
               <button
                 id="member-portal-btn"
                 onClick={onOpenMemberPortal}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap ${
                   currentMember
                     ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 hover:bg-emerald-100 hover:border-emerald-400'
                     : 'bg-stone-100 hover:bg-stone-200 text-stone-800'
                 }`}
                 title="Member Package Login & Daily Meal Balance"
               >
-                <div className="relative">
+                <div className="relative shrink-0">
                   <User className="w-4 h-4 text-emerald-700" />
                   {currentMember && (
                     <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse ring-2 ring-white" />
                   )}
                 </div>
                 {currentMember ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="hidden lg:inline font-bold text-stone-800">{currentMember.name.split(' ')[0]}</span>
-                    <span className="hidden sm:inline text-stone-300">|</span>
+                  <span className="flex items-center gap-1 sm:gap-1.5 whitespace-nowrap">
+                    <span className="hidden 2xl:inline font-bold text-stone-800">{currentMember.name.split(' ')[0]}</span>
+                    <span className="hidden 2xl:inline text-stone-300">|</span>
                     <span className="text-[11px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-full shadow-2xs">
                       {currentMember.activePackage && currentMember.activePackage.remainingMeals > 0
-                        ? `${currentMember.activePackage.remainingMeals} Meals Balance`
+                        ? `${currentMember.activePackage.remainingMeals} Meals`
                         : language === 'en'
-                        ? '0 Meals · Select Plan'
-                        : '0餐额 · 选购配套'}
-                    </span>
-                    <span className="hidden md:inline text-emerald-800 font-extrabold text-[11px]">
-                      {currentMember.activePackage && currentMember.activePackage.remainingMeals > 0
-                        ? language === 'en' ? 'Select Meal' : '选餐'
-                        : language === 'en' ? 'Choose Plan' : '选配套'}
+                        ? '0 Meals'
+                        : '0餐额'}
                     </span>
                   </span>
                 ) : (
-                  <span>
-                    <span className="hidden sm:inline">{language === 'en' ? 'Member Login' : '会员登录'}</span>
+                  <span className="whitespace-nowrap">
+                    <span className="hidden sm:inline">{language === 'en' ? 'Member Portal' : '会员中心'}</span>
                     <span className="sm:hidden">{language === 'en' ? 'Login' : '会员'}</span>
                   </span>
                 )}
@@ -290,23 +282,23 @@ export const Header: React.FC<HeaderProps> = ({
                 href={`${waBaseUrl}?text=Hi%20CHILL%20Healthy,%20I'd%20like%20to%20order%20meals!`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all hover:shadow-emerald-600/20 cursor-pointer"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all shrink-0 whitespace-nowrap cursor-pointer"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>{language === 'en' ? 'WhatsApp' : 'WhatsApp订餐'}</span>
+                <span>WhatsApp</span>
               </a>
 
               {/* Cart Button */}
               <button
                 id="cart-drawer-trigger"
                 onClick={() => setIsCartOpen(true)}
-                className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-sm font-bold shadow-md transition-transform active:scale-95 cursor-pointer"
+                className="relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
                 aria-label="Shopping Cart"
               >
-                <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                <ShoppingBag className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="hidden sm:inline">{language === 'en' ? 'Cart' : '餐篮'}</span>
                 {totalItems > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-extrabold animate-bounce">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-extrabold">
                     {totalItems}
                   </span>
                 )}
@@ -321,7 +313,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="mobile-menu-toggle"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 rounded-xl text-stone-700 hover:bg-stone-100 cursor-pointer"
+                className="xl:hidden p-2 rounded-xl text-stone-700 hover:bg-stone-100 cursor-pointer shrink-0"
                 aria-label="Toggle navigation menu"
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -332,7 +324,10 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div id="mobile-menu-drawer" className="lg:hidden border-t border-stone-200 bg-white px-4 pt-3 pb-6 space-y-2 shadow-lg animate-in slide-in-from-top duration-150">
+          <div
+            id="mobile-menu-drawer"
+            className="xl:hidden border-t border-stone-200 bg-white px-4 pt-3 pb-6 space-y-2 shadow-xl animate-in slide-in-from-top duration-150 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain"
+          >
             {/* Mobile Member Portal Quick Button */}
             <button
               onClick={() => {
