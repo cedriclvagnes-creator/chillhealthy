@@ -24,6 +24,7 @@ import {
   MemberAccount,
   MealRedemption,
   MealDeletionRefundRecord,
+  OfficialReceipt,
 } from './types';
 import { MEAL_ITEMS, MEAL_PLANS } from './data/menuData';
 import {
@@ -31,7 +32,11 @@ import {
   INITIAL_MEMBERS,
   INITIAL_REDEMPTIONS,
 } from './data/initialStore';
-import { getMemberReferralCode, findMemberByReferralCode } from './utils/referral';
+import {
+  getMemberReferralCode,
+  findMemberByReferralCode,
+  MIN_REFERRAL_PLAN_PRICE,
+} from './utils/referral';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -542,23 +547,42 @@ export default function App() {
       referralCode?: string;
     }
   ) => {
-    const pkg = packages.find((p) => p.id === planItem.cartItemId.replace(/^plan-/, '').split('-')[0]) || packages[0];
+    const pkg =
+      packages.find(
+        (p) =>
+          p.id === planItem.planDetails?.planId ||
+          planItem.cartItemId.includes(p.id)
+      ) || packages[0];
     const totalMealsToAdd = planItem.planDetails?.mealsTotal || pkg.mealsTotal || 20;
+    const planPrice = planItem.price || planItem.planDetails?.basePrice || pkg.totalPrice || 0;
+    const cleanCustomerPhone = customer.phone.replace(/\D/g, '');
+
+    // Check if new account sign-up (free meal is strictly available for new account sign ups only)
+    const isExistingMember = Boolean(
+      currentMember ||
+      members.some((m) => m.phone.replace(/\D/g, '') === cleanCustomerPhone)
+    );
+    const isNewAccount = !isExistingMember;
 
     // Check referral reward eligibility:
     // If a referral code was entered and matches an existing member (not the buyer)
     let matchedReferrer: MemberAccount | undefined;
     if (customer.referralCode) {
       const candidate = findMemberByReferralCode(members, customer.referralCode);
-      const customerPhoneClean = customer.phone.replace(/\D/g, '');
       if (
         candidate &&
         candidate.id !== currentMember?.id &&
-        candidate.phone.replace(/\D/g, '') !== customerPhoneClean
+        candidate.phone.replace(/\D/g, '') !== cleanCustomerPhone
       ) {
         matchedReferrer = candidate;
       }
     }
+
+    // Eligibility condition: new account sign up + plan RM398 and above only
+    const isReferralEligibleForFreeMeal =
+      Boolean(matchedReferrer) &&
+      isNewAccount &&
+      planPrice >= MIN_REFERRAL_PLAN_PRICE;
 
     if (currentMember) {
       const updated: MemberAccount = {
@@ -635,8 +659,9 @@ export default function App() {
       setCurrentMember(newMember);
     }
 
-    // Award +1 Free Meal Credit to the Referrer!
-    if (matchedReferrer) {
+    // Award +1 Free Meal Credit to the Referrer ONLY if eligible:
+    // New account sign up on RM398 plan and above only!
+    if (isReferralEligibleForFreeMeal && matchedReferrer) {
       const referrerId = matchedReferrer.id;
       setMembers((prev) =>
         prev.map((m) => {
@@ -670,7 +695,7 @@ export default function App() {
                 date: new Date().toISOString().split('T')[0],
                 type: 'bonus',
                 amount: 1,
-                note: `🎁 Referral Reward: +1 Free Meal Credit (Friend ${customer.name} subscribed to ${pkg.title})`,
+                note: `🎁 Referral Reward: +1 Free Meal Credit (New member ${customer.name} signed up with ${pkg.title} - RM ${planPrice.toFixed(0)})`,
               },
               ...m.creditsHistory,
             ],
@@ -748,6 +773,30 @@ export default function App() {
     if (currentMember?.id === memberId) {
       setCurrentMember(null);
     }
+  };
+
+  const handleSaveOfficialReceipt = (receipt: OfficialReceipt) => {
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === receipt.memberId) {
+          const existingList = m.officialReceipts || [];
+          const index = existingList.findIndex((r) => r.id === receipt.id || r.receiptNumber === receipt.receiptNumber);
+          const updatedList =
+            index >= 0
+              ? existingList.map((r, i) => (i === index ? receipt : r))
+              : [receipt, ...existingList];
+          const updatedMember: MemberAccount = {
+            ...m,
+            officialReceipts: updatedList,
+          };
+          if (currentMember?.id === m.id) {
+            setCurrentMember(updatedMember);
+          }
+          return updatedMember;
+        }
+        return m;
+      })
+    );
   };
 
   // Delete / Cancel meal order with automatic quota restore for customer WITH RECORD
@@ -1258,6 +1307,7 @@ export default function App() {
           onUpdateMemberAccount={handleUpdateMemberAccount}
           onAddMemberAccount={handleAddMemberAccount}
           onDeleteMemberAccount={handleDeleteMemberAccount}
+          onSaveOfficialReceipt={handleSaveOfficialReceipt}
           refundRecords={refundRecords}
           initialTab={backOfficeTab}
         />

@@ -19,7 +19,12 @@ import {
 } from 'lucide-react';
 import { CartItem, Language, SiteSettings, MemberAccount } from '../types';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
-import { getMemberReferralCode, findMemberByReferralCode } from '../utils/referral';
+import {
+  getMemberReferralCode,
+  findMemberByReferralCode,
+  checkReferralRewardEligibility,
+  MIN_REFERRAL_PLAN_PRICE,
+} from '../utils/referral';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -177,6 +182,16 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const deliveryFee = hasPlan ? 0 : subtotal >= 100 ? 0 : 15.0;
   const grandTotal = subtotal + deliveryFee;
 
+  const planPrice = planItem ? (planItem.price || planItem.planDetails?.basePrice || 0) : 0;
+  const cleanCustomerPhone = phone.replace(/\D/g, '');
+  const isExistingAccount = Boolean(
+    currentMember ||
+    (members && members.some((m) => m.phone.replace(/\D/g, '') === cleanCustomerPhone))
+  );
+  const isNewAccount = !isExistingAccount;
+  const isPlanPriceEligible = planPrice >= MIN_REFERRAL_PLAN_PRICE;
+  const isReferralEligible = Boolean(appliedReferralMember) && isNewAccount && isPlanPriceEligible;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone || !address) {
@@ -221,7 +236,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `*Delivery Address 1 (地址一):* ${address}, ${area} ${postalCode}%0A` +
         (hasAddress2 && address2 ? `*Delivery Address 2 (地址二):* ${address2}, ${area2} ${postalCode2}%0A` : '') +
         (appliedReferralMember
-          ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (Referrer: ${appliedReferralMember.name})%0A*Referral Reward:* ${appliedReferralMember.name} receives +1 Free Meal Credit upon confirmation!%0A`
+          ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (Referrer: ${appliedReferralMember.name})%0A` +
+            (isReferralEligible
+              ? `*Referral Reward (推荐免单奖励):* ${appliedReferralMember.name} receives +1 Free Meal Credit upon confirmation of this RM${planPrice.toFixed(0)} new account meal plan!%0A`
+              : !isNewAccount
+              ? `*Referral Note (推荐提示):* Existing account. Referral free meal bonus applies to new account registrations only.%0A`
+              : `*Referral Note (推荐提示):* Current plan is RM${planPrice.toFixed(0)}. Referral free meal bonus applies to new account plans RM398 and above (e.g. 20-Day Plan).%0A`)
           : referralCodeInput.trim()
           ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
           : '') +
@@ -386,12 +406,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-left text-xs space-y-1">
                     <div className="flex items-center gap-1.5 font-bold text-amber-900">
                       <Gift className="w-4 h-4 text-amber-600" />
-                      <span>{language === 'en' ? '🎁 Referral Reward Activated!' : '🎁 好友推荐奖励已生效！'}</span>
+                      <span>
+                        {isReferralEligible
+                          ? (language === 'en' ? '🎁 Referral Reward Activated (+1 Free Meal Credit)!' : '🎁 好友推荐奖励已生效 (+1份免费餐券)！')
+                          : (language === 'en' ? '🤝 Referrer Linked' : '🤝 推荐人已关联')}
+                      </span>
                     </div>
                     <p className="text-amber-800 text-[11px] leading-relaxed">
-                      {language === 'en'
-                        ? `Your referrer ${appliedReferralMember.name} (${getMemberReferralCode(appliedReferralMember)}) will receive 1 Free Meal Credit added to their account once this order is confirmed.`
-                        : `您的推荐人 ${appliedReferralMember.name}（推荐码：${getMemberReferralCode(appliedReferralMember)}）在此配套订单确认后，将自动获赠 1 份免费餐券！`}
+                      {isReferralEligible
+                        ? (language === 'en'
+                            ? `Your referrer ${appliedReferralMember.name} (${getMemberReferralCode(appliedReferralMember)}) will receive 1 Free Meal Credit added to their account once this new account order (RM${planPrice.toFixed(0)}) is confirmed.`
+                            : `您的推荐人 ${appliedReferralMember.name}（推荐码：${getMemberReferralCode(appliedReferralMember)}）在此新账户配套订单（RM${planPrice.toFixed(0)}）确认后，将自动获赠 1 份免费餐券！`)
+                        : !isNewAccount
+                        ? (language === 'en'
+                            ? `Referrer ${appliedReferralMember.name} is linked to your order. Note: Referral free meal credit is exclusively awarded for new account sign-ups.`
+                            : `已关联推荐人 ${appliedReferralMember.name}。提示：推荐免单餐券仅限新用户首次注册新账户时生效。`)
+                        : (language === 'en'
+                            ? `Referrer ${appliedReferralMember.name} is linked to your order. Note: Free meal credit requires subscribing to a plan of RM${MIN_REFERRAL_PLAN_PRICE} and above (current plan: RM${planPrice.toFixed(0)}).`
+                            : `已关联推荐人 ${appliedReferralMember.name}。提示：推荐免单餐券仅限订购 RM${MIN_REFERRAL_PLAN_PRICE} 及以上配套（当前配套：RM${planPrice.toFixed(0)}）。`)}
                     </p>
                   </div>
                 )}
@@ -718,16 +750,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     {language === 'en' ? "Friend's Referral Code (Optional)" : '好友推荐邀请码 (可选)'}
                   </span>
                 </label>
-                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
-                  {language === 'en' ? 'Earn 1 Free Meal for Referrer' : '为好友赢得 1 份免费餐'}
+                <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-300">
+                  {language === 'en' ? 'New Account · Plan RM398+ Only' : '新账户 · 限 RM398 及以上配套'}
                 </span>
               </div>
 
               <p className="text-[11px] text-stone-600 leading-snug">
                 {language === 'en'
-                  ? 'Referred by a friend or colleague? Enter their referral code or phone number. They will automatically receive 1 Free Meal Credit when your meal plan purchase is confirmed!'
-                  : '受好友或同事推荐订餐？输入好友的专属推荐码或手机号，您的配套订单确认后，推荐人即可自动获赠 1 份免费餐券！'}
+                  ? 'Referred by a friend or colleague? Enter their referral code. When signing up for a new account with a plan of RM398 and above (e.g. 20-Day Lifestyle Plan or Multi-Person Plans), 1 Free Meal Credit is awarded to your referrer!'
+                  : '受好友或同事推荐订餐？输入好友的专属推荐码或手机号。新账户首次注册订购 RM398 及以上餐食配套（如20天月度计划或多人套餐），推荐人即可获赠 1 份免费餐券！'}
               </p>
+
+              {/* Plan price threshold hint */}
+              {hasPlan && !isPlanPriceEligible && (
+                <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-xl">
+                  {language === 'en'
+                    ? `💡 Note: Current plan is RM ${planPrice.toFixed(0)}. Referral free meal reward activates on plans RM398 and above (e.g. 20-Day Transformation Plan RM398).`
+                    : `💡 提示：当前配套为 RM ${planPrice.toFixed(0)}。推荐免费餐券仅在订购 RM398 及以上配套（如20天月度计划 RM398）时生效。`}
+                </div>
+              )}
+
+              {/* Existing account hint */}
+              {!isNewAccount && (
+                <div className="text-[11px] text-stone-600 bg-stone-100 border border-stone-200 px-2.5 py-1.5 rounded-xl">
+                  {language === 'en'
+                    ? '💡 Note: You are ordering with an existing account. Referral free meal reward is reserved for new account first-time sign-ups.'
+                    : '💡 提示：您正在使用已有会员账户订餐。推荐免费餐券仅适用于新用户首次注册的新账户。'}
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <input
@@ -765,18 +815,61 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               {/* Referral verification feedback */}
               {appliedReferralMember && (
-                <div className="p-2.5 rounded-xl bg-emerald-100/80 border border-emerald-300 text-xs text-emerald-950 font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                <div
+                  className={`p-2.5 rounded-xl border text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in ${
+                    isReferralEligible
+                      ? 'bg-emerald-100/80 border-emerald-300 text-emerald-950'
+                      : 'bg-amber-50 border-amber-300 text-amber-950'
+                  }`}
+                >
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <CheckCircle
+                      className={`w-4 h-4 shrink-0 ${
+                        isReferralEligible ? 'text-emerald-700' : 'text-amber-700'
+                      }`}
+                    />
                     <span>
-                      {language === 'en' ? (
-                        <>
-                          Referred by <strong className="text-emerald-900">{appliedReferralMember.name}</strong> ({getMemberReferralCode(appliedReferralMember)}) · 1 Free Meal Credit will be credited to them!
-                        </>
+                      {isReferralEligible ? (
+                        language === 'en' ? (
+                          <>
+                            🎉 <strong>Eligible for Free Meal!</strong> Referred by{' '}
+                            <strong className="text-emerald-900">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · 1 Free Meal Credit will be
+                            credited to them!
+                          </>
+                        ) : (
+                          <>
+                            🎉 <strong>符合免单资格！</strong>推荐人：
+                            <strong className="text-emerald-900">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · 订单确认后自动送 1 份免费餐券！
+                          </>
+                        )
+                      ) : !isNewAccount ? (
+                        language === 'en' ? (
+                          <>
+                            Referred by{' '}
+                            <strong className="text-amber-950">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · <em>Existing Account (Free meal applies to new sign-ups only)</em>
+                          </>
+                        ) : (
+                          <>
+                            推荐人：<strong className="text-amber-950">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · <em>已有账户（免单奖励仅限新账户注册）</em>
+                          </>
+                        )
                       ) : (
-                        <>
-                          推荐人：<strong className="text-emerald-900">{appliedReferralMember.name}</strong> ({getMemberReferralCode(appliedReferralMember)}) · 订单确认后自动送 1 份免费餐券！
-                        </>
+                        language === 'en' ? (
+                          <>
+                            Referred by{' '}
+                            <strong className="text-amber-950">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · <em>Plan is RM{planPrice.toFixed(0)} (Free meal requires RM398+ plan)</em>
+                          </>
+                        ) : (
+                          <>
+                            推荐人：<strong className="text-amber-950">{appliedReferralMember.name}</strong> (
+                            {getMemberReferralCode(appliedReferralMember)}) · <em>当前配套 RM{planPrice.toFixed(0)}（免单需 RM398+ 配套）</em>
+                          </>
+                        )
                       )}
                     </span>
                   </div>

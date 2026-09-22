@@ -198,14 +198,53 @@ export interface MemberAccount {
     remainingMeals: number;
     purchasedDate: string;
     expiryDate: string;
+    price?: number;
   } | null;
+  officialReceipts?: OfficialReceipt[];
   creditsHistory: Array<{
     id: string;
     date: string;
     type: 'purchase' | 'redeem' | 'bonus' | 'refund';
     amount: number;
     note: string;
+    receiptNumber?: string;
+    paymentAmount?: number;
+    paymentMethod?: string;
+    paymentRef?: string;
   }>;
+}
+
+export interface OfficialReceipt {
+  id: string;
+  receiptNumber: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  memberEmail?: string;
+  memberAddress: string;
+  memberArea: string;
+  memberPostalCode: string;
+  memberAddress2?: string;
+  memberArea2?: string;
+  memberPostalCode2?: string;
+  planId: string;
+  planName: string;
+  planNameZh?: string;
+  totalMeals: number;
+  bonusMeals?: number;
+  unitPrice?: number;
+  totalAmount: number;
+  paymentMethod: string;
+  paymentReference?: string;
+  paymentConfirmed: boolean;
+  paymentConfirmedAt: string;
+  confirmedBy: string;
+  issuedAt: string;
+  notes?: string;
+  companyName?: string;
+  companyRegNo?: string;
+  kitchenAddress?: string;
+  kitchenContact?: string;
 }
 
 export interface MealRedemption {
@@ -223,7 +262,7 @@ export interface MealRedemption {
   mealNameZh: string;
   mealImage: string;
   quantity?: number;
-  status: 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered';
+  status: 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   dietaryNotes?: string;
   createdAt: string;
   redeemedAt?: string;

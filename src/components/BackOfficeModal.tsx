@@ -39,12 +39,28 @@ import {
   Store,
   CalendarOff,
   RotateCcw,
+  FileText,
+  Printer,
+  Receipt,
+  CreditCard,
+  Share2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Language, SiteSettings, MealPlan, MealItem, MealRedemption, MemberAccount, MealDeletionRefundRecord } from '../types';
+import {
+  Language,
+  SiteSettings,
+  MealPlan,
+  MealItem,
+  MealRedemption,
+  MemberAccount,
+  MealDeletionRefundRecord,
+  OfficialReceipt,
+} from '../types';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
 import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
+import { OfficialReceiptModal } from './OfficialReceiptModal';
+import { createDefaultOfficialReceipt, generateReceiptNumber } from '../utils/receipt';
 
 interface BackOfficeModalProps {
   isOpen: boolean;
@@ -70,6 +86,7 @@ interface BackOfficeModalProps {
   onEnterLiveEditMode?: () => void;
   onAdminAuthChange?: (isAuthenticated: boolean) => void;
   refundRecords?: MealDeletionRefundRecord[];
+  onSaveOfficialReceipt?: (receipt: OfficialReceipt) => void;
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -96,6 +113,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onEnterLiveEditMode,
   onAdminAuthChange,
   refundRecords = [],
+  onSaveOfficialReceipt,
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -207,11 +225,177 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [newMemPostal2, setNewMemPostal2] = useState('');
   const [newMemDietary, setNewMemDietary] = useState('');
 
+  // Official Receipt issuance & preview modal state
+  const [activeReceiptForModal, setActiveReceiptForModal] = useState<OfficialReceipt | null>(null);
+  const [activeReceiptMember, setActiveReceiptMember] = useState<MemberAccount | null>(null);
+
+  // Generate Specific Package Meal Order Modal state
+  const [isGeneratingPackageOrder, setIsGeneratingPackageOrder] = useState<boolean>(false);
+  const [orderGenMember, setOrderGenMember] = useState<MemberAccount | null>(null);
+  const [orderGenPlanId, setOrderGenPlanId] = useState<string>('');
+  const [orderGenPlanName, setOrderGenPlanName] = useState<string>('');
+  const [orderGenPlanNameZh, setOrderGenPlanNameZh] = useState<string>('');
+  const [orderGenTotalMeals, setOrderGenTotalMeals] = useState<number>(20);
+  const [orderGenPrice, setOrderGenPrice] = useState<number>(398);
+  const [orderGenBonusMeals, setOrderGenBonusMeals] = useState<number>(0);
+  const [orderGenPaymentMethod, setOrderGenPaymentMethod] = useState<string>('DuitNow QR');
+  const [orderGenReferenceNo, setOrderGenReferenceNo] = useState<string>('');
+  const [orderGenPaymentConfirmed, setOrderGenPaymentConfirmed] = useState<boolean>(true);
+  const [orderGenAutoIssueReceipt, setOrderGenAutoIssueReceipt] = useState<boolean>(true);
+  const [orderGenNotes, setOrderGenNotes] = useState<string>('');
+
+  // All receipts ledger view modal
+  const [isReceiptsLedgerOpen, setIsReceiptsLedgerOpen] = useState<boolean>(false);
+  const [receiptSearchQuery, setReceiptSearchQuery] = useState<string>('');
+
   if (!isOpen) return null;
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3500);
+  };
+
+  const handleOpenReceiptForMember = (mem: MemberAccount, receipt?: OfficialReceipt) => {
+    setActiveReceiptMember(mem);
+    if (receipt) {
+      setActiveReceiptForModal(receipt);
+    } else {
+      const defaultPlan =
+        packages.find((p) => p.id === mem.activePackage?.planId || mem.activePackage?.planName.includes(p.title)) ||
+        (mem.activePackage
+          ? {
+              id: mem.activePackage.planId || 'custom-plan',
+              title: mem.activePackage.planName,
+              titleZh: mem.activePackage.planNameZh,
+              mealsTotal: mem.activePackage.totalMeals || 20,
+              totalPrice: (mem.activePackage as any).price || 398,
+            }
+          : packages[0] || { id: 'p1', title: '20-Day Transformation Plan', mealsTotal: 20, totalPrice: 398 });
+      const newReceipt = createDefaultOfficialReceipt(mem, defaultPlan as any, siteSettings);
+      setActiveReceiptForModal(newReceipt);
+    }
+  };
+
+  const handleSaveReceiptFromModal = (savedReceipt: OfficialReceipt) => {
+    if (onSaveOfficialReceipt) {
+      onSaveOfficialReceipt(savedReceipt);
+    }
+    const targetMember = members.find((m) => m.id === savedReceipt.memberId) || activeReceiptMember;
+    if (targetMember && onUpdateMemberAccount) {
+      const existingList = targetMember.officialReceipts || [];
+      const index = existingList.findIndex((r) => r.id === savedReceipt.id || r.receiptNumber === savedReceipt.receiptNumber);
+      const updatedList =
+        index >= 0
+          ? existingList.map((r, i) => (i === index ? savedReceipt : r))
+          : [savedReceipt, ...existingList];
+      const updatedMem = {
+        ...targetMember,
+        officialReceipts: updatedList,
+      };
+      onUpdateMemberAccount(updatedMem);
+    }
+    triggerToast(`✓ Saved Official Receipt #${savedReceipt.receiptNumber}!`);
+  };
+
+  const handleOpenOrderGenerator = (mem?: MemberAccount) => {
+    const target = mem || members[0] || null;
+    setOrderGenMember(target);
+    const defaultPlan = packages[0] || { id: 'p1', title: '20-Day Transformation Plan', titleZh: '20天健康塑形轻食配套', mealsTotal: 20, totalPrice: 398 };
+    setOrderGenPlanId(defaultPlan.id);
+    setOrderGenPlanName(defaultPlan.title);
+    setOrderGenPlanNameZh(defaultPlan.titleZh || defaultPlan.title);
+    setOrderGenTotalMeals(defaultPlan.mealsTotal);
+    setOrderGenPrice(defaultPlan.totalPrice);
+    setOrderGenBonusMeals(0);
+    setOrderGenPaymentMethod('DuitNow QR');
+    setOrderGenReferenceNo(`DN-${Date.now().toString().slice(-6)}`);
+    setOrderGenPaymentConfirmed(true);
+    setOrderGenAutoIssueReceipt(true);
+    setOrderGenNotes('Payment confirmed received. Package activated by Back Office.');
+    setIsGeneratingPackageOrder(true);
+  };
+
+  const handleConfirmGenerateOrder = () => {
+    if (!orderGenMember) {
+      triggerToast('Please select a customer.');
+      return;
+    }
+    if (!orderGenPlanName || Number(orderGenTotalMeals) <= 0) {
+      triggerToast('Please enter a valid plan name and meal quantity.');
+      return;
+    }
+
+    const mealsToAdd = Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0);
+    const currentRemaining = orderGenMember.activePackage?.remainingMeals || 0;
+    const newRemaining = currentRemaining + mealsToAdd;
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const expiryDate = new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0];
+
+    // 1. Create Official Receipt
+    let createdReceipt: OfficialReceipt | null = null;
+    if (orderGenAutoIssueReceipt) {
+      createdReceipt = createDefaultOfficialReceipt(
+        orderGenMember,
+        {
+          id: orderGenPlanId || `custom-pkg-${Date.now()}`,
+          title: orderGenPlanName,
+          titleZh: orderGenPlanNameZh || orderGenPlanName,
+          mealsTotal: Number(orderGenTotalMeals),
+          totalPrice: Number(orderGenPrice),
+        },
+        siteSettings,
+        orderGenPaymentMethod,
+        orderGenReferenceNo || undefined
+      );
+      createdReceipt.bonusMeals = Number(orderGenBonusMeals || 0);
+      createdReceipt.paymentConfirmed = orderGenPaymentConfirmed;
+      createdReceipt.notes = orderGenNotes || createdReceipt.notes;
+      createdReceipt.confirmedBy = 'CHILL Back Office (Finance)';
+
+      if (onSaveOfficialReceipt) {
+        onSaveOfficialReceipt(createdReceipt);
+      }
+    }
+
+    // 2. Update Member Account
+    const updatedMember: MemberAccount = {
+      ...orderGenMember,
+      activePackage: {
+        planId: orderGenPlanId || 'custom-plan',
+        planName: orderGenPlanName,
+        planNameZh: orderGenPlanNameZh || orderGenPlanName,
+        totalMeals: (orderGenMember.activePackage?.totalMeals || 0) + mealsToAdd,
+        remainingMeals: newRemaining,
+        purchasedDate: dateStr,
+        expiryDate: expiryDate,
+      },
+      creditsHistory: [
+        {
+          id: `cr-pkg-${Date.now()}`,
+          date: dateStr,
+          type: 'purchase',
+          amount: mealsToAdd,
+          note: `Order Generated: ${orderGenPlanName} (${orderGenTotalMeals} meals${orderGenBonusMeals > 0 ? ` + ${orderGenBonusMeals} bonus` : ''}) · Paid RM ${Number(orderGenPrice).toFixed(2)} [Ref: ${orderGenReferenceNo || 'Verified'}]`,
+        },
+        ...(orderGenMember.creditsHistory || []),
+      ],
+      officialReceipts: createdReceipt
+        ? [createdReceipt, ...(orderGenMember.officialReceipts || [])]
+        : orderGenMember.officialReceipts,
+    };
+
+    if (onUpdateMemberAccount) {
+      onUpdateMemberAccount(updatedMember);
+    }
+
+    setIsGeneratingPackageOrder(false);
+    triggerToast(`✓ Generated ${orderGenPlanName} order for ${orderGenMember.name}! +${mealsToAdd} meals added.`);
+
+    if (createdReceipt) {
+      setActiveReceiptMember(updatedMember);
+      setActiveReceiptForModal(createdReceipt);
+    }
   };
 
   const handleExportMembersExcel = (filteredList: MemberAccount[]) => {
@@ -3426,8 +3610,28 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => handleOpenOrderGenerator()}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          title="Generate a specific meal package order with confirmed payment for a customer"
+                        >
+                          <Package className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Generate Package Order' : '生成专属套餐订单'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsReceiptsLedgerOpen(true)}
+                          className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          title="View all issued official receipts and payment records"
+                        >
+                          <Receipt className="w-4 h-4" />
+                          <span>{language === 'en' ? 'Receipts Ledger' : '正式收据总表'}</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleExportMembersExcel(filteredMembers)}
-                          className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                           title="Export customer meal package orders and member accounts to Excel"
                         >
                           <FileSpreadsheet className="w-4 h-4" />
@@ -3702,6 +3906,53 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 </button>
                               </div>
 
+                              {/* Official Receipt Status / Quick View */}
+                              {mem.officialReceipts && mem.officialReceipts.length > 0 && (
+                                <div className="p-2 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-center justify-between gap-2 text-xs">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <Receipt className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                    <span className="font-mono text-[11px] font-bold text-stone-800 truncate">
+                                      {mem.officialReceipts[0].receiptNumber}
+                                    </span>
+                                    <span className="text-[10px] font-extrabold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                                      RM {mem.officialReceipts[0].totalAmount.toFixed(2)} (PAID)
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenReceiptForMember(mem, mem.officialReceipts![0])}
+                                    className="px-2 py-0.5 rounded-lg bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 text-[10px] font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                    title="View or print official receipt"
+                                  >
+                                    <Printer className="w-3 h-3 text-stone-500" />
+                                    <span>{language === 'en' ? 'View / Print' : '查看/打印'}</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Back Office Package Order & Receipt Generation Buttons */}
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenOrderGenerator(mem)}
+                                  className="py-2 px-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                  title="Generate specific package meal order for this customer"
+                                >
+                                  <Package className="w-3.5 h-3.5" />
+                                  <span className="truncate">{language === 'en' ? 'Generate Order' : '生成专属订单'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenReceiptForMember(mem)}
+                                  className="py-2 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                  title="Issue official receipt upon payment confirmation"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span className="truncate">{language === 'en' ? 'Issue Receipt' : '开具正式收据'}</span>
+                                </button>
+                              </div>
+
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
@@ -3709,7 +3960,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   className="flex-1 py-2 px-3 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
-                                  <span>{language === 'en' ? 'Edit Customer & Package Info' : '修改会员与套餐信息'}</span>
+                                  <span>{language === 'en' ? 'Edit Customer Info' : '修改会员信息'}</span>
                                 </button>
 
                                 <a
@@ -4199,6 +4450,530 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
             </main>
           </>
         )}
-    </div>
+        {/* MODAL: GENERATE SPECIFIC PACKAGE MEAL ORDER */}
+        {isGeneratingPackageOrder && (
+          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-emerald-800 to-emerald-950 text-white px-6 py-4 flex items-center justify-between border-b border-emerald-700/50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600/50 flex items-center justify-center text-white border border-emerald-500/30">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-heading font-black text-sm sm:text-base text-white">
+                      {language === 'en' ? 'Generate Specific Meal Package Order' : '生成专属健康餐套餐订单'}
+                    </h4>
+                    <p className="text-[11px] text-emerald-200">
+                      {language === 'en'
+                        ? 'Create custom or preset package order with confirmed payment and official receipt'
+                        : '为指定顾客录入专属套餐，确认款项到账并直接开具正式官方收据'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsGeneratingPackageOrder(false)}
+                  className="text-emerald-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-xs text-stone-800">
+                {/* 1. Target Customer Selection */}
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-stone-800 flex items-center gap-1.5 text-xs">
+                      <Users className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? '1. Target Customer' : '1. 目标客户'}</span>
+                    </label>
+                    <span className="text-[11px] text-stone-500">
+                      {language === 'en' ? 'Order will be credited to this member account' : '套餐餐券将直接入账至此客户会员'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                    <select
+                      value={orderGenMember?.id || ''}
+                      onChange={(e) => {
+                        const found = members.find((m) => m.id === e.target.value);
+                        setOrderGenMember(found || null);
+                      }}
+                      className="flex-1 px-3.5 py-2.5 rounded-xl border border-stone-300 bg-white font-bold text-stone-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                    >
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.phone}) - Current Balance: {m.activePackage?.remainingMeals || 0} meals
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {orderGenMember && (
+                    <div className="p-3 bg-white rounded-xl border border-stone-200/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <div>
+                        <span className="font-bold text-stone-900">{orderGenMember.name}</span>
+                        <span className="text-stone-500 ml-2">({orderGenMember.phone})</span>
+                        <p className="text-stone-500 mt-0.5 truncate max-w-md">
+                          📍 {orderGenMember.address || 'No address set'}, {orderGenMember.area}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-stone-400 block text-[10px]">Current Balance</span>
+                        <span className="font-extrabold text-emerald-700 text-xs">
+                          {orderGenMember.activePackage?.remainingMeals || 0} Meals Remaining
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Package Plan Presets & Details */}
+                <div className="space-y-3">
+                  <label className="font-bold text-stone-800 flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Utensils className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? '2. Select Meal Package Plan' : '2. 选择健康餐配套方案'}</span>
+                    </span>
+                    <span className="text-[11px] text-stone-400 font-normal">
+                      Click to auto-fill or customize below
+                    </span>
+                  </label>
+
+                  {/* Preset Buttons */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {packages.map((pkg) => {
+                      const isSelected = orderGenPlanId === pkg.id;
+                      return (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => {
+                            setOrderGenPlanId(pkg.id);
+                            setOrderGenPlanName(pkg.title);
+                            setOrderGenPlanNameZh(pkg.titleZh || pkg.title);
+                            setOrderGenTotalMeals(pkg.mealsTotal);
+                            setOrderGenPrice(pkg.totalPrice);
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-50 border-emerald-600 text-emerald-950 ring-2 ring-emerald-600/30 font-bold'
+                              : 'bg-white border-stone-200 hover:border-stone-300 text-stone-700'
+                          }`}
+                        >
+                          <span className="block font-bold text-[11px] leading-tight truncate">
+                            {language === 'en' ? pkg.title : pkg.titleZh || pkg.title}
+                          </span>
+                          <div className="flex items-center justify-between mt-1 text-[10px]">
+                            <span className="font-extrabold text-emerald-800">RM {pkg.totalPrice}</span>
+                            <span className="text-stone-500">{pkg.mealsTotal} meals</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Editable Plan Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Package Name (EN)</label>
+                      <input
+                        type="text"
+                        value={orderGenPlanName}
+                        onChange={(e) => setOrderGenPlanName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        placeholder="e.g. 20-Day Transformation Plan"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Package Name (ZH / 中文)</label>
+                      <input
+                        type="text"
+                        value={orderGenPlanNameZh}
+                        onChange={(e) => setOrderGenPlanNameZh(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        placeholder="例如：20天健康塑形轻食配套"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Total Meals Quota</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="1"
+                          max="300"
+                          value={orderGenTotalMeals}
+                          onChange={(e) => setOrderGenTotalMeals(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-bold text-stone-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        />
+                        <span className="absolute right-3 top-2.5 text-[10px] text-stone-400 font-bold">meals</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Package Price (RM)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-xs text-stone-400 font-bold">RM</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={orderGenPrice}
+                          onChange={(e) => setOrderGenPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full pl-9 pr-3 py-2 rounded-xl border border-stone-200 bg-white font-bold text-stone-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-emerald-800 block mb-1">+ Free Bonus Meals</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="20"
+                          value={orderGenBonusMeals}
+                          onChange={(e) => setOrderGenBonusMeals(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50/50 font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        />
+                        <span className="absolute right-3 top-2.5 text-[10px] text-emerald-700 font-bold">free</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Payment Verification */}
+                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-stone-800 flex items-center gap-1.5 text-xs">
+                      <CreditCard className="w-4 h-4 text-amber-700" />
+                      <span>{language === 'en' ? '3. Payment Confirmation Details' : '3. 收款与支付确认'}</span>
+                    </label>
+                    <span className="text-[11px] text-emerald-800 font-extrabold bg-emerald-100 px-2 py-0.5 rounded-full">
+                      ✓ Confirmed Received
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Payment Method</label>
+                      <select
+                        value={orderGenPaymentMethod}
+                        onChange={(e) => setOrderGenPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-bold text-stone-900 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                      >
+                        <option value="DuitNow QR">DuitNow QR (Direct Pay)</option>
+                        <option value="Online Banking (FPX)">Online Banking (FPX Transfer)</option>
+                        <option value="Touch 'n Go eWallet">Touch 'n Go eWallet</option>
+                        <option value="Credit Card">Credit Card</option>
+                        <option value="Cash / Manual Transfer">Cash / Manual Bank In</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-stone-600 block mb-1">Bank Reference / Txn No.</label>
+                      <input
+                        type="text"
+                        value={orderGenReferenceNo}
+                        onChange={(e) => setOrderGenReferenceNo(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                        placeholder="e.g. DN-20260922-8392"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-stone-600 block mb-1">Back Office Notes / Audit Log</label>
+                    <input
+                      type="text"
+                      value={orderGenNotes}
+                      onChange={(e) => setOrderGenNotes(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                      placeholder="e.g. Verified with bank statement. Package valid for 60 days."
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={orderGenAutoIssueReceipt}
+                        onChange={(e) => setOrderGenAutoIssueReceipt(e.target.checked)}
+                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="font-bold text-stone-800">
+                        {language === 'en'
+                          ? 'Auto-issue Official Receipt and open preview for 1-click Print & WhatsApp'
+                          : '自动开具官方正式收据并打开预览（支持一键打印/发至WhatsApp）'}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 4. Live Impact Summary */}
+                <div className="p-3.5 bg-emerald-950 text-white rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="text-emerald-400 block text-[11px] font-bold">ORDER SUMMARY</span>
+                    <span className="font-extrabold text-white text-sm">
+                      {orderGenMember?.name || 'Selected Customer'} · {orderGenPlanName}
+                    </span>
+                    <p className="text-emerald-200 text-[11px] mt-0.5">
+                      Adding +{Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0)} meals (Total new balance:{' '}
+                      {(orderGenMember?.activePackage?.remainingMeals || 0) + Number(orderGenTotalMeals) + Number(orderGenBonusMeals || 0)} meals)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-emerald-400 block text-[11px]">Total Paid Amount</span>
+                    <span className="font-heading font-black text-xl text-emerald-300">
+                      RM {Number(orderGenPrice).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsGeneratingPackageOrder(false)}
+                  className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-bold hover:bg-stone-100 cursor-pointer"
+                >
+                  {language === 'en' ? 'Cancel' : '取消'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmGenerateOrder}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center gap-2 shadow-md cursor-pointer transition-all"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>
+                    {language === 'en'
+                      ? 'Confirm Order & Issue Official Receipt'
+                      : '确认录入并开具正式收据'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: OFFICIAL RECEIPTS LEDGER */}
+        {isReceiptsLedgerOpen && (
+          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95">
+              {/* Header */}
+              <div className="bg-stone-900 text-white px-6 py-4 flex items-center justify-between border-b border-stone-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-heading font-black text-base text-white">
+                      {language === 'en' ? 'Official Receipts & Payment Confirmation Ledger' : '官方正式收据与收款确认总表'}
+                    </h4>
+                    <p className="text-xs text-stone-400">
+                      {language === 'en'
+                        ? 'Archive of all verified payment receipts issued to meal package customers'
+                        : '所有已向套餐会员开具的正式收据存根与付款凭据归档'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsReceiptsLedgerOpen(false)}
+                  className="text-stone-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Sub-toolbar */}
+              {(() => {
+                const allReceiptsList = members
+                  .flatMap((m) => (m.officialReceipts || []).map((r) => ({ receipt: r, member: m })))
+                  .sort(
+                    (a, b) =>
+                      new Date(b.receipt.issuedAt).getTime() -
+                      new Date(a.receipt.issuedAt).getTime()
+                  );
+
+                const filtered = allReceiptsList.filter(({ receipt }) => {
+                  if (!receiptSearchQuery.trim()) return true;
+                  const q = receiptSearchQuery.toLowerCase();
+                  return (
+                    receipt.receiptNumber.toLowerCase().includes(q) ||
+                    receipt.memberName.toLowerCase().includes(q) ||
+                    receipt.memberPhone.includes(q) ||
+                    receipt.planName.toLowerCase().includes(q) ||
+                    (receipt.planNameZh && receipt.planNameZh.includes(q)) ||
+                    (receipt.paymentReference && receipt.paymentReference.toLowerCase().includes(q))
+                  );
+                });
+
+                const totalRevenue = filtered.reduce((acc, { receipt }) => acc + receipt.totalAmount, 0);
+
+                const handleExportReceiptsCSV = () => {
+                  const headers = ['Receipt No', 'Date Time', 'Member ID', 'Customer Name', 'Phone', 'Package', 'Meals', 'Bonus Meals', 'Amount (RM)', 'Payment Method', 'Reference No', 'Status'];
+                  const rows = filtered.map(({ receipt }) => [
+                    receipt.receiptNumber,
+                    `"${receipt.issuedAt}"`,
+                    receipt.memberId,
+                    `"${receipt.memberName.replace(/"/g, '""')}"`,
+                    receipt.memberPhone,
+                    `"${receipt.planName.replace(/"/g, '""')}"`,
+                    receipt.totalMeals,
+                    receipt.bonusMeals || 0,
+                    receipt.totalAmount.toFixed(2),
+                    receipt.paymentMethod,
+                    `"${receipt.paymentReference || ''}"`,
+                    receipt.paymentConfirmed ? 'PAID' : 'PENDING',
+                  ]);
+                  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+                  const encodedUri = encodeURI(csvContent);
+                  const link = document.createElement('a');
+                  link.setAttribute('href', encodedUri);
+                  link.setAttribute('download', `CHILL_Official_Receipts_${new Date().toISOString().split('T')[0]}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  triggerToast('✓ Exported official receipts to CSV!');
+                };
+
+                return (
+                  <>
+                    <div className="p-4 bg-stone-50 border-b border-stone-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                        <Search className="w-4 h-4 text-stone-400" />
+                        <input
+                          type="text"
+                          value={receiptSearchQuery}
+                          onChange={(e) => setReceiptSearchQuery(e.target.value)}
+                          placeholder="Search receipt #, customer name, phone, or package..."
+                          className="w-full px-3 py-1.5 rounded-xl border border-stone-200 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-stone-600 text-xs">
+                          Total: <strong className="text-emerald-700">{filtered.length} Receipts</strong> (RM {totalRevenue.toFixed(2)})
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={handleExportReceiptsCSV}
+                          className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Export CSV</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Receipts List */}
+                    <div className="p-4 overflow-y-auto flex-1 divide-y divide-stone-100 space-y-2">
+                      {filtered.length === 0 ? (
+                        <div className="text-center py-12 text-stone-400">
+                          <Receipt className="w-10 h-10 mx-auto text-stone-300 mb-2" />
+                          <p className="font-bold text-stone-600">No official receipts found</p>
+                          <p className="text-xs text-stone-400 mt-1">
+                            Click "Issue Official Receipt" or "Generate Package Order" on any member card to create receipts.
+                          </p>
+                        </div>
+                      ) : (
+                        filtered.map(({ receipt, member }) => (
+                          <div
+                            key={receipt.id}
+                            className="p-3.5 rounded-2xl bg-white hover:bg-stone-50 border border-stone-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                          >
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-xs text-stone-900">
+                                  {receipt.receiptNumber}
+                                </span>
+                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                                  PAID ✓
+                                </span>
+                                <span className="text-stone-400 text-[11px]">
+                                  {receipt.issuedAt}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-stone-700 font-bold">
+                                {receipt.memberName} <span className="text-stone-400 font-normal">({receipt.memberPhone})</span>
+                              </p>
+
+                              <p className="text-[11px] text-stone-500 truncate">
+                                {receipt.planName} · {receipt.totalMeals} Meals
+                                {receipt.bonusMeals ? ` (+${receipt.bonusMeals} free)` : ''} · {receipt.paymentMethod}
+                                {receipt.paymentReference ? ` (Ref: ${receipt.paymentReference})` : ''}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 sm:self-center shrink-0">
+                              <div className="text-right">
+                                <span className="text-[10px] text-stone-400 block">Amount Paid</span>
+                                <span className="font-heading font-black text-sm text-stone-900">
+                                  RM {receipt.totalAmount.toFixed(2)}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveReceiptMember(member);
+                                  setActiveReceiptForModal(receipt);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>{language === 'en' ? 'View / Print' : '查看/打印'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Footer */}
+              <div className="p-3.5 bg-stone-50 border-t border-stone-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsReceiptsLedgerOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs cursor-pointer"
+                >
+                  {language === 'en' ? 'Close' : '关闭'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: OFFICIAL RECEIPT ISSUANCE & PREVIEW */}
+        {activeReceiptForModal && (
+          <OfficialReceiptModal
+            isOpen={Boolean(activeReceiptForModal)}
+            onClose={() => {
+              setActiveReceiptForModal(null);
+              setActiveReceiptMember(null);
+            }}
+            language={language}
+            member={activeReceiptMember || undefined}
+            packages={packages}
+            siteSettings={siteSettings}
+            existingReceipt={activeReceiptForModal}
+            onSaveReceipt={handleSaveReceiptFromModal}
+          />
+        )}
+      </div>
   );
 };

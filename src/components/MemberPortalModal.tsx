@@ -36,13 +36,18 @@ import {
   Copy,
   Share2,
   Users,
+  AlertTriangle,
+  FileText,
+  Printer,
 } from 'lucide-react';
-import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings } from '../types';
+import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings, OfficialReceipt } from '../types';
 import { ChillLogo } from './ChillLogo';
+import { OfficialReceiptModal } from './OfficialReceiptModal';
 import {
   getMemberReferralCode,
   buildReferralShareUrl,
   buildReferralWhatsAppMessage,
+  MIN_REFERRAL_PLAN_PRICE,
 } from '../utils/referral';
 
 interface MemberPortalModalProps {
@@ -244,12 +249,43 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [dietaryNotes, setDietaryNotes] = useState('');
   const [redemptionSuccessMsg, setRedemptionSuccessMsg] = useState('');
 
+  // Daily Meal Redemption Confirmed Popup & Double-Booking Awareness state
+  const [redemptionSuccessPopup, setRedemptionSuccessPopup] = useState<{
+    isOpen: boolean;
+    deliveryDate: string;
+    formattedDate: string;
+    mealName: string;
+    mealNameZh: string;
+    mealImage: string;
+    quantity: number;
+    deliverySlot: string;
+    deliveryAddress: string;
+    area: string;
+    postalCode: string;
+    remainingMealsAfter: number;
+    isBatch?: boolean;
+    batchDaysCount?: number;
+  } | null>(null);
+
+  // Double-booking pre-confirmation alert warning
+  const [doubleBookingWarning, setDoubleBookingWarning] = useState<{
+    isOpen: boolean;
+    date: string;
+    existingMealName: string;
+    existingMealNameZh?: string;
+    existingQty: number;
+    onProceed: () => void;
+  } | null>(null);
+
+  // Official Receipt preview modal for member
+  const [selectedReceiptForPreview, setSelectedReceiptForPreview] = useState<OfficialReceipt | null>(null);
+
   // Meal Search & Filter state
   const [mealSearchQuery, setMealSearchQuery] = useState('');
   const [selectedMealCategory, setSelectedMealCategory] = useState<string>('all');
 
-  // History sub-tab: 'deliveries' (meal deliveries) or 'refunds' (quota refund & balance records)
-  const [historySubTab, setHistorySubTab] = useState<'deliveries' | 'refunds'>('deliveries');
+  // History sub-tab: 'deliveries' (meal deliveries) or 'refunds' (quota refund & balance records) or 'receipts' (official receipts)
+  const [historySubTab, setHistorySubTab] = useState<'deliveries' | 'refunds' | 'receipts'>('deliveries');
 
   // Advance Multi-Day Planner state
   const upcomingWorkdays = useMemo(() => getUpcomingWorkdays(5), []);
@@ -523,6 +559,21 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     setSelectedDate(dateVal);
   };
 
+  // Helper: Format human-friendly display date
+  const formatDisplayDate = (dStr: string) => {
+    try {
+      const dObj = new Date(dStr + 'T00:00:00');
+      return dObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dStr;
+    }
+  };
+
   // Submit Daily Meal Redemption
   const handleRedemptionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,34 +610,77 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
 
     const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
-    const success = onRedeemMeal({
-      memberId: currentMember.id,
-      memberName: currentMember.name,
-      memberPhone: currentMember.phone,
-      deliveryDate: selectedDate,
-      deliverySlot: selectedSlot,
-      deliveryAddress: currentAddress,
-      area: currentArea,
-      postalCode: currentPostal,
-      mealId: chosenMeal.id,
-      mealName: chosenMeal.name,
-      mealNameZh: chosenMeal.nameZh,
-      mealImage: chosenMeal.image,
-      quantity: mealQuantity,
-      dietaryNotes,
-      recipeStandard: 'Standard Chef Recipe' as const,
-    });
 
-    if (success) {
-      setRedemptionSuccessMsg(
-        language === 'en'
-          ? `✓ Successfully booked ${mealQuantity} meal(s) (${chosenMeal.name}) for ${selectedDate}! Delivered: 10:00 AM – 2:00 PM.`
-          : `✓ 成功预定 ${mealQuantity} 份餐品（${chosenMeal.nameZh}），将于 ${selectedDate} 午间（10:00 AM – 2:00 PM）送达！`
-      );
-      setTimeout(() => {
-        setRedemptionSuccessMsg('');
-      }, 6000);
+    const doSubmitRedemption = () => {
+      const success = onRedeemMeal({
+        memberId: currentMember.id,
+        memberName: currentMember.name,
+        memberPhone: currentMember.phone,
+        deliveryDate: selectedDate,
+        deliverySlot: selectedSlot,
+        deliveryAddress: currentAddress,
+        area: currentArea,
+        postalCode: currentPostal,
+        mealId: chosenMeal.id,
+        mealName: chosenMeal.name,
+        mealNameZh: chosenMeal.nameZh,
+        mealImage: chosenMeal.image,
+        quantity: mealQuantity,
+        dietaryNotes,
+        recipeStandard: 'Standard Chef Recipe' as const,
+      });
+
+      if (success) {
+        const remainingAfter = Math.max(0, (currentMember.activePackage?.remainingMeals || 1) - mealQuantity);
+
+        // Pop up the official confirmation notification modal to ensure awareness and avoid double booking
+        setRedemptionSuccessPopup({
+          isOpen: true,
+          deliveryDate: selectedDate,
+          formattedDate: formatDisplayDate(selectedDate),
+          mealName: chosenMeal.name,
+          mealNameZh: chosenMeal.nameZh,
+          mealImage: chosenMeal.image,
+          quantity: mealQuantity,
+          deliverySlot: selectedSlot,
+          deliveryAddress: currentAddress,
+          area: currentArea,
+          postalCode: currentPostal,
+          remainingMealsAfter: remainingAfter,
+        });
+
+        setRedemptionSuccessMsg(
+          language === 'en'
+            ? `✓ Successfully booked ${mealQuantity} meal(s) (${chosenMeal.name}) for ${selectedDate}! Delivered: 10:00 AM – 2:00 PM.`
+            : `✓ 成功预定 ${mealQuantity} 份餐品（${chosenMeal.nameZh}），将于 ${selectedDate} 午间（10:00 AM – 2:00 PM）送达！`
+        );
+        setTimeout(() => {
+          setRedemptionSuccessMsg('');
+        }, 6000);
+      }
+    };
+
+    // Pre-check for existing booking on selected date to prevent accidental double booking
+    const existingBooking = allRedemptions.find(
+      (r) => r.memberId === currentMember.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
+    );
+
+    if (existingBooking) {
+      setDoubleBookingWarning({
+        isOpen: true,
+        date: selectedDate,
+        existingMealName: existingBooking.mealName,
+        existingMealNameZh: existingBooking.mealNameZh,
+        existingQty: existingBooking.quantity || 1,
+        onProceed: () => {
+          setDoubleBookingWarning(null);
+          doSubmitRedemption();
+        },
+      });
+      return;
     }
+
+    doSubmitRedemption();
   };
 
   // Submit Advance Multi-Day Batch Redemption
@@ -632,12 +726,30 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       redemptionsList.forEach((r) => onRedeemMeal(r));
     }
 
+    const remainingAfter = Math.max(0, currentMember.activePackage.remainingMeals - daysCount);
+
+    setRedemptionSuccessPopup({
+      isOpen: true,
+      deliveryDate: `${upcomingWorkdays[0]} ~ ${upcomingWorkdays[upcomingWorkdays.length - 1]}`,
+      formattedDate: `${formatDisplayDate(upcomingWorkdays[0])} — ${formatDisplayDate(upcomingWorkdays[upcomingWorkdays.length - 1])}`,
+      mealName: `${daysCount} Advance Scheduled Workday Bentos`,
+      mealNameZh: `${daysCount} 个工作日提前整周排餐`,
+      mealImage: menuItems[0]?.image || '',
+      quantity: daysCount,
+      deliverySlot: 'Lunch (10:00 AM – 2:00 PM)',
+      deliveryAddress: currentAddress,
+      area: currentArea,
+      postalCode: currentPostal,
+      remainingMealsAfter: remainingAfter,
+      isBatch: true,
+      batchDaysCount: daysCount,
+    });
+
     setRedemptionSuccessMsg(
       language === 'en'
         ? `✓ Successfully planned all ${daysCount} upcoming workdays in advance!`
         : `✓ 成功一次性完成未来 ${daysCount} 个工作日的所有午餐排期！`
     );
-    setPortalTab('history');
   };
 
   // Randomize batch meals
@@ -2086,6 +2198,31 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                 <span className="text-amber-700 font-bold">{selectedMealObj.protein}g protein</span>
                               </div>
                             </div>
+
+                            {/* Inline Double-Booking Notice for Selected Date */}
+                            {(() => {
+                              const existingBooking = allRedemptions.find(
+                                (r) => r.memberId === currentMember?.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
+                              );
+                              if (!existingBooking) return null;
+                              return (
+                                <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-2xl text-amber-900 text-xs flex items-start gap-2.5 mt-2 shadow-2xs">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-bold">
+                                      {language === 'en'
+                                        ? `Notice: You already have a meal booked for ${selectedDate}!`
+                                        : `温馨提示：您在 ${selectedDate} 已经有一笔午餐预定！`}
+                                    </span>
+                                    <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                                      {language === 'en'
+                                        ? `Scheduled dish: "${existingBooking.mealName}" (${existingBooking.quantity || 1} box). To avoid accidental double booking, please verify before confirming.`
+                                        : `已排餐品：“${existingBooking.mealNameZh || existingBooking.mealName}”（${existingBooking.quantity || 1}份）。为免重复订餐，请核对是否确需加订。`}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[11px] text-emerald-900 font-semibold">
                             <span>
@@ -2112,9 +2249,19 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       >
                         <Sparkles className="w-4 h-4" />
                         <span>
-                          {language === 'en'
-                            ? `Confirm & Book ${mealQuantity} Bento for ${selectedDate}`
-                            : `确认兑换 ${mealQuantity} 份餐品 (送达: ${selectedDate})`}
+                          {(() => {
+                            const existingBooking = allRedemptions.find(
+                              (r) => r.memberId === currentMember?.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
+                            );
+                            if (existingBooking) {
+                              return language === 'en'
+                                ? `Add Additional Bento for ${selectedDate} (${mealQuantity} box)`
+                                : `加订额外餐品 (送达: ${selectedDate} · ${mealQuantity}份)`;
+                            }
+                            return language === 'en'
+                              ? `Confirm & Book ${mealQuantity} Bento for ${selectedDate}`
+                              : `确认兑换 ${mealQuantity} 份餐品 (送达: ${selectedDate})`;
+                          })()}
                         </span>
                       </button>
                     </div>
@@ -2417,6 +2564,26 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         </span>
                       )}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHistorySubTab('receipts')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        historySubTab === 'receipts'
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>{language === 'en' ? 'Official Receipts' : '官方付款收据'}</span>
+                      {currentMember?.officialReceipts && currentMember.officialReceipts.length > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                          historySubTab === 'receipts' ? 'bg-emerald-900 text-white' : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {currentMember.officialReceipts.length}
+                        </span>
+                      )}
+                    </button>
                   </div>
 
                   {currentMember?.activePackage && (
@@ -2637,6 +2804,64 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     )}
                   </div>
                 )}
+
+                {/* Sub-view 3: Official Receipts */}
+                {historySubTab === 'receipts' && (
+                  <div>
+                    {!currentMember?.officialReceipts || currentMember.officialReceipts.length === 0 ? (
+                      <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 text-stone-400 text-xs space-y-2">
+                        <FileText className="w-8 h-8 text-stone-300 mx-auto" />
+                        <p>
+                          {language === 'en'
+                            ? 'No official payment receipts issued yet. Receipts will appear here once verified by kitchen administration.'
+                            : '暂无已开具的官方正式付款收据。后台确认付款后将在此展示。'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {currentMember.officialReceipts.map((rec) => (
+                          <div
+                            key={rec.id}
+                            className="p-4 rounded-2xl bg-white border border-stone-200 hover:border-emerald-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
+                                  {rec.paymentConfirmed ? (language === 'en' ? 'PAID' : '已付款') : (language === 'en' ? 'PENDING' : '待确认')}
+                                </span>
+                                <span className="font-mono text-xs font-bold text-stone-900">
+                                  #{rec.receiptNumber}
+                                </span>
+                                <span className="text-[11px] text-stone-400">· {rec.issuedAt}</span>
+                              </div>
+                              <h5 className="font-heading font-bold text-sm text-stone-900">
+                                {rec.planName}
+                              </h5>
+                              <p className="text-xs text-stone-500">
+                                {language === 'en' ? 'Payment Method:' : '支付方式:'} {rec.paymentMethod}
+                                {rec.paymentReference && ` (${rec.paymentReference})`}
+                              </p>
+                            </div>
+
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
+                              <div className="font-heading font-extrabold text-base text-emerald-800">
+                                RM {rec.totalAmount.toFixed(2)}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReceiptForPreview(rec)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>{language === 'en' ? 'View / Print Receipt' : '查看 / 打印收据'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2653,13 +2878,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       </div>
                       <h3 className="font-heading text-xl sm:text-2xl font-extrabold text-stone-900">
                         {language === 'en'
-                          ? 'Get 1 Free Meal Credit for Every Friend You Refer!'
-                          : '每成功推荐 1 位好友购买配套，即送 1 份免费餐券！'}
+                          ? 'Get 1 Free Meal Credit for Every New Friend Referral (RM398+ Plan)!'
+                          : '好友首次开户订购 RM398 及以上配套，立送您 1 份免费餐券！'}
                       </h3>
                       <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
                         {language === 'en'
-                          ? 'Invite colleagues and friends to eat clean and live healthy. Whenever someone purchases any meal plan using your Referral Code, 1 Free Meal Credit is automatically credited to your active package!'
-                          : '邀请同事与好友一起健康享用营养低卡轻食。每当好友使用您的专属推荐码购买任何餐点配套，您的账户将自动入账 1 份免费餐券（永久累计、自动抵扣）。'}
+                          ? `Invite colleagues and friends to eat clean and live healthy. Whenever a friend signs up for a new account and purchases any meal plan of RM${MIN_REFERRAL_PLAN_PRICE} and above (e.g. 20-Day Lifestyle Plan or Multi-Person Plans) using your Referral Code, 1 Free Meal Credit is automatically credited to your active package!`
+                          : `邀请同事与好友一起健康享用营养低卡轻食。每当好友注册新账户并使用您的专属推荐码购买 RM${MIN_REFERRAL_PLAN_PRICE} 及以上餐点配套（如热销的20天月度计划或双人/多人套餐），您的账户将自动入账 1 份免费餐券（永久累计、自动抵扣）。`}
                       </p>
                     </div>
 
@@ -2801,12 +3026,12 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         2
                       </div>
                       <p className="text-xs font-bold text-stone-900">
-                        {language === 'en' ? 'Friend Subscribes' : '好友订购任何健康餐配套'}
+                        {language === 'en' ? 'New Account Signs Up (RM398+ Plan)' : '好友新开户订购 RM398+ 配套'}
                       </p>
                       <p className="text-[11px] text-stone-500 leading-relaxed">
                         {language === 'en'
-                          ? 'Your friend purchases any 10, 20, 40, or group meal plan with free delivery.'
-                          : '好友订购 10、20、40 或多人健康餐配套并在结账输入您的推荐码。'}
+                          ? `Friend signs up for a new account with a plan of RM${MIN_REFERRAL_PLAN_PRICE}+ (e.g. 20-Day Plan RM398) & enters your code.`
+                          : `好友首次注册新账户并选购 RM${MIN_REFERRAL_PLAN_PRICE} 及以上配套（如20天轻体餐 RM398），结账输入您的推荐码。`}
                       </p>
                     </div>
 
@@ -2955,6 +3180,228 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* =========================================================================
+          POPUP NOTIFICATION 1: DAILY MEAL CONFIRMATION & DOUBLE-BOOKING AWARENESS
+          ========================================================================= */}
+      {redemptionSuccessPopup && redemptionSuccessPopup.isOpen && (
+        <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-stone-200 animate-in zoom-in-95">
+            {/* Top Emerald Header */}
+            <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white p-5 sm:p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 rounded-2xl bg-white/20 text-white border border-white/30 shrink-0">
+                  <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-200" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest bg-emerald-700/80 text-emerald-200 px-2.5 py-0.5 rounded-md">
+                    {language === 'en' ? 'RESERVATION CONFIRMED' : '订餐排期已确认'}
+                  </span>
+                  <h3 className="font-heading font-black text-lg sm:text-xl text-white mt-1 leading-tight">
+                    {language === 'en' ? 'Daily Meal Successfully Booked!' : '每日健康餐预定成功！'}
+                  </h3>
+                  <p className="text-xs text-emerald-100/90 mt-0.5">
+                    {language === 'en'
+                      ? 'Your meal has been securely scheduled with our kitchen team.'
+                      : '您的餐点已成功提交后厨制作排期。'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4">
+              {/* Double-Booking Prevention Awareness Box */}
+              <div className="p-4 rounded-2xl bg-amber-50/95 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
+                <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{language === 'en' ? 'Awareness: Avoid Double Booking' : '防重复订餐重要提示'}</span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  {language === 'en' ? (
+                    <>
+                      Your lunch for <strong>{redemptionSuccessPopup.formattedDate}</strong> is locked into our kitchen prep queue.{' '}
+                      <strong>Please do not submit another order for this date</strong> to avoid unintended duplicate meal quota deductions.
+                    </>
+                  ) : (
+                    <>
+                      您在 <strong>{redemptionSuccessPopup.formattedDate}</strong> 的餐点已锁定后厨制作排期。{' '}
+                      <strong>请勿就该日期重复订餐</strong>，以免重复扣除餐券。如需核对可在「配送记录」中查看。
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Order Summary Card */}
+              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
+                <div className="flex items-center gap-3 pb-3 border-b border-stone-200/70">
+                  {redemptionSuccessPopup.mealImage && (
+                    <img
+                      src={redemptionSuccessPopup.mealImage}
+                      alt={redemptionSuccessPopup.mealName}
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-stone-200 shrink-0 shadow-2xs"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-heading font-bold text-sm text-stone-900 truncate">
+                      {language === 'en' ? redemptionSuccessPopup.mealName : redemptionSuccessPopup.mealNameZh}
+                    </h4>
+                    {language !== 'en' && (
+                      <p className="text-xs text-stone-500 truncate">{redemptionSuccessPopup.mealName}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1 text-xs">
+                      <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                        {redemptionSuccessPopup.quantity} {language === 'en' ? 'Box' : '份'}
+                      </span>
+                      <span className="text-stone-500 font-medium">
+                        {language === 'en' ? 'Chef Standard Recipe' : '私厨标准配方'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
+                      {language === 'en' ? 'Delivery Date & Time' : '送餐日期与时段'}
+                    </span>
+                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>{redemptionSuccessPopup.deliveryDate}</span>
+                    </p>
+                    <p className="text-[11px] text-stone-500 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                      <span>{redemptionSuccessPopup.deliverySlot}</span>
+                    </p>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
+                      {language === 'en' ? 'Remaining Package Balance' : '套餐剩余餐券'}
+                    </span>
+                    <p className="font-extrabold text-emerald-800 text-sm flex items-center gap-1.5">
+                      <PackageCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        {redemptionSuccessPopup.remainingMealsAfter} {language === 'en' ? 'Meals Left' : '餐可用'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-stone-200/70 text-xs">
+                  <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
+                    {language === 'en' ? 'Delivery Destination' : '送餐目的地'}
+                  </span>
+                  <p className="text-stone-700 flex items-start gap-1.5 mt-0.5">
+                    <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
+                    <span>
+                      {redemptionSuccessPopup.deliveryAddress}, {redemptionSuccessPopup.area} {redemptionSuccessPopup.postalCode}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRedemptionSuccessPopup(null);
+                    setPortalTab('history');
+                  }}
+                  className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <History className="w-4 h-4" />
+                  <span>{language === 'en' ? 'View in Delivery Records' : '查阅配送记录'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRedemptionSuccessPopup(null)}
+                  className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{language === 'en' ? 'Got it / Done' : '我知道了 / 完成'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POPUP NOTIFICATION 2: DOUBLE-BOOKING PRE-CONFIRMATION WARNING MODAL
+          ========================================================================= */}
+      {doubleBookingWarning && doubleBookingWarning.isOpen && (
+        <div className="fixed inset-0 z-80 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-amber-300 animate-in zoom-in-95">
+            <div className="bg-amber-500 text-white p-5 flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-white/20 text-white shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-heading font-black text-base text-white">
+                  {language === 'en' ? 'Double Booking Notice' : '重复订餐风险提示'}
+                </h3>
+                <p className="text-xs text-amber-100">
+                  {language === 'en' ? 'You already have a scheduled lunch for this date' : '您在该送餐日期已有一笔预定记录'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-stone-700">
+              <p className="leading-relaxed">
+                {language === 'en' ? (
+                  <>
+                    You already have <strong>{doubleBookingWarning.existingQty}x {doubleBookingWarning.existingMealName}</strong> scheduled for delivery on <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong>.
+                  </>
+                ) : (
+                  <>
+                    您在 <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong> 已经成功预定了 <strong>{doubleBookingWarning.existingMealNameZh || doubleBookingWarning.existingMealName}</strong>（{doubleBookingWarning.existingQty}份）。
+                  </>
+                )}
+              </p>
+
+              <p className="text-stone-500 bg-amber-50 p-3 rounded-xl border border-amber-200">
+                {language === 'en'
+                  ? 'To avoid accidental double booking, please confirm if you intentionally want to add an additional meal box to this delivery date.'
+                  : '为避免重复扣除您的套餐餐券，请确认您是否确实需要为该日期加订多一份午餐？'}
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setDoubleBookingWarning(null)}
+                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold transition-colors cursor-pointer"
+                >
+                  {language === 'en' ? 'Cancel (Keep Existing)' : '取消（保持原有预定）'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={doubleBookingWarning.onProceed}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  {language === 'en' ? 'Yes, Book Additional Meal' : '是的，确认加订餐品'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          POPUP NOTIFICATION 3: OFFICIAL RECEIPT PREVIEW MODAL FOR MEMBER
+          ========================================================================= */}
+      {selectedReceiptForPreview && (
+        <OfficialReceiptModal
+          isOpen={Boolean(selectedReceiptForPreview)}
+          onClose={() => setSelectedReceiptForPreview(null)}
+          receipt={selectedReceiptForPreview}
+          language={language}
+          siteSettings={siteSettings}
+        />
+      )}
     </div>
   );
 };
