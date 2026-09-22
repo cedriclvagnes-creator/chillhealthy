@@ -63,8 +63,23 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
         : packages[0] || { id: 'p1', title: '20-Day Healthy Meal Plan', mealsTotal: 20, totalPrice: 398 })
     : null;
 
+  const sanitizeReceipt = (r: OfficialReceipt): OfficialReceipt => {
+    if (!r) return r;
+    return {
+      ...r,
+      companyName:
+        !r.companyName || r.companyName.includes('SDN. BHD.')
+          ? COMPANY_NAME
+          : r.companyName,
+      companyRegNo:
+        !r.companyRegNo || r.companyRegNo.includes('202401029841')
+          ? COMPANY_REG_NO
+          : r.companyRegNo,
+    };
+  };
+
   const [receipt, setReceipt] = useState<OfficialReceipt>(() => {
-    if (targetReceipt) return targetReceipt;
+    if (targetReceipt) return sanitizeReceipt(targetReceipt);
     if (member && defaultPlan) return createDefaultOfficialReceipt(member, defaultPlan as any, siteSettings);
     return {} as OfficialReceipt;
   });
@@ -76,7 +91,7 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
   // When member or targetReceipt changes, update local state
   useEffect(() => {
     if (targetReceipt) {
-      setReceipt(targetReceipt);
+      setReceipt(sanitizeReceipt(targetReceipt));
     } else if (member && defaultPlan) {
       setReceipt(createDefaultOfficialReceipt(member, defaultPlan as any, siteSettings));
     }
@@ -315,10 +330,10 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
                 <ChillLogo size="md" />
                 <div>
                   <h1 className="font-heading font-black text-xl sm:text-2xl tracking-tight text-stone-950">
-                    {COMPANY_NAME}
+                    {receipt.companyName || COMPANY_NAME}
                   </h1>
                   <p className="text-[11px] font-mono text-stone-500">
-                    Co. Reg. No: {COMPANY_REG_NO}
+                    Co. Reg. No: {receipt.companyRegNo || COMPANY_REG_NO}
                   </p>
                 </div>
               </div>
@@ -491,7 +506,7 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
             {/* Official Digital Stamp Graphic */}
             <div className="flex flex-col items-center justify-center p-3 rounded-2xl border-2 border-emerald-600 bg-emerald-50/50 text-emerald-800 text-center w-full sm:w-56 shadow-2xs rotate-[-1deg]">
               <div className="font-mono text-[9px] font-extrabold uppercase tracking-widest text-emerald-700">
-                CHILL HEALTHY SDN. BHD.
+                CHILL HEALTHY TRADING (003786393-M)
               </div>
               <div className="font-heading font-black text-sm text-emerald-950 my-0.5 tracking-wider border-y border-emerald-300 py-0.5 w-full">
                 PAID & VERIFIED

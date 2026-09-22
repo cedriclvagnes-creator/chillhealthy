@@ -1,8 +1,9 @@
 import { MemberAccount, MealPlan, OfficialReceipt, SiteSettings } from '../types';
 import { OFFICIAL_WA_DISPLAY } from './whatsapp';
 
-export const COMPANY_NAME = 'CHILL HEALTHY SDN. BHD.';
-export const COMPANY_REG_NO = '202401029841 (1568291-A)';
+export const COMPANY_NAME = 'Chill Healthy Trading';
+export const COMPANY_REG_NO = '003786393-M';
+export const COMPANY_FULL_NAME = 'Chill Healthy Trading (003786393-M)';
 export const DEFAULT_KITCHEN_ADDRESS = '18, Jalan Astaka U8/88, Bukit Jelutong, 40150 Shah Alam, Selangor';
 
 /**
@@ -75,11 +76,20 @@ export function createDefaultOfficialReceipt(
  * Generates an official WhatsApp formatted text for the receipt so it can be sent to the customer.
  */
 export function buildReceiptWhatsAppMessage(receipt: OfficialReceipt): string {
+  const companyTitle =
+    receipt.companyName && !receipt.companyName.includes('SDN. BHD.')
+      ? receipt.companyName
+      : COMPANY_NAME;
+  const regNo =
+    receipt.companyRegNo && !receipt.companyRegNo.includes('202401029841')
+      ? receipt.companyRegNo
+      : COMPANY_REG_NO;
+
   return (
     `*═══════════════════════════*%0A` +
     `🥗 *CHILL HEALTHY — OFFICIAL RECEIPT* 🥗%0A` +
-    `*${receipt.companyName || COMPANY_NAME}*%0A` +
-    `_Co. Reg: ${receipt.companyRegNo || COMPANY_REG_NO}_%0A` +
+    `*${companyTitle} (${regNo})*%0A` +
+    `_Co. Reg. No: ${regNo}_%0A` +
     `*═══════════════════════════*%0A%0A` +
     `*Receipt No:* ${receipt.receiptNumber}%0A` +
     `*Date & Time:* ${receipt.issuedAt}%0A` +
