@@ -28,6 +28,8 @@ interface AlaCarteCombinationPhotoProps {
   language: Language;
   onExploreMenu?: () => void;
   allowEdit?: boolean;
+  customPhotoUrl?: string;
+  comboMode?: 'photo' | 'grid' | 'spread';
 }
 
 const STORAGE_KEY_PHOTO = 'chillhealthy_hero_combo_photo';
@@ -82,11 +84,50 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
   language,
   onExploreMenu,
   allowEdit = false,
+  customPhotoUrl,
+  comboMode,
 }) => {
-  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'spread'>('grid');
+  const [customPhoto, setCustomPhoto] = useState<string | null>(() => {
+    if (customPhotoUrl) return customPhotoUrl;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PHOTO);
+      if (saved) return saved;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const [viewMode, setViewMode] = useState<'photo' | 'grid' | 'spread'>(() => {
+    if (comboMode) return comboMode;
+    if (customPhotoUrl) return 'photo';
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PHOTO);
+      if (saved) return 'photo';
+    } catch {
+      // ignore
+    }
+    return 'grid';
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const singleItemImageRef = useRef<HTMLInputElement>(null);
+
+  // Sync customPhotoUrl prop if updated from Back Office
+  useEffect(() => {
+    if (customPhotoUrl !== undefined) {
+      setCustomPhoto(customPhotoUrl || null);
+      if (customPhotoUrl && !comboMode) {
+        setViewMode('photo');
+      }
+    }
+  }, [customPhotoUrl, comboMode]);
+
+  useEffect(() => {
+    if (comboMode) {
+      setViewMode(comboMode);
+    }
+  }, [comboMode]);
 
   // Stateful & editable ala carte items (especially the last two ala carte items!)
   const [alaCarteItems, setAlaCarteItems] = useState<AlaCarteGridItem[]>(() => {
@@ -111,15 +152,17 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PHOTO);
-      if (saved) {
-        setCustomPhoto(saved);
+    if (!customPhotoUrl) {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_PHOTO);
+        if (saved) {
+          setCustomPhoto(saved);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
-  }, []);
+  }, [customPhotoUrl]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -129,6 +172,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
     reader.onload = () => {
       const dataUrl = reader.result as string;
       setCustomPhoto(dataUrl);
+      setViewMode('photo');
       try {
         localStorage.setItem(STORAGE_KEY_PHOTO, dataUrl);
       } catch {
@@ -140,6 +184,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
 
   const handleResetPhoto = () => {
     setCustomPhoto(null);
+    setViewMode('grid');
     try {
       localStorage.removeItem(STORAGE_KEY_PHOTO);
     } catch {
@@ -206,14 +251,16 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
 
   return (
     <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-stone-900 group">
-      {/* Hidden file input for custom photo upload */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileUpload}
-        className="hidden"
-      />
+      {/* Hidden file input for custom photo upload - ONLY in Admin Mode */}
+      {allowEdit && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+      )}
 
       {/* Top action controls bar */}
       <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-stone-900/85 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20 shadow-md">
@@ -229,7 +276,50 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
           </button>
         )}
 
-        {customPhoto && allowEdit ? (
+        {/* View mode buttons */}
+        {customPhoto && (
+          <button
+            onClick={() => setViewMode('photo')}
+            title={language === 'en' ? 'Signature Combination Photo' : '潮轻食精选单点组合照片'}
+            className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+              viewMode === 'photo'
+                ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                : 'text-stone-300 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>{language === 'en' ? 'Photo' : '封面'}</span>
+          </button>
+        )}
+
+        <button
+          onClick={() => setViewMode('grid')}
+          title={language === 'en' ? '4-Dish Ala Carte Grid' : '四款单点组合拼图'}
+          className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+            viewMode === 'grid'
+              ? 'bg-emerald-600 text-white font-bold shadow-xs'
+              : 'text-stone-300 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          <Grid2X2 className="w-3 h-3" />
+          <span>{language === 'en' ? 'Grid' : '拼图'}</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('spread')}
+          title={language === 'en' ? 'Table Spread Photo' : '餐桌全景组合'}
+          className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
+            viewMode === 'spread'
+              ? 'bg-emerald-600 text-white font-bold shadow-xs'
+              : 'text-stone-300 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          <ImageIcon className="w-3 h-3" />
+          <span>{language === 'en' ? 'Spread' : '全景'}</span>
+        </button>
+
+        {/* Admin only: Reset or Upload custom photo */}
+        {allowEdit && customPhoto && (
           <button
             onClick={handleResetPhoto}
             title={language === 'en' ? 'Reset to combination photo' : '还原组合照片'}
@@ -238,33 +328,6 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
             <RefreshCw className="w-3 h-3 text-amber-400" />
             <span>{language === 'en' ? 'Reset' : '还原'}</span>
           </button>
-        ) : (
-          <>
-            <button
-              onClick={() => setViewMode('grid')}
-              title={language === 'en' ? '4-Dish Ala Carte Grid' : '四款单点组合拼图'}
-              className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                viewMode === 'grid'
-                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                  : 'text-stone-300 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Grid2X2 className="w-3 h-3" />
-              <span>{language === 'en' ? 'Grid' : '拼图'}</span>
-            </button>
-            <button
-              onClick={() => setViewMode('spread')}
-              title={language === 'en' ? 'Table Spread Photo' : '餐桌全景组合'}
-              className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full transition-all cursor-pointer ${
-                viewMode === 'spread'
-                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                  : 'text-stone-300 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <ImageIcon className="w-3 h-3" />
-              <span>{language === 'en' ? 'Spread' : '全景'}</span>
-            </button>
-          </>
         )}
 
         {allowEdit && (
@@ -281,7 +344,7 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
 
       {/* Main Image Container */}
       <div className="w-full h-84 sm:h-96 relative overflow-hidden">
-        {customPhoto ? (
+        {customPhoto && viewMode === 'photo' ? (
           <img
             src={customPhoto}
             alt="CHILL Healthy Ala Carte Combination"

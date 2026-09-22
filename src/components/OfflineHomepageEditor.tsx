@@ -691,6 +691,7 @@ export const OfflineHomepageEditor: React.FC<OfflineHomepageEditorProps> = ({
           onExploreMenu={() => scrollToSection('menu')}
           onViewPlans={() => scrollToSection('plans')}
           onViewOrderGuide={() => scrollToSection('order-guide')}
+          siteSettings={draftSiteSettings}
           content={draftHomepageContent}
           isEditMode={isStagingEditMode}
           onEditHero={() => setActiveModal('hero')}

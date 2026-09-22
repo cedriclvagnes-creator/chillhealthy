@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowRight, ShieldCheck, Flame, Leaf, Clock, Sparkles, Star, Award, HeartHandshake, UtensilsCrossed, Edit3 } from 'lucide-react';
-import { Language, HomepageContent } from '../types';
+import { Language, HomepageContent, SiteSettings } from '../types';
 import { AlaCarteCombinationPhoto } from './AlaCarteCombinationPhoto';
 
 interface HeroBannerProps {
@@ -8,6 +8,7 @@ interface HeroBannerProps {
   onExploreMenu: () => void;
   onViewPlans: () => void;
   onViewOrderGuide?: () => void;
+  siteSettings?: SiteSettings;
   content?: HomepageContent;
   isEditMode?: boolean;
   onEditHero?: () => void;
@@ -18,6 +19,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onExploreMenu,
   onViewPlans,
   onViewOrderGuide,
+  siteSettings,
   content,
   isEditMode = false,
   onEditHero,
@@ -161,6 +163,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                 language={language}
                 onExploreMenu={onExploreMenu}
                 allowEdit={isEditMode}
+                customPhotoUrl={siteSettings?.heroComboPhotoUrl || content?.heroImage}
+                comboMode={siteSettings?.heroComboMode}
               />
 
               {/* Floating Highlight Card 1: 24 Ala Carte Choices */}

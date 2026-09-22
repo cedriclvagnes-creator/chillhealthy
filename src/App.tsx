@@ -51,10 +51,12 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const [activeSection, setActiveSection] = useState('hero');
 
-  // Site Settings (WhatsApp, phone, announcements, logo)
+  // Site Settings (WhatsApp, phone, announcements, logo, photos)
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_settings');
+      const savedCraftedPhoto = localStorage.getItem('chillhealthy_crafted_photo') || '';
+      const savedHeroComboPhoto = localStorage.getItem('chillhealthy_hero_combo_photo') || '';
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
@@ -62,9 +64,15 @@ export default function App() {
           ...parsed,
           whatsappNumber: '60126189919',
           whatsappDisplay: '+60126189919',
+          kitchenPhotoUrl: parsed.kitchenPhotoUrl || savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
+          heroComboPhotoUrl: parsed.heroComboPhotoUrl || savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
         };
       }
-      return DEFAULT_SITE_SETTINGS;
+      return {
+        ...DEFAULT_SITE_SETTINGS,
+        kitchenPhotoUrl: savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
+        heroComboPhotoUrl: savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
+      };
     } catch {
       return DEFAULT_SITE_SETTINGS;
     }
@@ -823,6 +831,20 @@ export default function App() {
   // Back Office Maintenance Handlers
   const handleUpdateSiteSettings = (newSettings: SiteSettings) => {
     setSiteSettings(newSettings);
+    if (newSettings.kitchenPhotoUrl) {
+      try {
+        localStorage.setItem('chillhealthy_crafted_photo', newSettings.kitchenPhotoUrl);
+      } catch {
+        // ignore
+      }
+    }
+    if (newSettings.heroComboPhotoUrl) {
+      try {
+        localStorage.setItem('chillhealthy_hero_combo_photo', newSettings.heroComboPhotoUrl);
+      } catch {
+        // ignore
+      }
+    }
   };
 
   const handleUpdatePackages = (newPackages: MealPlan[]) => {
@@ -1175,7 +1197,7 @@ export default function App() {
     setActiveSection(id);
     const element = document.getElementById(id);
     if (element) {
-      const yOffset = -80;
+      const yOffset = -135;
       const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: y, behavior: 'smooth' });
     }
@@ -1205,6 +1227,7 @@ export default function App() {
           onExploreMenu={() => scrollToSection('menu')}
           onViewPlans={() => scrollToSection('plans')}
           onViewOrderGuide={() => scrollToSection('order-guide')}
+          siteSettings={siteSettings}
         />
 
         <MenuSection

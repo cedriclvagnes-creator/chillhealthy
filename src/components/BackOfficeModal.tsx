@@ -44,6 +44,8 @@ import {
   Receipt,
   CreditCard,
   Share2,
+  Camera,
+  Grid2X2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -176,6 +178,13 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
   // Local editable copy of Site Settings
   const [formSettings, setFormSettings] = useState<SiteSettings>({ ...siteSettings });
+  const kitchenPhotoFileInputRef = useRef<HTMLInputElement>(null);
+  const heroComboPhotoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync formSettings whenever siteSettings updates from external changes
+  useEffect(() => {
+    setFormSettings({ ...siteSettings });
+  }, [siteSettings]);
 
   // Local editable copy of Packages
   const [editablePackages, setEditablePackages] = useState<MealPlan[]>(JSON.parse(JSON.stringify(packages)));
@@ -732,6 +741,110 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     triggerToast(language === 'en' ? '✓ Store & WhatsApp settings updated successfully!' : '✓ 站点及WhatsApp客服信息已成功保存！');
   };
 
+  // Upload Kitchen Photo from Device (Why CHILL Healthy Bento Tastes So Much Better section)
+  const handleKitchenPhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      triggerToast(language === 'en' ? 'Please select a valid image file' : '请选择有效的图片文件');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      triggerToast(language === 'en' ? 'Image file size is too large (max 8MB)' : '图片大小超过限制（最大8MB）');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        const updated = {
+          ...formSettings,
+          kitchenPhotoUrl: result,
+        };
+        setFormSettings(updated);
+        onUpdateSiteSettings(updated);
+        try {
+          localStorage.setItem('chillhealthy_crafted_photo', result);
+        } catch {
+          // ignore
+        }
+        triggerToast(language === 'en' ? '✓ Kitchen craftsmanship photo updated and live on homepage!' : '✓ 厨房实拍照片已更新并实时生效于首页！');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload Combination of Ala Carte Meals Photo (Top of Homepage)
+  const handleHeroComboPhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      triggerToast(language === 'en' ? 'Please select a valid image file' : '请选择有效的图片文件');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      triggerToast(language === 'en' ? 'Image file size is too large (max 8MB)' : '图片大小超过限制（最大8MB）');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        const updated = {
+          ...formSettings,
+          heroComboPhotoUrl: result,
+          heroComboMode: 'photo' as const,
+        };
+        setFormSettings(updated);
+        onUpdateSiteSettings(updated);
+        try {
+          localStorage.setItem('chillhealthy_hero_combo_photo', result);
+        } catch {
+          // ignore
+        }
+        triggerToast(language === 'en' ? '✓ Combination of Ala Carte Meals photo updated and live on homepage!' : '✓ 首页顶部单点餐品组合照片已更新并实时生效！');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetKitchenPhoto = () => {
+    const updated = {
+      ...formSettings,
+      kitchenPhotoUrl: '/agnes-kitchen.jpg',
+    };
+    setFormSettings(updated);
+    onUpdateSiteSettings(updated);
+    try {
+      localStorage.setItem('chillhealthy_crafted_photo', '/agnes-kitchen.jpg');
+    } catch {
+      // ignore
+    }
+    triggerToast(language === 'en' ? '✓ Reset kitchen photo to default official photo' : '✓ 已恢复默认官方厨房实拍照片');
+  };
+
+  const handleResetHeroComboPhoto = () => {
+    const updated = {
+      ...formSettings,
+      heroComboPhotoUrl: '',
+      heroComboMode: 'grid' as const,
+    };
+    setFormSettings(updated);
+    onUpdateSiteSettings(updated);
+    try {
+      localStorage.removeItem('chillhealthy_hero_combo_photo');
+    } catch {
+      // ignore
+    }
+    triggerToast(language === 'en' ? '✓ Reset to 4-Dish Ala Carte Grid' : '✓ 已恢复四款精选单点拼图展示');
+  };
+
   // Save Package changes
   const handleSavePackage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1183,6 +1296,304 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     ========================================================= */}
                 {activeTab === 'settings' && (
                   <>
+                  {/* Photo Management Card for Homepage Featured Photos */}
+                  <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs space-y-6">
+                    <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <ImageIcon className="w-5 h-5 text-emerald-700" />
+                          <h4 className="font-heading font-extrabold text-base sm:text-lg text-stone-900">
+                            {language === 'en' ? 'Homepage Core Featured Photos' : '首页核心展示照片管理（仅限后台编辑）'}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {language === 'en'
+                            ? 'Customer uploads are strictly disabled on the public site. Only photos uploaded or configured here are displayed.'
+                            : '已彻底关闭前台顾客上传权限。前台仅展示您在此上传或配置的官方照片，修改后实时同步。'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                        <Shield className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{language === 'en' ? 'Customer Uploads Disabled' : '前台顾客无权上传 · 已锁定'}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Photo 1: Kitchen Craftsmanship Photo (Why CHILL Healthy Bento Tastes So Much Better section) */}
+                      <div className="bg-stone-50/80 rounded-2xl p-4 sm:p-5 border border-stone-200 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 uppercase tracking-wide">
+                                {language === 'en' ? 'Section 4 Photo' : '第4版块实拍'}
+                              </span>
+                              <h5 className="font-heading font-bold text-sm text-stone-900 mt-1">
+                                {language === 'en' ? 'Photo Beside "Why CHILL Healthy Bento Tastes So Much Better"' : '厨房实拍照片（低卡却极致入味旁）'}
+                              </h5>
+                              <p className="text-[11px] text-stone-500 mt-0.5">
+                                {language === 'en'
+                                  ? 'Displays beside the brand story section with artisan badge.'
+                                  : '展示于品牌故事版块，带有“源自巴生·匠心手作”标识。'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Live Thumbnail / Preview */}
+                          <div className="relative w-full h-44 rounded-xl overflow-hidden bg-stone-900 border border-stone-200 shadow-inner group">
+                            <img
+                              src={formSettings.kitchenPhotoUrl || '/agnes-kitchen.jpg'}
+                              alt="Kitchen Preview"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/WhatsApp Image 2026-09-19 at 20.03.24.jpeg';
+                              }}
+                            />
+                            {/* Apron Patch Blur Overlay preview */}
+                            <div
+                              className="absolute rounded-full blur-[0.6px] pointer-events-none"
+                              style={{
+                                top: '61.5%',
+                                left: '53.5%',
+                                transform: 'translate(-50%, -50%)',
+                                width: '26%',
+                                height: '5.8%',
+                                background: 'radial-gradient(ellipse at center, #f5f5f5 0%, #ebebeb 70%, rgba(230, 230, 230, 0.95) 100%)',
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white pointer-events-none">
+                              <span className="text-[10px] font-extrabold text-emerald-400 uppercase">
+                                {language === 'en' ? 'Crafted with Care · Klang Kitchen' : '源自巴生 · 匠心手作健康餐'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Hidden File Input */}
+                          <input
+                            type="file"
+                            ref={kitchenPhotoFileInputRef}
+                            onChange={handleKitchenPhotoFileUpload}
+                            accept="image/*"
+                            className="hidden"
+                          />
+
+                          {/* URL Input */}
+                          <div>
+                            <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'Image URL (Or upload below)' : '图片URL链接（或从设备直接上传）'}
+                            </label>
+                            <input
+                              type="text"
+                              value={formSettings.kitchenPhotoUrl || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updated = { ...formSettings, kitchenPhotoUrl: val };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
+                                try {
+                                  localStorage.setItem('chillhealthy_crafted_photo', val);
+                                } catch {}
+                              }}
+                              placeholder="/agnes-kitchen.jpg or https://..."
+                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 border-t border-stone-200 flex flex-col sm:flex-row items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => kitchenPhotoFileInputRef.current?.click()}
+                            className="w-full sm:flex-1 py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>{language === 'en' ? 'Upload Kitchen Photo' : '上传厨房实拍新照片'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleResetKitchenPhoto}
+                            title={language === 'en' ? 'Reset to default official photo' : '恢复默认官方原图'}
+                            className="py-2 px-3 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>{language === 'en' ? 'Reset' : '恢复默认'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Photo 2: Combination of Ala Carte Meals Photo (Top of Homepage / Hero Banner) */}
+                      <div className="bg-stone-50/80 rounded-2xl p-4 sm:p-5 border border-stone-200 flex flex-col justify-between space-y-4">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wide">
+                                {language === 'en' ? 'Hero Banner Cover' : '首页首屏封面'}
+                              </span>
+                              <h5 className="font-heading font-bold text-sm text-stone-900 mt-1">
+                                {language === 'en' ? 'Combination of Ala Carte Meals Photo' : '单点健康餐组合封面照（首页顶部）'}
+                              </h5>
+                              <p className="text-[11px] text-stone-500 mt-0.5">
+                                {language === 'en'
+                                  ? 'Displays in the hero showcase frame at the top of the homepage.'
+                                  : '展示于首页顶部首屏，支持自定义上传照片、四款精选拼图或全景。'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Display Mode Selector */}
+                          <div className="flex items-center gap-1 p-1 bg-stone-200/70 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = {
+                                  ...formSettings,
+                                  heroComboMode: 'photo' as const,
+                                };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
+                              }}
+                              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                (formSettings.heroComboMode === 'photo' || (!formSettings.heroComboMode && formSettings.heroComboPhotoUrl))
+                                  ? 'bg-white text-emerald-800 shadow-xs'
+                                  : 'text-stone-600 hover:text-stone-900'
+                              }`}
+                            >
+                              <Sparkles className="w-3 h-3 text-amber-500" />
+                              <span>{language === 'en' ? 'Custom Photo' : '自定照片'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = {
+                                  ...formSettings,
+                                  heroComboMode: 'grid' as const,
+                                };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
+                              }}
+                              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                formSettings.heroComboMode === 'grid' || (!formSettings.heroComboMode && !formSettings.heroComboPhotoUrl)
+                                  ? 'bg-white text-emerald-800 shadow-xs'
+                                  : 'text-stone-600 hover:text-stone-900'
+                              }`}
+                            >
+                              <Grid2X2 className="w-3 h-3" />
+                              <span>{language === 'en' ? '4-Dish Grid' : '四款拼图'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = {
+                                  ...formSettings,
+                                  heroComboMode: 'spread' as const,
+                                };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
+                              }}
+                              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                formSettings.heroComboMode === 'spread'
+                                  ? 'bg-white text-emerald-800 shadow-xs'
+                                  : 'text-stone-600 hover:text-stone-900'
+                              }`}
+                            >
+                              <ImageIcon className="w-3 h-3" />
+                              <span>{language === 'en' ? 'Spread' : '全景'}</span>
+                            </button>
+                          </div>
+
+                          {/* Live Thumbnail / Preview */}
+                          <div className="relative w-full h-44 rounded-xl overflow-hidden bg-stone-900 border border-stone-200 shadow-inner group">
+                            {formSettings.heroComboPhotoUrl && (formSettings.heroComboMode === 'photo' || !formSettings.heroComboMode) ? (
+                              <img
+                                src={formSettings.heroComboPhotoUrl}
+                                alt="Combination Preview"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : formSettings.heroComboMode === 'spread' ? (
+                              <img
+                                src="https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1200&q=80"
+                                alt="Spread Preview"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5 bg-stone-800">
+                                <img src="https://admin.chillhealthy.com/uploads/h2ia7y6vd60ogckg84.jpg" alt="1" className="w-full h-full object-cover" />
+                                <img src="https://admin.chillhealthy.com/uploads/d1j2uwbv4mgowsccow.jpg" alt="2" className="w-full h-full object-cover" />
+                                <img src="https://admin.chillhealthy.com/uploads/y92l27dzynko4kock.jpg" alt="3" className="w-full h-full object-cover" />
+                                <img src="https://admin.chillhealthy.com/uploads/1uijdxelztq8w0s80o.jpg" alt="4" className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white pointer-events-none">
+                              <span className="text-[10px] font-extrabold text-amber-400 uppercase">
+                                {language === 'en' ? '★ Signature Ala Carte Selection' : '★ 潮轻食精选单点组合'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Hidden File Input */}
+                          <input
+                            type="file"
+                            ref={heroComboPhotoFileInputRef}
+                            onChange={handleHeroComboPhotoFileUpload}
+                            accept="image/*"
+                            className="hidden"
+                          />
+
+                          {/* URL Input */}
+                          <div>
+                            <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'Image URL (Or upload below)' : '图片URL链接（或从设备直接上传）'}
+                            </label>
+                            <input
+                              type="text"
+                              value={formSettings.heroComboPhotoUrl || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updated = {
+                                  ...formSettings,
+                                  heroComboPhotoUrl: val,
+                                  heroComboMode: val ? ('photo' as const) : formSettings.heroComboMode,
+                                };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
+                                try {
+                                  if (val) {
+                                    localStorage.setItem('chillhealthy_hero_combo_photo', val);
+                                  } else {
+                                    localStorage.removeItem('chillhealthy_hero_combo_photo');
+                                  }
+                                } catch {}
+                              }}
+                              placeholder="https://... or paste image URL"
+                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 border-t border-stone-200 flex flex-col sm:flex-row items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => heroComboPhotoFileInputRef.current?.click()}
+                            className="w-full sm:flex-1 py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>{language === 'en' ? 'Upload Combo Photo' : '上传单点组合照片'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleResetHeroComboPhoto}
+                            title={language === 'en' ? 'Switch back to 4-dish grid' : '恢复四款单点拼图'}
+                            className="py-2 px-3 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Grid2X2 className="w-3 h-3" />
+                            <span>{language === 'en' ? '4-Dish Grid' : '恢复拼图'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <form onSubmit={handleSaveSettings} className="max-w-4xl mx-auto space-y-5 bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs">
                   <div className="border-b border-stone-100 pb-3">
                     <h4 className="font-heading font-extrabold text-base text-stone-900">

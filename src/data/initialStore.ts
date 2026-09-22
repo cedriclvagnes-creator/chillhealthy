@@ -30,6 +30,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   instagramHandle: '@chillhealthybox',
   instagramUrl: 'https://www.instagram.com/chillhealthybox/',
   facebookUrl: 'https://www.facebook.com/chillhealthy88',
+  kitchenPhotoUrl: '/agnes-kitchen.jpg',
+  heroComboPhotoUrl: '',
+  heroComboMode: 'grid',
 };
 
 export const INITIAL_MEMBERS: MemberAccount[] = [

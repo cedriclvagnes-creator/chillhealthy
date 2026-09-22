@@ -150,6 +150,9 @@ export interface SiteSettings {
   instagramHandle?: string;
   instagramUrl?: string;
   facebookUrl?: string;
+  kitchenPhotoUrl?: string; // Photo beside "Why CHILL Healthy Bento Tastes So Much Better"
+  heroComboPhotoUrl?: string; // Photo for Combination of Ala Carte Meals at top of homepage
+  heroComboMode?: 'photo' | 'grid' | 'spread'; // Display mode for Combination photo (photo, 4-dish grid, or table spread)
 }
 
 export interface HomepageContent {
