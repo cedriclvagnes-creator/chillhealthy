@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, Clock, Calendar, ShieldCheck, ArrowRight, UserCheck, Users, HeartPulse, Plus, Edit3 } from 'lucide-react';
-import { MealPlan, Language, CartItem } from '../types';
+import { Check, Sparkles, Clock, Calendar, ShieldCheck, ArrowRight, UserCheck, Users, HeartPulse, Plus, Edit3, MessageCircle, Building2, Truck } from 'lucide-react';
+import { MealPlan, Language, CartItem, SiteSettings } from '../types';
 import { MEAL_PLANS } from '../data/menuData';
+import { buildWhatsAppUrl } from '../utils/whatsapp';
 
 interface MealPlansSectionProps {
   language: Language;
@@ -10,6 +11,7 @@ interface MealPlansSectionProps {
   onOpenMemberPortal?: () => void;
   isEditMode?: boolean;
   onEditPackages?: () => void;
+  siteSettings?: SiteSettings;
 }
 
 export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
@@ -19,11 +21,18 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
   onOpenMemberPortal,
   isEditMode = false,
   onEditPackages,
+  siteSettings,
 }) => {
   const isEn = language === 'en';
   // Track upsize choice per plan ID
   const [upsizeSelections, setUpsizeSelections] = useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = useState<'solo' | 'team' | 'all'>('solo');
+
+  // WhatsApp concierge for Big Group orders
+  const bigGroupWhatsAppUrl = buildWhatsAppUrl(
+    siteSettings?.whatsappNumber,
+    'Hi CHILL Healthy, we would like to enquire about a big group order (above 100 boxes per delivery) on top with free delivery!'
+  );
 
   const toggleUpsize = (planId: string) => {
     setUpsizeSelections((prev) => ({
@@ -135,6 +144,18 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
               }`}
             >
               {isEn ? 'All Packages (7 Plans)' : '全部配套 (7款)'}
+            </button>
+            <button
+              onClick={() => {
+                const el = document.getElementById('big-group-catering');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shadow-sm"
+            >
+              <span>🏢</span>
+              <span>{isEn ? 'Big Group (>100 Boxes Free Delivery)' : '大宗团餐 (100盒以上享免运)'}</span>
             </button>
           </div>
         </div>
@@ -333,8 +354,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       </span>
                       <span>
                         {isEn
-                          ? `Delivers ${plan.mealsPerDay} meal${plan.mealsPerDay > 1 ? 's' : ''} per day to 1 address (10:00 AM – 5:00 PM)`
-                          : `一天送${plan.mealsPerDay === 1 ? '一' : plan.mealsPerDay === 2 ? '两' : plan.mealsPerDay === 3 ? '三' : plan.mealsPerDay === 4 ? '四' : '六'}餐一个地址（10:00 AM – 5:00 PM）`}
+                          ? `Delivers ${plan.mealsPerDay} meal${plan.mealsPerDay > 1 ? 's' : ''}/day (Lunch 10:00 AM – 2:00 PM / Dinner 3:00 PM – 7:00 PM)`
+                          : `一天送${plan.mealsPerDay === 1 ? '一' : plan.mealsPerDay === 2 ? '两' : plan.mealsPerDay === 3 ? '三' : plan.mealsPerDay === 4 ? '四' : '六'}餐（午餐 10:00 AM – 2:00 PM / 晚餐 3:00 PM – 7:00 PM）`}
                       </span>
                     </div>
 
@@ -373,8 +394,75 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
           })}
         </div>
 
+        {/* Big Group Catering Everyday Banner (>100 Boxes with Free Delivery) */}
+        <div id="big-group-catering" className="mt-8 mb-8 max-w-5xl mx-auto">
+          <div className="bg-gradient-to-br from-stone-900 via-stone-850 to-emerald-950/70 rounded-3xl p-6 sm:p-8 border-2 border-emerald-500/40 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-60 h-60 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div className="space-y-3 max-w-2xl text-center lg:text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/40">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isEn ? 'Everyday Big Group & Corporate Catering' : '每日大型团体 / 企业团餐定制'}</span>
+                </div>
+                <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-white">
+                  {isEn ? (
+                    <>
+                      We Cater for <span className="text-emerald-400">Big Groups Everyday</span>!
+                    </>
+                  ) : (
+                    <>
+                      我们<span className="text-emerald-400">每天均承接大宗团餐</span>定制服务！
+                    </>
+                  )}
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+                  {isEn
+                    ? 'We do cater for big groups on everyday! Planning corporate lunches, department wellness days, training seminars, production crews, or family celebrations? Contact us for big group orders above 100 boxes per delivery on top with 100% FREE delivery, custom bulk menu curation, and dedicated delivery timing.'
+                    : '我们每天均承接大宗团餐！无论企业午餐、员工健康日、大型培训讲座、活动剧组或团体聚会，欢迎随时联系我们洽询 100 盒以上大宗团餐订单，在原有优惠基础上更专享 100% 全免运费配送与专属菜单搭配服务。'}
+                </p>
+
+                {/* Highlight Badges */}
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 pt-1 text-xs">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-stone-800/90 text-stone-200 border border-stone-700/80 font-medium">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    {isEn ? 'Cater Everyday (Mon–Sun)' : '每天承接（周一至周日）'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 font-bold">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    {isEn ? '>100 Boxes = FREE Delivery on top' : '单次满100盒 · 额外享免费配送'}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-950/80 text-amber-300 border border-amber-500/40 font-medium">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    {isEn ? 'Custom Corporate Menus' : '专属营养配比 · 正规发票'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Direct WhatsApp Call to Action */}
+              <div className="shrink-0 flex flex-col items-center gap-2 w-full sm:w-auto">
+                <a
+                  href={bigGroupWhatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4 fill-stone-950" />
+                  <span>
+                    {isEn ? 'Contact Us for Big Group (>100 Boxes)' : '联系洽询大宗团餐（>100盒享免运）'}
+                  </span>
+                </a>
+                <span className="text-[11px] text-stone-400">
+                  {isEn ? 'Above 100 boxes per delivery on top with free delivery' : '单次 100 盒以上大宗订单专享免运费配送'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Dinner & Lunch Delivery Time Timetable (Directly After Meal Plan Selection) */}
-        <div className="mt-10 mb-8 max-w-5xl mx-auto">
+        <div className="mt-8 mb-8 max-w-5xl mx-auto">
           <div className="bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 rounded-3xl p-6 sm:p-8 border border-emerald-500/30 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 -mt-8 -mr-8 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute bottom-0 left-0 -mb-8 -ml-8 w-40 h-40 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -386,13 +474,17 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                   <span>{isEn ? 'Daily Delivery Schedule · Monday to Friday' : '每日送餐时段 · 周一至周五'}</span>
                 </div>
                 <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-white">
-                  {isEn ? 'Flexible Lunch & Dinner Delivery Hours' : '午餐与晚餐双时段灵活配送'}
+                  {isEn ? 'Lunch (10:00 AM – 2:00 PM) & Dinner (3:00 PM – 7:00 PM)' : '午餐 (10:00 AM – 2:00 PM) & 晚餐 (3:00 PM – 7:00 PM)'}
                 </h3>
                 <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
                   {isEn
                     ? 'All CHILL Healthy meal plans support both Lunch and Dinner delivery options. Easily assign your preferred time slot each day in your Member Portal before the 5:00 PM cutoff.'
                     : '潮轻食所有健康餐配套均支持【午餐】及【晚餐】双时段配送。会员可自由在会员中心为每个工作日指定送达时段，每天下午 5:00 前完成隔日选餐。'}
                 </p>
+                <div className="pt-1 text-xs text-amber-300/90 font-semibold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <span>{isEn ? 'Daily cutoff before 5:00 PM.' : '每天请于下午 5:00 前完成隔天选餐。'}</span>
+                </div>
               </div>
 
               {/* Delivery Slots Cards */}
@@ -442,46 +534,67 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
 
         {/* Value Guarantees footer */}
         <div className="bg-stone-800/60 rounded-3xl p-6 sm:p-8 border border-stone-700/80 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-          <div className="space-y-1.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-              <Calendar className="w-5 h-5" />
+          <div className="space-y-1.5 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-white text-sm">
+                {isEn ? '30 Days Flexible Validity' : '30 天内弹性享用 20 餐'}
+              </h4>
+              <p className="text-xs text-stone-400 leading-relaxed">
+                {isEn
+                  ? 'Monday to Friday only. Outstation or busy? Pause anytime via WhatsApp.'
+                  : '仅限周一至周五工作日送达，公假除外。出差聚餐可随时在会员中心顺延。'}
+              </p>
             </div>
-            <h4 className="font-bold text-white text-sm">
-              {isEn ? '30 Days Flexible Validity' : '30 天内弹性享用 20 餐'}
-            </h4>
-            <p className="text-xs text-stone-400">
-              {isEn
-                ? 'Monday to Friday only. Outstation or busy? Pause anytime via WhatsApp.'
-                : '仅限周一至周五工作日送达，公假除外。出差聚餐可随时在会员中心顺延。'}
-            </p>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
-              <Clock className="w-5 h-5" />
+          <div className="space-y-2 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-white text-sm">
+                  {isEn ? 'Lunch & Dinner Delivery' : '午餐与晚餐双时段配送'}
+                </h4>
+                <p className="text-[11px] text-amber-300/90 font-medium mt-0.5">
+                  {isEn ? 'Lunch (10:00 AM – 2:00 PM) & Dinner (3:00 PM – 7:00 PM)' : '午餐 (10:00 AM – 2:00 PM) & 晚餐 (3:00 PM – 7:00 PM)'}
+                </p>
+              </div>
             </div>
-            <h4 className="font-bold text-white text-sm">
-              {isEn ? 'Lunch (10:00 AM – 2:00 PM) & Dinner (3:00 PM – 7:00 PM)' : '午餐 (10:00 AM – 2:00 PM) & 晚餐 (3:00 PM – 7:00 PM)'}
-            </h4>
-            <p className="text-xs text-stone-400">
-              {isEn
-                ? 'Lunch Delivery: 10:00 AM – 2:00 PM | Dinner Delivery: 3:00 PM – 7:00 PM. Daily cutoff before 5:00 PM.'
-                : '午餐配送：10:00 AM – 2:00 PM ｜ 晚餐配送：3:00 PM – 7:00 PM。每天请于 5:00 PM 前确定次日餐点。'}
-            </p>
+
+            {/* Tidy structured lines with clean vertical spacing */}
+            <div className="space-y-1.5 pt-1 text-xs text-stone-300">
+              <div className="bg-stone-900/80 border border-stone-700/80 rounded-xl px-2.5 py-1 text-emerald-400 font-semibold flex items-center justify-center gap-1.5">
+                <span>🍱</span>
+                <span>{isEn ? 'Lunch Delivery: 10:00 AM – 2:00 PM' : '午餐配送：10:00 AM – 2:00 PM'}</span>
+              </div>
+              <div className="bg-stone-900/80 border border-stone-700/80 rounded-xl px-2.5 py-1 text-amber-400 font-semibold flex items-center justify-center gap-1.5">
+                <span>🍲</span>
+                <span>{isEn ? 'Dinner Delivery: 3:00 PM – 7:00 PM' : '晚餐配送：3:00 PM – 7:00 PM'}</span>
+              </div>
+              <div className="text-[11px] text-stone-400 pt-0.5 font-medium">
+                {isEn ? '⏰ Daily cutoff before 5:00 PM.' : '⏰ 每天截单时间：下午 5:00 前'}
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 flex items-center justify-center mx-auto">
-              <ShieldCheck className="w-5 h-5" />
+          <div className="space-y-1.5 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <div className="w-10 h-10 rounded-2xl bg-sky-500/20 text-sky-400 flex items-center justify-center mx-auto">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <h4 className="font-bold text-white text-sm">
+                {isEn ? 'Klang Valley Free Delivery' : '巴生谷全境免费送达'}
+              </h4>
+              <p className="text-xs text-stone-400 leading-relaxed">
+                {isEn
+                  ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses.'
+                  : '包含运费无附加收费，一个会员账户支持设置办公室与家两个常用地址。'}
+              </p>
             </div>
-            <h4 className="font-bold text-white text-sm">
-              {isEn ? 'Klang Valley Free Delivery' : '巴生谷全境免费送达'}
-            </h4>
-            <p className="text-xs text-stone-400">
-              {isEn
-                ? 'Coverage across Klang Valley. 1 account supports up to 2 addresses.'
-                : '包含运费无附加收费，一个会员账户支持设置办公室与家两个常用地址。'}
-            </p>
           </div>
         </div>
       </div>

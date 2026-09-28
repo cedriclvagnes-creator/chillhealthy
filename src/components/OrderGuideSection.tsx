@@ -260,6 +260,17 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
                     </span>
                   </div>
                   <div className="flex items-start gap-2 text-xs sm:text-sm text-stone-300">
+                    <span className="text-base leading-none shrink-0 mt-0.5">🏢</span>
+                    <span>
+                      <strong className="text-amber-300">
+                        {isEn ? 'Everyday Big Group Catering: ' : '每日大宗团餐定制：'}
+                      </strong>
+                      {isEn
+                        ? 'We do cater for big groups on everyday! Contact us for big group orders above 100 boxes per delivery on top with free delivery.'
+                        : '我们每天均承接大宗团餐！单次配送 100 盒以上大宗订单更专享免运费配送，欢迎随时联系洽询。'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs sm:text-sm text-stone-300">
                     <HeartPulse className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                     <span>
                       {isEn

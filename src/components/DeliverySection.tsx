@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle, Edit3 } from 'lucide-react';
-import { Language } from '../types';
+import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle, Edit3, MessageCircle, Building2 } from 'lucide-react';
+import { Language, SiteSettings } from '../types';
 import { DELIVERY_AREAS } from '../data/menuData';
+import { buildWhatsAppUrl } from '../utils/whatsapp';
 
 interface DeliverySectionProps {
   language: Language;
   isEditMode?: boolean;
   onEditDelivery?: () => void;
+  siteSettings?: SiteSettings;
 }
 
 export const DeliverySection: React.FC<DeliverySectionProps> = ({
   language,
   isEditMode = false,
   onEditDelivery,
+  siteSettings,
 }) => {
   const [postalCode, setPostalCode] = useState('');
   const [postalResult, setPostalResult] = useState<{
@@ -21,6 +24,11 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
     areaName?: string;
     feeText?: string;
   } | null>(null);
+
+  const bigGroupWhatsAppUrl = buildWhatsAppUrl(
+    siteSettings?.whatsappNumber,
+    'Hi CHILL Healthy, we would like to enquire about a big group order (above 100 boxes per delivery) on top with free delivery!'
+  );
 
   const handleCheckPostal = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,32 +186,33 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
         </div>
 
         {/* Delivery Schedule & Klang Valley Free Delivery Highlights (No Self Pickup) */}
-        <div className="mt-10 max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200/90 shadow-2xs">
-            <div className="flex items-center gap-2 font-bold text-emerald-950 text-sm mb-1.5">
-              <Clock className="w-4 h-4 text-emerald-700 shrink-0" />
-              <span>{language === 'en' ? 'Delivery Time ｜ 配送时间' : '配送时间 ｜ Delivery Time'}</span>
-            </div>
-            <p className="text-xs text-stone-600 mb-2">
-              {language === 'en'
-                ? 'Monday to Friday (Excluding Public Holidays & Weekends)'
-                : '星期一至星期五（公假及周末除外）'}
-            </p>
-            <div className="space-y-1 text-xs">
-              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
-                <span className="font-semibold text-emerald-900">{language === 'en' ? 'Lunch Delivery:' : '午餐配送：'}</span>
-                <span className="font-bold text-emerald-700">10:00 AM – 2:00 PM</span>
+        <div className="mt-10 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200/90 shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-emerald-950 text-sm mb-1.5">
+                <Clock className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>{language === 'en' ? 'Delivery Time ｜ 配送时间' : '配送时间 ｜ Delivery Time'}</span>
               </div>
-              <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-100">
-                <span className="font-semibold text-amber-900">{language === 'en' ? 'Dinner Delivery:' : '晚餐配送：'}</span>
-                <span className="font-bold text-amber-700">3:00 PM – 7:00 PM</span>
+              <p className="text-xs text-stone-600 mb-2.5">
+                {language === 'en'
+                  ? 'Monday to Friday (Excluding Public Holidays & Weekends)'
+                  : '星期一至星期五（公假及周末除外）'}
+              </p>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between bg-white/90 px-3 py-1.5 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span className="font-semibold text-emerald-900">{language === 'en' ? '🍱 Lunch Delivery:' : '🍱 午餐配送：'}</span>
+                  <span className="font-bold text-emerald-700">10:00 AM – 2:00 PM</span>
+                </div>
+                <div className="flex items-center justify-between bg-white/90 px-3 py-1.5 rounded-xl border border-amber-100 shadow-2xs">
+                  <span className="font-semibold text-amber-900">{language === 'en' ? '🍲 Dinner Delivery:' : '🍲 晚餐配送：'}</span>
+                  <span className="font-bold text-amber-700">3:00 PM – 7:00 PM</span>
+                </div>
               </div>
             </div>
-            <p className="mt-2 text-[11px] text-stone-500">
-              {language === 'en'
-                ? 'Daily meals delivered fresh. Daily meal selection cutoff before 5:00 PM.'
-                : '每日新鲜现做送达。隔天餐点请在每天下午 5:00 前完成选择。'}
-            </p>
+            <div className="mt-3 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[11px] text-stone-600">
+              <span className="font-medium text-emerald-800">✓ {language === 'en' ? 'Daily Fresh Cooked' : '每日新鲜现做'}</span>
+              <span className="font-bold text-amber-700">{language === 'en' ? 'Daily cutoff before 5:00 PM' : '每天 5:00 PM 前截单'}</span>
+            </div>
           </div>
 
           <div className="p-5 rounded-2xl bg-sky-50/80 border border-sky-200/90 shadow-2xs flex flex-col justify-between">
@@ -220,9 +229,39 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             </div>
             <div className="mt-3 pt-2.5 border-t border-sky-200/60 flex items-center gap-1.5 text-[11px] font-semibold text-sky-800">
               <Check className="w-3.5 h-3.5 text-sky-600" />
-              <span>{language === 'en' ? 'Daily meals delivered fresh' : '每日新鲜午餐现做准时配送'}</span>
+              <span>{language === 'en' ? 'Included in all meal plans — 0 hidden surcharge' : '健康餐配套全包运费 · 无隐藏附加费'}</span>
             </div>
           </div>
+        </div>
+
+        {/* Big Group Catering Everyday Banner (>100 Boxes with Free Delivery) */}
+        <div className="mt-4 max-w-4xl mx-auto p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50/80 to-amber-50 border-2 border-amber-300/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0 font-extrabold text-xl shadow-xs">
+              🏢
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-heading font-black text-amber-950 text-sm sm:text-base">
+                  {language === 'en' ? 'Everyday Big Group Catering (>100 Boxes Free Delivery)' : '每日大型团体 / 企业团餐定制（单次满100盒享免运）'}
+                </span>
+              </div>
+              <p className="text-xs text-stone-700 mt-1 leading-relaxed">
+                {language === 'en'
+                  ? 'We do cater for big groups on everyday! Contact us for big group orders above 100 boxes per delivery on top with free delivery, custom bulk menu curation, and dedicated timing.'
+                  : '我们每天均承接大宗团餐！无论企业午餐、大型会议、讲座活动或团体聚会，欢迎随时联系我们洽询单次配送 100 盒以上大宗订单，更专享免费送达与专属菜单定制服务。'}
+              </p>
+            </div>
+          </div>
+          <a
+            href={bigGroupWhatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md whitespace-nowrap hover:scale-[1.02]"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Contact for Big Group' : '联系洽询团餐'}</span>
+          </a>
         </div>
       </div>
     </section>

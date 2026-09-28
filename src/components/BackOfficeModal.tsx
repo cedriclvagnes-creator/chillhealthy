@@ -46,6 +46,7 @@ import {
   Share2,
   Camera,
   Grid2X2,
+  Landmark,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -58,6 +59,12 @@ import {
   MealDeletionRefundRecord,
   OfficialReceipt,
 } from '../types';
+import {
+  getUpcomingMalaysiaBankHolidays,
+  getUpcomingMalaysiaWeekdayBankHolidays,
+  synchronizeMalaysiaWeekdayBankHolidays,
+  MalaysiaBankHoliday,
+} from '../utils/malaysiaHolidays';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
 import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
@@ -89,6 +96,7 @@ interface BackOfficeModalProps {
   onUpdateRedemptionOrder?: (order: MealRedemption) => void;
   onDeleteRedemptionOrder?: (id: string, reason?: string) => boolean;
   onToggleDisabledDeliveryDate?: (dateStr: string) => void;
+  onSyncMalaysiaBankHolidays?: (monthsAhead?: number) => any;
   onUpdateMemberAccount?: (member: MemberAccount) => void;
   onAddMemberAccount?: (member: MemberAccount) => void;
   onDeleteMemberAccount?: (memberId: string) => void;
@@ -116,6 +124,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateRedemptionOrder,
   onDeleteRedemptionOrder,
   onToggleDisabledDeliveryDate,
+  onSyncMalaysiaBankHolidays,
   onUpdateMemberAccount,
   onAddMemberAccount,
   onDeleteMemberAccount,
@@ -3135,6 +3144,224 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             ? (language === 'en' ? 'Re-enable Date' : '恢复该日期送餐')
                             : (language === 'en' ? 'Turn Off Date' : '设为停送日期')}
                         </button>
+                      </div>
+
+                      {/* Malaysia Bank Public Holidays (BNM Weekday Off Synchronization - 3 Months Ahead) */}
+                      <div className="pt-3 border-t border-amber-200/80 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent p-3 rounded-xl border border-amber-300/80">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🇲🇾</span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h6 className="text-xs font-black text-stone-900 tracking-wide flex items-center gap-1.5">
+                                  <Landmark className="w-3.5 h-3.5 text-amber-700" />
+                                  <span>
+                                    {language === 'en'
+                                      ? 'Malaysia Bank Public Holidays (Next 3 Months Synchronization)'
+                                      : '马来西亚银行法定公假 (未来3个月工作日自动停送同步)'}
+                                  </span>
+                                </h6>
+                              </div>
+                              <p className="text-[11px] text-stone-600 mt-0.5">
+                                {language === 'en'
+                                  ? 'Synchronizes all gazetted Malaysian bank public holidays falling on weekdays (Mon–Fri) or replacement Mondays. Automatically turns off delivery up to 3 months ahead.'
+                                  : '同步所有落在工作日（周一至周五）或周一法定补假的马来西亚银行公假。未来3个月内的公假均设为停送，会员套餐自动顺延。'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Quick Sync Action Button */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onSyncMalaysiaBankHolidays) {
+                                  const res = onSyncMalaysiaBankHolidays(3);
+                                  triggerToast(
+                                    language === 'en'
+                                      ? `🇲🇾 Synced! ${res?.newlyAddedDates?.length || 0} new bank holiday dates turned OFF (${res?.weekdayHolidays?.length || 0} total in next 3 months).`
+                                      : `🇲🇾 同步成功！新增 ${res?.newlyAddedDates?.length || 0} 个公假停送日（未来3个月共 ${res?.weekdayHolidays?.length || 0} 个平日公假）。`
+                                  );
+                                } else {
+                                  const res = synchronizeMalaysiaWeekdayBankHolidays(
+                                    siteSettings.disabledDeliveryDates || [],
+                                    new Date(),
+                                    3
+                                  );
+                                  onUpdateSiteSettings({
+                                    ...siteSettings,
+                                    disabledDeliveryDates: res.updatedDisabledDates,
+                                    lastBankHolidaySyncDate: new Date().toISOString().split('T')[0],
+                                  });
+                                  triggerToast(
+                                    language === 'en'
+                                      ? `🇲🇾 Synced! ${res.newlyAddedDates.length} new bank holiday dates turned OFF.`
+                                      : `🇲🇾 同步完成！新增 ${res.newlyAddedDates.length} 个停送公假。`
+                                  );
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-black rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02] active:scale-95"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>{language === 'en' ? 'Sync Bank Holidays (Next 3 Months)' : '一键同步公假 (未来3个月)'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Setting Toggle & Info Bar */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                          <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={siteSettings.autoSyncMalaysiaBankHolidays !== false}
+                              onChange={(e) => {
+                                onUpdateSiteSettings({
+                                  ...siteSettings,
+                                  autoSyncMalaysiaBankHolidays: e.target.checked,
+                                });
+                                triggerToast(
+                                  e.target.checked
+                                    ? '✓ Auto-sync Malaysia weekday bank holidays enabled'
+                                    : '⚠️ Auto-sync Malaysia bank holidays disabled'
+                                );
+                              }}
+                              className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span>
+                              {language === 'en'
+                                ? 'Auto-sync Malaysia weekday bank holidays on app start'
+                                : '系统启动时自动同步未来3个月的平日银行公假'}
+                            </span>
+                          </label>
+
+                          {siteSettings.lastBankHolidaySyncDate && (
+                            <span className="text-[10px] text-stone-500 font-mono">
+                              {language === 'en' ? 'Last synced:' : '上次同步:'} {siteSettings.lastBankHolidaySyncDate}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Upcoming 3 Months Malaysia Bank Holidays List */}
+                        {(() => {
+                          const upcomingHolidays = getUpcomingMalaysiaBankHolidays(new Date(), 3);
+                          const weekdayHols = upcomingHolidays.filter((h) => h.isWeekday);
+                          const offCount = weekdayHols.filter((h) =>
+                            siteSettings.disabledDeliveryDates?.includes(h.date)
+                          ).length;
+
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px] text-stone-600 px-1 font-bold">
+                                <span>
+                                  {language === 'en'
+                                    ? `Bank Holidays in Next 3 Months (${weekdayHols.length} weekday dates, ${offCount} turned OFF):`
+                                    : `未来3个月公假清单 (${weekdayHols.length}个工作日，${offCount}个已停送)：`}
+                                </span>
+                                <span className="text-[10px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                                  {offCount === weekdayHols.length
+                                    ? (language === 'en' ? '✓ All Weekday Holidays Off' : '✓ 所有平日公假已停送')
+                                    : `${offCount}/${weekdayHols.length} ${language === 'en' ? 'Turned Off' : '已停送'}`}
+                                </span>
+                              </div>
+
+                              {upcomingHolidays.length === 0 ? (
+                                <p className="text-xs text-stone-500 italic p-3 bg-white rounded-xl border border-stone-200">
+                                  {language === 'en'
+                                    ? 'No Malaysian public holidays scheduled in the next 3 months.'
+                                    : '未来3个月内无马来西亚法定银行公假。'}
+                                </p>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {upcomingHolidays.map((hol) => {
+                                    const isOff = siteSettings.disabledDeliveryDates?.includes(hol.date);
+                                    const isWeekday = hol.isWeekday;
+
+                                    return (
+                                      <div
+                                        key={hol.date}
+                                        className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${
+                                          isOff
+                                            ? 'bg-red-50/90 border-red-300 text-stone-900 shadow-2xs'
+                                            : isWeekday
+                                            ? 'bg-white border-amber-300 hover:border-amber-400'
+                                            : 'bg-stone-50/80 border-stone-200 text-stone-500'
+                                        }`}
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-mono text-xs font-black text-stone-900">
+                                              {hol.date}
+                                            </span>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-stone-200/80 text-stone-700">
+                                              {hol.dayOfWeekName}
+                                            </span>
+                                            {hol.isReplacement ? (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                                                {language === 'en' ? 'Replacement Mon' : '补假(周一)'}
+                                              </span>
+                                            ) : isWeekday ? (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                                {language === 'en' ? 'Weekday Holiday' : '平日公假'}
+                                              </span>
+                                            ) : (
+                                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-stone-100 text-stone-600">
+                                                {language === 'en' ? 'Weekend' : '周末'}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="mt-1">
+                                            <span className="text-xs font-bold text-stone-900 block truncate">
+                                              {language === 'en' ? hol.nameEn : hol.nameZh}
+                                            </span>
+                                            <span className="text-[10px] text-stone-500 block truncate">
+                                              {language === 'en' ? hol.nameZh : hol.nameEn}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Status & Toggle button */}
+                                        <div className="shrink-0 flex flex-col items-end gap-1">
+                                          {isOff ? (
+                                            <span className="text-[10px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md shadow-2xs">
+                                              OFF (停送)
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md">
+                                              {isWeekday ? (language === 'en' ? 'Active' : '正常送餐') : (language === 'en' ? 'Weekend' : '周末休')}
+                                            </span>
+                                          )}
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (onToggleDisabledDeliveryDate) {
+                                                onToggleDisabledDeliveryDate(hol.date);
+                                                triggerToast(
+                                                  isOff
+                                                    ? `✓ Re-enabled delivery for ${hol.date} (${hol.nameEn})`
+                                                    : `⚠️ Turned OFF delivery for ${hol.date} (${hol.nameEn})`
+                                                );
+                                              }
+                                            }}
+                                            className={`text-[11px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                                              isOff
+                                                ? 'bg-white hover:bg-stone-100 text-stone-700 border-stone-300'
+                                                : 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600'
+                                            }`}
+                                          >
+                                            {isOff
+                                              ? (language === 'en' ? 'Re-enable' : '恢复配送')
+                                              : (language === 'en' ? 'Turn OFF' : '设为停送')}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 

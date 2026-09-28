@@ -23,8 +23,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   whatsappNumber: '60126189919',
   whatsappDisplay: '+60126189919',
   logoUrl: '/chill-healthy-logo.svg',
-  announcementEn: '🌿 Fresh Daily Lunch & Dinner Bento Delivery Across Klang Valley & KL · WhatsApp: +60126189919',
-  announcementZh: '🌿 巴生河流域及吉隆坡高品质午餐与晚餐外卖餐盒 · 官方 WhatsApp: +60126189919',
+  announcementEn: '🌿 Fresh Daily Lunch & Dinner · Big Group Catering Everyday (>100 Boxes Free Delivery) · WhatsApp: +60126189919',
+  announcementZh: '🌿 午餐与晚餐鲜制配送 · 每日承接大宗团餐（单次100盒以上享免运费） · WhatsApp: +60126189919',
   kitchenAddress: 'CHILL Healthy Kitchen, Klang & Selangor Delivery Hub, Malaysia',
   kitchenHours: 'Monday to Friday: 8:30 AM – 7:30 PM',
   instagramHandle: '@chillhealthybox',
@@ -33,6 +33,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   kitchenPhotoUrl: '/agnes-kitchen.jpg',
   heroComboPhotoUrl: '',
   heroComboMode: 'grid',
+  autoSyncMalaysiaBankHolidays: true,
 };
 
 export const INITIAL_MEMBERS: MemberAccount[] = [

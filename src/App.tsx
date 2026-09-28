@@ -46,12 +46,13 @@ import {
   evaluateMemberPackageExpiration,
   getTodayStr,
 } from './utils/packageExpiry';
+import { synchronizeMalaysiaWeekdayBankHolidays } from './utils/malaysiaHolidays';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const [activeSection, setActiveSection] = useState('hero');
 
-  // Site Settings (WhatsApp, phone, announcements, logo, photos)
+  // Site Settings (WhatsApp, phone, announcements, logo, photos, Malaysia bank holidays auto-off)
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_settings');
@@ -59,17 +60,28 @@ export default function App() {
       const savedHeroComboPhoto = localStorage.getItem('chillhealthy_hero_combo_photo') || '';
       if (saved) {
         const parsed = JSON.parse(saved);
+        const baseDisabled = parsed.disabledDeliveryDates || [];
+        const isAutoSync = parsed.autoSyncMalaysiaBankHolidays !== false;
+        const initialDisabled = isAutoSync
+          ? synchronizeMalaysiaWeekdayBankHolidays(baseDisabled, new Date(), 3).updatedDisabledDates
+          : baseDisabled;
+
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
+          autoSyncMalaysiaBankHolidays: isAutoSync,
+          disabledDeliveryDates: initialDisabled,
           whatsappNumber: '60126189919',
           whatsappDisplay: '+60126189919',
           kitchenPhotoUrl: parsed.kitchenPhotoUrl || savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
           heroComboPhotoUrl: parsed.heroComboPhotoUrl || savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
         };
       }
+      const initialSync = synchronizeMalaysiaWeekdayBankHolidays([], new Date(), 3);
       return {
         ...DEFAULT_SITE_SETTINGS,
+        autoSyncMalaysiaBankHolidays: true,
+        disabledDeliveryDates: initialSync.updatedDisabledDates,
         kitchenPhotoUrl: savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
         heroComboPhotoUrl: savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
       };
@@ -1049,10 +1061,26 @@ export default function App() {
       const updated = exists ? current.filter((d) => d !== dateStr) : [...current, dateStr].sort();
       const nextSettings = { ...prev, disabledDeliveryDates: updated };
       try {
-        localStorage.setItem('chillhealthy_sitesettings', JSON.stringify(nextSettings));
+        localStorage.setItem('chillhealthy_settings', JSON.stringify(nextSettings));
       } catch {}
       return nextSettings;
     });
+  };
+
+  // Synchronize Malaysia weekday bank holidays up to 3 months ahead
+  const handleSyncMalaysiaBankHolidays = (monthsAhead: number = 3) => {
+    const current = siteSettings.disabledDeliveryDates || [];
+    const syncRes = synchronizeMalaysiaWeekdayBankHolidays(current, new Date(), monthsAhead);
+    const nextSettings = {
+      ...siteSettings,
+      disabledDeliveryDates: syncRes.updatedDisabledDates,
+      lastBankHolidaySyncDate: new Date().toISOString().split('T')[0],
+    };
+    setSiteSettings(nextSettings);
+    try {
+      localStorage.setItem('chillhealthy_settings', JSON.stringify(nextSettings));
+    } catch {}
+    return syncRes;
   };
 
   // Reset password by handphone (for WhatsApp TAC verification)
@@ -1242,6 +1270,7 @@ export default function App() {
           onAddPlanToCart={handleAddToCart}
           packages={packages}
           onOpenMemberPortal={() => setIsMemberPortalOpen(true)}
+          siteSettings={siteSettings}
         />
 
         <OrderGuideSection
@@ -1272,7 +1301,10 @@ export default function App() {
           }}
         />
 
-        <DeliverySection language={language} />
+        <DeliverySection
+          language={language}
+          siteSettings={siteSettings}
+        />
 
         <ReviewsSection language={language} />
       </main>
@@ -1440,6 +1472,7 @@ export default function App() {
           onUpdateRedemptionOrder={handleUpdateRedemptionOrder}
           onDeleteRedemptionOrder={handleDeleteRedemptionOrder}
           onToggleDisabledDeliveryDate={handleToggleDisabledDeliveryDate}
+          onSyncMalaysiaBankHolidays={handleSyncMalaysiaBankHolidays}
           members={members}
           onUpdateMemberCredits={handleUpdateMemberCredits}
           onUpdateMemberAccount={handleUpdateMemberAccount}

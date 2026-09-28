@@ -20,6 +20,7 @@ import {
   FileCheck,
   Leaf,
   Truck,
+  Facebook,
 } from 'lucide-react';
 import { Language, CartItem, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
@@ -362,19 +363,22 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>{language === 'en' ? 'Delivery Coverage' : '配送范围'}</span>
               </button>
 
-              {/* 7. IG Posts */}
+              {/* 7. Follow FB & IG */}
               <button
                 id="nav-link-instagram"
                 onClick={() => scrollToSection('instagram')}
                 className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs sm:text-[13px] font-bold whitespace-nowrap transition-all cursor-pointer ${
                   activeSection === 'instagram'
-                    ? 'bg-pink-700 text-white shadow-xs'
-                    : 'text-stone-700 hover:text-pink-700 hover:bg-white hover:shadow-2xs'
+                    ? 'bg-stone-900 text-white shadow-xs'
+                    : 'text-stone-700 hover:text-stone-900 hover:bg-white hover:shadow-2xs'
                 }`}
-                title="Instagram @chillhealthybox"
+                title="Follow CHILL Healthy on Facebook & Instagram"
               >
-                <Instagram className="w-3.5 h-3.5 text-pink-600 shrink-0" />
-                <span>{language === 'en' ? 'IG Posts' : '官方 IG'}</span>
+                <div className="flex items-center -space-x-1 shrink-0">
+                  <Facebook className="w-3.5 h-3.5 text-[#1877F2]" />
+                  <Instagram className="w-3.5 h-3.5 text-pink-600" />
+                </div>
+                <span>{language === 'en' ? 'Follow FB & IG' : '关注 FB & IG'}</span>
               </button>
             </nav>
           </div>
@@ -436,6 +440,23 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
+                onClick={() => {
+                  scrollToSection('plans');
+                  setTimeout(() => {
+                    const el = document.getElementById('big-group-catering');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 150);
+                }}
+                className="w-full text-left py-2.5 px-3.5 rounded-xl text-amber-900 bg-amber-50/80 border border-amber-200/80 font-semibold hover:bg-amber-100 flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm">🏢</span>
+                  <span>{language === 'en' ? 'Big Group Catering Everyday' : '每日大型团餐定制'}</span>
+                </div>
+                <span className="text-[10px] bg-amber-500 text-stone-950 font-extrabold px-2 py-0.5 rounded-full">&gt;100 Free Delivery</span>
+              </button>
+
+              <button
                 onClick={() => scrollToSection('order-guide')}
                 className="w-full text-left py-2.5 px-3.5 rounded-xl text-stone-800 font-semibold hover:bg-stone-100 flex items-center gap-3 cursor-pointer"
               >
@@ -490,13 +511,16 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={() => scrollToSection('instagram')}
-                className="w-full text-left py-2.5 px-3.5 rounded-xl text-pink-700 font-semibold hover:bg-pink-50 cursor-pointer flex items-center justify-between"
+                className="w-full text-left py-2.5 px-3.5 rounded-xl text-stone-800 font-semibold hover:bg-stone-100 cursor-pointer flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <Instagram className="w-4 h-4 text-pink-600 shrink-0" />
-                  <span>{language === 'en' ? 'Official Instagram' : '官方 Instagram 动态'}</span>
+                  <div className="flex items-center -space-x-1 shrink-0">
+                    <Facebook className="w-4 h-4 text-[#1877F2]" />
+                    <Instagram className="w-4 h-4 text-pink-600" />
+                  </div>
+                  <span>{language === 'en' ? 'Follow Us on FB & IG' : '关注官方 FB 与 IG'}</span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-pink-700">@chillhealthybox</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-700">@chillhealthybox</span>
               </button>
             </div>
 

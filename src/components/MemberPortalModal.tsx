@@ -41,6 +41,7 @@ import {
   Printer,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings, OfficialReceipt } from '../types';
+import { getMalaysiaHolidayInfo } from '../utils/malaysiaHolidays';
 import { ChillLogo } from './ChillLogo';
 import { OfficialReceiptModal } from './OfficialReceiptModal';
 import {
@@ -547,10 +548,16 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
 
     if (siteSettings.disabledDeliveryDates?.includes(dateVal)) {
+      const hol = getMalaysiaHolidayInfo(dateVal);
+      const holName = hol ? (language === 'en' ? hol.nameEn : hol.nameZh) : '';
       alert(
         language === 'en'
-          ? `⚠️ Notice: ${dateVal} has been turned off by kitchen administration (holiday or off-day). Please select another date.`
-          : `⚠️ 提示：${dateVal} 已被后厨管理关闭（节假日或休厨日）。请选择其他送餐日期。`
+          ? hol
+            ? `🇲🇾 Notice: ${dateVal} is an official Malaysia Bank Public Holiday (${holName}). Delivery is turned off and your package validity automatically extends by +1 day. Please select another workday.`
+            : `⚠️ Notice: ${dateVal} has been turned off by kitchen administration (holiday or off-day). Please select another date.`
+          : hol
+            ? `🇲🇾 提示：${dateVal} 为马来西亚银行法定公假（${holName}）。后厨暂停配送，您的会员套餐有效期已自动顺延 +1 天。请选择其他工作日。`
+            : `⚠️ 提示：${dateVal} 已被后厨管理关闭（节假日或休厨日）。请选择其他送餐日期。`
       );
       setSelectedDate(getNextWorkday(1));
       return;
@@ -591,10 +598,16 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
 
     if (siteSettings.disabledDeliveryDates?.includes(selectedDate)) {
+      const hol = getMalaysiaHolidayInfo(selectedDate);
+      const holName = hol ? (language === 'en' ? hol.nameEn : hol.nameZh) : '';
       alert(
         language === 'en'
-          ? `⚠️ Notice: The selected date (${selectedDate}) has been turned off by kitchen administration. Please select another date.`
-          : `⚠️ 提示：所选送餐日期 (${selectedDate}) 已由后厨暂停送餐，请选择其他送餐日期。`
+          ? hol
+            ? `🇲🇾 Notice: ${selectedDate} is a Malaysia Bank Public Holiday (${holName}). Delivery is turned off and your meal plan validity is extended. Please select another date.`
+            : `⚠️ Notice: The selected date (${selectedDate}) has been turned off by kitchen administration. Please select another date.`
+          : hol
+            ? `🇲🇾 提示：所选日期 (${selectedDate}) 为马来西亚银行法定公假（${holName}），已暂停送餐。您的套餐将自动顺延，请选择其他日期。`
+            : `⚠️ 提示：所选送餐日期 (${selectedDate}) 已由后厨暂停送餐，请选择其他送餐日期。`
       );
       return;
     }
@@ -2044,6 +2057,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               {upcomingWorkdays.map((wDate) => {
                                 const isSelected = selectedDate === wDate;
                                 const isOff = siteSettings.disabledDeliveryDates?.includes(wDate);
+                                const hol = getMalaysiaHolidayInfo(wDate);
                                 const dObj = new Date(wDate + 'T00:00:00');
                                 const dayName = dObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
                                   weekday: 'short',
@@ -2057,15 +2071,20 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                     type="button"
                                     disabled={isOff}
                                     onClick={() => handleDateChange(wDate)}
+                                    title={
+                                      isOff && hol
+                                        ? `Malaysia Bank Public Holiday: ${hol.nameEn} / ${hol.nameZh} (Delivery Paused)`
+                                        : undefined
+                                    }
                                     className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
                                       isSelected
                                         ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
                                         : isOff
-                                        ? 'bg-stone-100 text-stone-400 border-stone-200 line-through cursor-not-allowed'
+                                        ? 'bg-red-50 text-red-500 border-red-200 line-through cursor-not-allowed'
                                         : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
                                     }`}
                                   >
-                                    {dayName} {isOff && '(Off)'}
+                                    {dayName} {isOff && (hol ? `(🇲🇾 ${language === 'en' ? hol.nameEn : hol.nameZh} Off)` : '(Off)')}
                                   </button>
                                 );
                               })}

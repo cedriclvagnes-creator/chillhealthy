@@ -16,9 +16,11 @@ import {
   Home,
   Gift,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { CartItem, Language, SiteSettings, MemberAccount } from '../types';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
+import { getMalaysiaHolidayInfo } from '../utils/malaysiaHolidays';
 import {
   getMemberReferralCode,
   findMemberByReferralCode,
@@ -158,11 +160,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const [deliveryDate, setDeliveryDate] = useState(() => {
-    // Next workday (Monday - Friday)
+    // Next available active delivery workday (Monday - Friday, excluding admin/bank holiday off dates)
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    if (d.getDay() === 6) d.setDate(d.getDate() + 2); // if Saturday, move to Monday
-    if (d.getDay() === 0) d.setDate(d.getDate() + 1); // if Sunday, move to Monday
+    for (let i = 0; i < 30; i++) {
+      const day = d.getDay();
+      const str = d.toISOString().split('T')[0];
+      if (day !== 0 && day !== 6 && !siteSettings.disabledDeliveryDates?.includes(str)) {
+        return str;
+      }
+      d.setDate(d.getDate() + 1);
+    }
     return d.toISOString().split('T')[0];
   });
 
@@ -196,6 +204,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     e.preventDefault();
     if (!name || !phone || !address) {
       alert(language === 'en' ? 'Please complete all required fields.' : '请填写完整联系信息与送餐地址。');
+      return;
+    }
+
+    if (siteSettings.disabledDeliveryDates?.includes(deliveryDate)) {
+      const hol = getMalaysiaHolidayInfo(deliveryDate);
+      alert(
+        language === 'en'
+          ? hol
+            ? `🇲🇾 Notice: ${deliveryDate} is a Malaysia Bank Public Holiday (${hol.nameEn}). Delivery is turned off. Please select another delivery date.`
+            : `⚠️ Notice: Selected date (${deliveryDate}) has been turned off by kitchen administration. Please select another date.`
+          : hol
+            ? `🇲🇾 提示：${deliveryDate} 为马来西亚银行法定公假（${hol.nameZh}），后厨暂停配送。请选择其他工作日。`
+            : `⚠️ 提示：所选日期 (${deliveryDate}) 后厨已暂停配送，请选择其他日期。`
+      );
       return;
     }
 
@@ -694,6 +716,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   onChange={(e) => setDeliveryDate(e.target.value)}
                   className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 bg-white"
                 />
+                {siteSettings.disabledDeliveryDates?.includes(deliveryDate) && (() => {
+                  const hol = getMalaysiaHolidayInfo(deliveryDate);
+                  return (
+                    <div className="mt-1.5 p-2 rounded-lg bg-amber-50 border border-amber-300 text-[11px] text-amber-900 font-semibold flex items-start gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <span>
+                        {language === 'en'
+                          ? hol
+                            ? `🇲🇾 Notice: ${deliveryDate} is a Malaysia Bank Public Holiday (${hol.nameEn}). Delivery is turned off. Please select another workday.`
+                            : `⚠️ Notice: ${deliveryDate} is turned off by kitchen administration. Please select another date.`
+                          : hol
+                            ? `🇲🇾 提示：${deliveryDate} 为马来西亚银行法定公假（${hol.nameZh}），已暂停配送。请选择其他工作日。`
+                            : `⚠️ 提示：${deliveryDate} 已暂停配送，请选择其他配送日期。`}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

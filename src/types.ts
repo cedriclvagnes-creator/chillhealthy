@@ -147,6 +147,8 @@ export interface SiteSettings {
   kitchenAddress: string;
   kitchenHours: string;
   disabledDeliveryDates?: string[];
+  autoSyncMalaysiaBankHolidays?: boolean; // Automatically sync Malaysian bank weekday holidays up to 3 months ahead
+  lastBankHolidaySyncDate?: string; // Last timestamp/date when bank holidays were synced
   instagramHandle?: string;
   instagramUrl?: string;
   facebookUrl?: string;
