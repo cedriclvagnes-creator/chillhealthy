@@ -16,7 +16,7 @@ export const DEFAULT_HOMEPAGE_CONTENT: HomepageContent = {
   storySubtitleZh: '— 每一份，皆是用心手作的健康温度',
   storyDescriptionEn: 'Most people give up on diets not because of lack of willpower, but because traditional diet food is dry, tasteless, and exhausting to maintain. At CHILL Healthy, we combine modern sous-vide culinary science with authentic Asian home-cooking flavors so you can eat clean consistently without feeling deprived.',
   storyDescriptionZh: '绝大多数人减脂失败，不是毅力不足，而是传统减脂餐太难下咽！CHILL Healthy 潮轻食突破传统束缚，将法式低温慢煮工艺与南洋风味巧妙结合，坚持0味精、低盐低油，让每天的健康午餐成为期待已久的生活享受。',
-  kitchenPhotoUrl: '/agnes-kitchen.jpg',
+  kitchenPhotoUrl: 'https://admin.chillhealthy.com/uploads/36yvg4y1z0aoc0wwsg.jpg',
 };
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -30,7 +30,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   instagramHandle: '@chillhealthybox',
   instagramUrl: 'https://www.instagram.com/chillhealthybox/',
   facebookUrl: 'https://www.facebook.com/chillhealthy88',
-  kitchenPhotoUrl: '/agnes-kitchen.jpg',
+  kitchenPhotoUrl: 'https://admin.chillhealthy.com/uploads/36yvg4y1z0aoc0wwsg.jpg',
   heroComboPhotoUrl: '',
   heroComboMode: 'grid',
   autoSyncMalaysiaBankHolidays: true,

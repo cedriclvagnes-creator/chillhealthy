@@ -39,6 +39,8 @@ import {
   AlertTriangle,
   FileText,
   Printer,
+  Crown,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { Language, MemberAccount, MealItem, MealPlan, MealRedemption, SiteSettings, OfficialReceipt } from '../types';
 import { getMalaysiaHolidayInfo } from '../utils/malaysiaHolidays';
@@ -1785,12 +1787,25 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setPortalTab('renew')}
-                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-transform active:scale-95 cursor-pointer"
-                    >
-                      {language === 'en' ? 'Subscribe Plan' : '购买配套'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPortalTab('renew')}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 hover:from-amber-400 hover:to-emerald-600 text-white font-extrabold text-xs shadow-md transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Crown className="w-3.5 h-3.5 text-amber-200" />
+                        <span>{language === 'en' ? '👑 Subscribe Plan (Save RM120+)' : '👑 选购超值配套 (立省RM120+)'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onOpenMenu || onClose}
+                        className="px-3.5 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 text-stone-200 hover:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-stone-600"
+                        title={language === 'en' ? 'Order Single Ala Carte Bento' : '单点今日外卖餐盒'}
+                      >
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-amber-300" />
+                        <span>{language === 'en' ? 'Order Ala Carte' : '单点今日外卖'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2259,30 +2274,67 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         </div>
                       )}
 
-                      {/* Submit Redemption Button */}
-                      <button
-                        type="button"
-                        onClick={handleRedemptionSubmit}
-                        disabled={!currentMember.activePackage || currentMember.activePackage.remainingMeals <= 0}
-                        className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98"
-                      >
-                        <Sparkles className="w-4 h-4" />
-                        <span>
-                          {(() => {
-                            const existingBooking = allRedemptions.find(
-                              (r) => r.memberId === currentMember?.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
-                            );
-                            if (existingBooking) {
+                      {/* Submit Redemption Button or 0-Meal Action Guidance */}
+                      {(!currentMember.activePackage || currentMember.activePackage.remainingMeals <= 0) ? (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-3">
+                          <div className="flex items-start gap-2.5 text-xs text-amber-950">
+                            <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-amber-900">
+                                {language === 'en'
+                                  ? 'You currently have 0 meal credits.'
+                                  : '您当前暂无可用餐额（0餐）。'}
+                              </p>
+                              <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                                {language === 'en'
+                                  ? 'Upgrade to a CHILL Meal Plan for maximum savings (from RM19.90/meal with 100% Free Delivery), or order fresh Ala Carte bentos directly!'
+                                  : '强烈建议您选购周期餐包享天天免运费与低至RM19.90/餐超值优惠；您也可以随时直接单点今日轻食！'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setPortalTab('renew')}
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 hover:from-amber-400 hover:to-emerald-600 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                            >
+                              <Crown className="w-3.5 h-3.5 text-amber-200" />
+                              <span>{language === 'en' ? '👑 Upgrade to Meal Plan' : '👑 选购健康餐配套'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={onOpenMenu || onClose}
+                              className="py-2.5 px-4 rounded-xl bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600" />
+                              <span>{language === 'en' ? 'Order Ala Carte' : '单点今日餐品'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRedemptionSubmit}
+                          className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>
+                            {(() => {
+                              const existingBooking = allRedemptions.find(
+                                (r) => r.memberId === currentMember?.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
+                              );
+                              if (existingBooking) {
+                                return language === 'en'
+                                  ? `Add Additional Bento for ${selectedDate} (${mealQuantity} box)`
+                                  : `加订额外餐品 (送达: ${selectedDate} · ${mealQuantity}份)`;
+                              }
                               return language === 'en'
-                                ? `Add Additional Bento for ${selectedDate} (${mealQuantity} box)`
-                                : `加订额外餐品 (送达: ${selectedDate} · ${mealQuantity}份)`;
-                            }
-                            return language === 'en'
-                              ? `Confirm & Book ${mealQuantity} Bento for ${selectedDate}`
-                              : `确认兑换 ${mealQuantity} 份餐品 (送达: ${selectedDate})`;
-                          })()}
-                        </span>
-                      </button>
+                                ? `Confirm & Book ${mealQuantity} Bento for ${selectedDate}`
+                                : `确认兑换 ${mealQuantity} 份餐品 (送达: ${selectedDate})`;
+                            })()}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </div>
 

@@ -14,6 +14,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { BackOfficeModal } from './components/BackOfficeModal';
+import { UrgeBuyPlanModal } from './components/UrgeBuyPlanModal';
 import { Footer } from './components/Footer';
 import {
   Language,
@@ -57,6 +58,9 @@ export default function App() {
     try {
       const saved = localStorage.getItem('chillhealthy_settings');
       const savedCraftedPhoto = localStorage.getItem('chillhealthy_crafted_photo') || '';
+      const validCrafted = (savedCraftedPhoto && !savedCraftedPhoto.includes('agnes-kitchen') && !savedCraftedPhoto.includes('h2ia7y6vd60ogckg84'))
+        ? savedCraftedPhoto
+        : '';
       const savedHeroComboPhoto = localStorage.getItem('chillhealthy_hero_combo_photo') || '';
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -66,6 +70,10 @@ export default function App() {
           ? synchronizeMalaysiaWeekdayBankHolidays(baseDisabled, new Date(), 3).updatedDisabledDates
           : baseDisabled;
 
+        const effectiveKitchenPhoto = (parsed.kitchenPhotoUrl && !parsed.kitchenPhotoUrl.includes('h2ia7y6vd60ogckg84') && !parsed.kitchenPhotoUrl.includes('agnes-kitchen'))
+          ? parsed.kitchenPhotoUrl
+          : validCrafted || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl;
+
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
@@ -73,7 +81,7 @@ export default function App() {
           disabledDeliveryDates: initialDisabled,
           whatsappNumber: '60126189919',
           whatsappDisplay: '+60126189919',
-          kitchenPhotoUrl: parsed.kitchenPhotoUrl || savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
+          kitchenPhotoUrl: effectiveKitchenPhoto,
           heroComboPhotoUrl: parsed.heroComboPhotoUrl || savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
         };
       }
@@ -82,7 +90,7 @@ export default function App() {
         ...DEFAULT_SITE_SETTINGS,
         autoSyncMalaysiaBankHolidays: true,
         disabledDeliveryDates: initialSync.updatedDisabledDates,
-        kitchenPhotoUrl: savedCraftedPhoto || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
+        kitchenPhotoUrl: validCrafted || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl,
         heroComboPhotoUrl: savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
       };
     } catch {
@@ -202,6 +210,11 @@ export default function App() {
   const [isMemberPortalOpen, setIsMemberPortalOpen] = useState(false);
   const [isBackOfficeOpen, setIsBackOfficeOpen] = useState(false);
   const [backOfficeTab, setBackOfficeTab] = useState<'settings' | 'packages' | 'menu' | 'redemptions' | 'members'>('settings');
+
+  // Urge to buy a plan before ordering ala carte for registered members
+  const [isUrgePlanModalOpen, setIsUrgePlanModalOpen] = useState(false);
+  const [pendingAlaCarteItem, setPendingAlaCarteItem] = useState<CartItem | null>(null);
+  const [justRegisteredMember, setJustRegisteredMember] = useState(false);
 
   // Persistence Effects
   useEffect(() => {
@@ -461,6 +474,12 @@ export default function App() {
       setMembers((prev) => [newAcct, ...prev]);
     }
     setCurrentMember(newAcct);
+    setJustRegisteredMember(true);
+    try {
+      sessionStorage.removeItem('chillhealthy_dismiss_urge_plan');
+    } catch {
+      // ignore
+    }
   };
 
   const handleUpdateMemberPassword = (newPassword: string): boolean => {
@@ -1143,7 +1162,7 @@ export default function App() {
   };
 
   // Cart operations
-  const handleAddToCart = (newItem: CartItem) => {
+  const executeAddToCart = (newItem: CartItem) => {
     setCart((prevCart) => {
       const existingIdx = prevCart.findIndex(
         (i) =>
@@ -1163,6 +1182,29 @@ export default function App() {
     });
 
     setIsCartOpen(true);
+  };
+
+  const handleAddToCart = (newItem: CartItem) => {
+    // If adding an ala carte meal (type: 'meal') and customer is a registered member
+    const isAlaCarte = newItem.type === 'meal' && !newItem.planDetails;
+    const isMember = Boolean(currentMember || justRegisteredMember);
+    const hasActivePlan = Boolean(currentMember?.activePackage && currentMember.activePackage.remainingMeals > 0);
+    const hasDismissedUrge = (() => {
+      try {
+        return sessionStorage.getItem('chillhealthy_dismiss_urge_plan') === 'true';
+      } catch {
+        return false;
+      }
+    })();
+
+    // User requirement: "Pls pop up urge to buy a plan before order ala carte after customer register as a member, any how, after urge on buying plan, pls allow customer to order ala carte too"
+    if (isAlaCarte && isMember && !hasActivePlan && !hasDismissedUrge) {
+      setPendingAlaCarteItem(newItem);
+      setIsUrgePlanModalOpen(true);
+      return;
+    }
+
+    executeAddToCart(newItem);
   };
 
   const handleQuickAdd = (meal: MealItem) => {
@@ -1483,6 +1525,45 @@ export default function App() {
           initialTab={backOfficeTab}
         />
       )}
+
+      {/* Urge to Buy a Plan Before Ordering Ala Carte Modal */}
+      <UrgeBuyPlanModal
+        isOpen={isUrgePlanModalOpen}
+        onClose={() => {
+          setIsUrgePlanModalOpen(false);
+          // Any how, after urge on buying plan, pls allow customer to order ala carte too
+          if (pendingAlaCarteItem) {
+            executeAddToCart(pendingAlaCarteItem);
+            setPendingAlaCarteItem(null);
+          }
+        }}
+        onSelectPlan={() => {
+          setIsUrgePlanModalOpen(false);
+          setPendingAlaCarteItem(null);
+          scrollToSection('plans');
+        }}
+        onProceedAlaCarte={() => {
+          setIsUrgePlanModalOpen(false);
+          try {
+            sessionStorage.setItem('chillhealthy_dismiss_urge_plan', 'true');
+          } catch {
+            // ignore
+          }
+          // Any how, after urge on buying plan, pls allow customer to order ala carte too
+          if (pendingAlaCarteItem) {
+            executeAddToCart(pendingAlaCarteItem);
+            setPendingAlaCarteItem(null);
+          }
+        }}
+        language={language}
+        pendingItemTitle={
+          pendingAlaCarteItem
+            ? language === 'en'
+              ? pendingAlaCarteItem.title
+              : pendingAlaCarteItem.titleZh || pendingAlaCarteItem.title
+            : undefined
+        }
+      />
     </div>
   );
 }

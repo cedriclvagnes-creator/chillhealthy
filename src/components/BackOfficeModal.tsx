@@ -824,18 +824,19 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   };
 
   const handleResetKitchenPhoto = () => {
+    const defaultPhoto = 'https://admin.chillhealthy.com/uploads/36yvg4y1z0aoc0wwsg.jpg';
     const updated = {
       ...formSettings,
-      kitchenPhotoUrl: '/agnes-kitchen.jpg',
+      kitchenPhotoUrl: defaultPhoto,
     };
     setFormSettings(updated);
     onUpdateSiteSettings(updated);
     try {
-      localStorage.setItem('chillhealthy_crafted_photo', '/agnes-kitchen.jpg');
+      localStorage.setItem('chillhealthy_crafted_photo', defaultPhoto);
     } catch {
       // ignore
     }
-    triggerToast(language === 'en' ? '✓ Reset kitchen photo to default official photo' : '✓ 已恢复默认官方厨房实拍照片');
+    triggerToast(language === 'en' ? '✓ Reset photo to official @chillhealthybox photo' : '✓ 已恢复官方 @chillhealthybox 实拍照片');
   };
 
   const handleResetHeroComboPhoto = () => {
@@ -1350,24 +1351,9 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           {/* Live Thumbnail / Preview */}
                           <div className="relative w-full h-44 rounded-xl overflow-hidden bg-stone-900 border border-stone-200 shadow-inner group">
                             <img
-                              src={formSettings.kitchenPhotoUrl || '/agnes-kitchen.jpg'}
+                              src={formSettings.kitchenPhotoUrl || 'https://admin.chillhealthy.com/uploads/36yvg4y1z0aoc0wwsg.jpg'}
                               alt="Kitchen Preview"
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/WhatsApp Image 2026-09-19 at 20.03.24.jpeg';
-                              }}
-                            />
-                            {/* Apron Patch Blur Overlay preview */}
-                            <div
-                              className="absolute rounded-full blur-[0.6px] pointer-events-none"
-                              style={{
-                                top: '61.5%',
-                                left: '53.5%',
-                                transform: 'translate(-50%, -50%)',
-                                width: '26%',
-                                height: '5.8%',
-                                background: 'radial-gradient(ellipse at center, #f5f5f5 0%, #ebebeb 70%, rgba(230, 230, 230, 0.95) 100%)',
-                              }}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2.5 text-white pointer-events-none">
                               <span className="text-[10px] font-extrabold text-emerald-400 uppercase">
@@ -1402,7 +1388,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   localStorage.setItem('chillhealthy_crafted_photo', val);
                                 } catch {}
                               }}
-                              placeholder="/agnes-kitchen.jpg or https://..."
+                              placeholder="https://admin.chillhealthy.com/uploads/... or https://..."
                               className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
                             />
                           </div>
