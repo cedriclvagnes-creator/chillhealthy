@@ -48,6 +48,7 @@ import {
   getTodayStr,
 } from './utils/packageExpiry';
 import { synchronizeMalaysiaWeekdayBankHolidays } from './utils/malaysiaHolidays';
+import { normalizeMalaysianPhone } from './utils/malaysiaPhone';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -426,15 +427,7 @@ export default function App() {
   };
 
   const handleMemberRegister = (newMemberData: Partial<MemberAccount>) => {
-    const rawPhone = (newMemberData.phone || '').replace(/\D/g, '');
-    const cleanPhone =
-      rawPhone.length >= 8
-        ? rawPhone.startsWith('60')
-          ? rawPhone.slice(1)
-          : rawPhone.startsWith('0')
-          ? rawPhone
-          : `0${rawPhone}`
-        : rawPhone || '0126189919';
+    const cleanPhone = normalizeMalaysianPhone(newMemberData.phone || '') || '0126189919';
 
     const existingIndex = members.findIndex(
       (m) => m.phone === cleanPhone || m.memberNumber === cleanPhone || m.id === cleanPhone
@@ -480,6 +473,30 @@ export default function App() {
     } catch {
       // ignore
     }
+  };
+
+  const handleRegisterCustomerFromCheckout = (customer: {
+    name: string;
+    phone: string;
+    address: string;
+    area: string;
+    postalCode: string;
+    address2?: string;
+    area2?: string;
+    postalCode2?: string;
+    password?: string;
+  }) => {
+    handleMemberRegister({
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      area: customer.area,
+      postalCode: customer.postalCode,
+      address2: customer.address2,
+      area2: customer.area2,
+      postalCode2: customer.postalCode2,
+      password: customer.password || '123456',
+    });
   };
 
   const handleUpdateMemberPassword = (newPassword: string): boolean => {
@@ -1433,6 +1450,7 @@ export default function App() {
           onOrderCompleted={handleOrderCompleted}
           onPackageOrdered={handlePackageOrdered}
           onOpenMemberPortal={() => setIsMemberPortalOpen(true)}
+          onRegisterCustomer={handleRegisterCustomerFromCheckout}
         />
       )}
 

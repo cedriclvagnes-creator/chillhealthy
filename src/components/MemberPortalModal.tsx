@@ -52,6 +52,12 @@ import {
   buildReferralWhatsAppMessage,
   MIN_REFERRAL_PLAN_PRICE,
 } from '../utils/referral';
+import {
+  isValidMalaysianHandphone,
+  normalizeMalaysianPhone,
+  getMalaysianPhoneError,
+  formatMalaysianPhone,
+} from '../utils/malaysiaPhone';
 
 interface MemberPortalModalProps {
   isOpen: boolean;
@@ -223,6 +229,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [regArea2, setRegArea2] = useState('Klang / Bukit Tinggi');
   const [regPostal2, setRegPostal2] = useState('');
   const [regError, setRegError] = useState('');
+  // Option for customer to register and buy ala carte meal vs register & buy meal plan
+  const [regIntent, setRegIntent] = useState<'alacarte' | 'plan'>('alacarte');
 
   // Change Password Modal state
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -383,22 +391,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
-    const rawPhone = regPhone.replace(/\D/g, '');
-    if (!rawPhone || rawPhone.length < 8) {
-      setRegError(
-        language === 'en'
-          ? 'Please enter a valid Handphone Number (which serves as your Login ID).'
-          : '请填写有效的手机号码（作为您的会员登录账号）。'
-      );
+    const phoneError = getMalaysianPhoneError(regPhone, language);
+    if (phoneError) {
+      setRegError(phoneError);
       return;
     }
 
-    const cleanPhone =
-      rawPhone.startsWith('60')
-        ? rawPhone.slice(1)
-        : rawPhone.startsWith('0')
-        ? rawPhone
-        : `0${rawPhone}`;
+    const cleanPhone = normalizeMalaysianPhone(regPhone);
 
     // Validate Address 1 (Mandatory)
     if (!regAddress.trim()) {
@@ -452,6 +451,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       postalCode2: hasRegAddress2 && regAddress2.trim() ? regPostal2.trim() : undefined,
       activeAddressSlot: 1,
     });
+
+    // Option for customer to register and buy ala carte meal directly
+    if (regIntent === 'alacarte') {
+      if (onOpenMenu) {
+        onOpenMenu();
+      } else {
+        onClose();
+      }
+    } else {
+      setPortalTab('renew');
+    }
   };
 
   const handleChangePasswordSubmit = (e: React.FormEvent) => {
@@ -1353,8 +1363,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs font-bold text-stone-700 block">
-                            {language === 'en' ? 'Handphone Number (Login ID) *' : '手机号码 (会员登录账号) *'}
+                            {language === 'en' ? 'Malaysian Handphone (Login ID) *' : '马来西亚手机号码 (会员登录账号) *'}
                           </label>
+                          {regPhone && (
+                            <span className="text-[10px] font-bold">
+                              {isValidMalaysianHandphone(regPhone) ? (
+                                <span className="text-emerald-700 flex items-center gap-0.5">
+                                  <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                  <span>🇲🇾 {language === 'en' ? 'Valid Mobile' : '有效手机号'}</span>
+                                </span>
+                              ) : (
+                                <span className="text-amber-700 flex items-center gap-0.5">
+                                  <AlertCircle className="w-3 h-3 text-amber-600" />
+                                  <span>🇲🇾 01x-xxxxxxx</span>
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </div>
                         <div className="relative">
                           <Phone className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-3" />
@@ -1364,19 +1389,30 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             value={regPhone}
                             onChange={(e) => setRegPhone(e.target.value)}
                             placeholder="e.g. 012-618 9919"
-                            className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border border-emerald-600/40 bg-emerald-50/30 focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold text-stone-900"
+                            className={`w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border ${
+                              regPhone && !isValidMalaysianHandphone(regPhone)
+                                ? 'border-amber-400 bg-amber-50/40 text-stone-900'
+                                : 'border-emerald-600/40 bg-emerald-50/30 text-stone-900'
+                            } focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold`}
                           />
                         </div>
                       </div>
                     </div>
 
-                    <div className="p-2 rounded-xl bg-emerald-100/60 border border-emerald-200 text-[11px] text-emerald-900 flex items-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                      <span>
-                        {language === 'en'
-                          ? 'Your handphone number will be your official Member Login ID.'
-                          : '您的手机号码将作为唯一的会员登录ID，简单好记。'}
-                      </span>
+                    <div className="p-2.5 rounded-xl bg-emerald-100/60 border border-emerald-200 text-[11px] text-emerald-900 flex items-start gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">
+                          {language === 'en'
+                            ? 'Eligible Malaysian Handphone Number (01x-xxxxxxx)'
+                            : '必须为有效的马来西亚手机号码（01x 开头，10-11位）'}
+                        </span>
+                        <p className="text-[10.5px] text-emerald-800 mt-0.5">
+                          {language === 'en'
+                            ? 'Your mobile number serves as your official Member ID for fast WhatsApp verification and one-click login.'
+                            : '您的手机号码将作为官方会员账号，用于 WhatsApp 快速核验与一键登录。'}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -1601,13 +1637,82 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Select Order Intent Upon Registration: Buy Ala Carte Meal vs Subscribe Plan */}
+                  <div className="bg-stone-50/90 p-4 rounded-2xl border border-stone-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                        <Utensils className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>{language === 'en' ? 'Select Option Upon Registration:' : '注册完成后您想先体验什么？'}</span>
+                      </span>
+                      <span className="text-[10px] text-stone-500 font-medium">
+                        {language === 'en' ? 'Flexible & Switchable' : '随时自由选择'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setRegIntent('alacarte')}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                          regIntent === 'alacarte'
+                            ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold ring-2 ring-emerald-600/30'
+                            : 'border-stone-200 text-stone-700 hover:bg-white bg-stone-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold flex items-center gap-1.5">
+                            <UtensilsCrossed className="w-4 h-4 text-emerald-600" />
+                            <span>{language === 'en' ? 'Register & Buy Ala Carte Meal' : '注册并单点今日外卖餐品'}</span>
+                          </span>
+                          {regIntent === 'alacarte' && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-stone-500 font-normal leading-snug">
+                          {language === 'en'
+                            ? 'Single bentos on-demand. Pay via DuitNow QR or WhatsApp!'
+                            : '零绑约单点鲜食。支持 DuitNow QR 或 WhatsApp 转账！'}
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRegIntent('plan')}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                          regIntent === 'plan'
+                            ? 'border-amber-600 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-600/30'
+                            : 'border-stone-200 text-stone-700 hover:bg-white bg-stone-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold flex items-center gap-1.5">
+                            <Crown className="w-4 h-4 text-amber-600" />
+                            <span>{language === 'en' ? 'Register & Subscribe Meal Plan' : '注册并订购周期健康餐配套'}</span>
+                          </span>
+                          {regIntent === 'plan' && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-stone-500 font-normal leading-snug">
+                          {language === 'en'
+                            ? '5/10/20 Days · From RM19.90/meal · Save RM120+ with Free Delivery'
+                            : '5/10/20天餐包 · 低至RM19.90/餐 · 享天天免运立省RM120+'}
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Bottom Registration CTA */}
                   <button
                     type="submit"
                     className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer mt-2 flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{language === 'en' ? 'Create Account & Access Member Portal (0 Meals Initial)' : '立即注册并进入会员中心 (初始0餐)'}</span>
+                    <span>
+                      {regIntent === 'alacarte'
+                        ? language === 'en'
+                          ? 'Register Account & Order Ala Carte Meal (0 Meals Initial)'
+                          : '立即注册账号并开启单点选餐 (初始0餐 · 免绑约)'
+                        : language === 'en'
+                        ? 'Register Account & View Meal Plans'
+                        : '立即注册账号并选购超值配套 (RM398起)'}
+                    </span>
                   </button>
                 </form>
               )}
@@ -1799,11 +1904,11 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <button
                         type="button"
                         onClick={onOpenMenu || onClose}
-                        className="px-3.5 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 text-stone-200 hover:text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-stone-600"
-                        title={language === 'en' ? 'Order Single Ala Carte Bento' : '单点今日外卖餐盒'}
+                        className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-emerald-600/60 shadow-xs"
+                        title={language === 'en' ? 'Order Fresh Ala Carte Bento (Pay via DuitNow QR or WhatsApp)' : '单点今日外卖餐盒（支持DuitNow QR或WhatsApp付款）'}
                       >
                         <UtensilsCrossed className="w-3.5 h-3.5 text-amber-300" />
-                        <span>{language === 'en' ? 'Order Ala Carte' : '单点今日外卖'}</span>
+                        <span>{language === 'en' ? '🍱 Order Ala Carte (QR/WhatsApp)' : '🍱 单点今日外卖 (QR/WhatsApp付款)'}</span>
                       </button>
                     </div>
                   )}
@@ -2304,10 +2409,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             <button
                               type="button"
                               onClick={onOpenMenu || onClose}
-                              className="py-2.5 px-4 rounded-xl bg-white hover:bg-stone-50 border border-stone-300 text-stone-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                              className="py-2.5 px-4 rounded-xl bg-white hover:bg-stone-50 border border-emerald-600/40 text-emerald-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                             >
-                              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600" />
-                              <span>{language === 'en' ? 'Order Ala Carte' : '单点今日餐品'}</span>
+                              <UtensilsCrossed className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>{language === 'en' ? '🍱 Order Ala Carte (QR/WhatsApp)' : '🍱 单点今日餐品 (QR/WhatsApp付款)'}</span>
                             </button>
                           </div>
                         </div>

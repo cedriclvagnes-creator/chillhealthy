@@ -17,6 +17,7 @@ import {
   Gift,
   Check,
   AlertCircle,
+  Crown,
 } from 'lucide-react';
 import { CartItem, Language, SiteSettings, MemberAccount } from '../types';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
@@ -27,6 +28,12 @@ import {
   checkReferralRewardEligibility,
   MIN_REFERRAL_PLAN_PRICE,
 } from '../utils/referral';
+import {
+  isValidMalaysianHandphone,
+  normalizeMalaysianPhone,
+  getMalaysianPhoneError,
+  formatMalaysianPhone,
+} from '../utils/malaysiaPhone';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -52,6 +59,17 @@ interface CheckoutModalProps {
     }
   ) => void;
   onOpenMemberPortal?: () => void;
+  onRegisterCustomer?: (customer: {
+    name: string;
+    phone: string;
+    address: string;
+    area: string;
+    postalCode: string;
+    address2?: string;
+    area2?: string;
+    postalCode2?: string;
+    password?: string;
+  }) => void;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -65,15 +83,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onOrderCompleted,
   onPackageOrdered,
   onOpenMemberPortal,
+  onRegisterCustomer,
 }) => {
   const hasPlan = cart.some((i) => i.type === 'plan');
   const planItem = cart.find((i) => i.type === 'plan');
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [area, setArea] = useState('Klang / Bukit Tinggi');
   const [address, setAddress] = useState('');
   const [postalCode, setPostalCode] = useState('41200');
+
+  // Option for customer to register and buy ala carte meal directly
+  const [registerAsMember, setRegisterAsMember] = useState(true);
+  const [registerPassword, setRegisterPassword] = useState('123456');
+  const [registeredMemberPhone, setRegisteredMemberPhone] = useState('');
 
   // Address 2 (one account up to 2 addresses for Klang Valley meal plans)
   const [hasAddress2, setHasAddress2] = useState(false);
@@ -207,6 +232,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
+    const phoneErr = getMalaysianPhoneError(phone, language);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
+      alert(phoneErr);
+      return;
+    }
+    const cleanPhone = normalizeMalaysianPhone(phone);
+
     if (siteSettings.disabledDeliveryDates?.includes(deliveryDate)) {
       const hol = getMalaysiaHolidayInfo(deliveryDate);
       alert(
@@ -228,7 +261,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (hasPlan && planItem && onPackageOrdered) {
       onPackageOrdered(planItem, {
         name,
-        phone,
+        phone: cleanPhone,
         address,
         area,
         postalCode,
@@ -239,6 +272,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           ? getMemberReferralCode(appliedReferralMember)
           : (referralCodeInput.trim().toUpperCase() || undefined),
       });
+      setRegisteredMemberPhone(cleanPhone);
+    } else if (registerAsMember && !currentMember && onRegisterCustomer) {
+      // Option for customer to register and buy ala carte meal directly
+      onRegisterCustomer({
+        name: name.trim(),
+        phone: cleanPhone,
+        address: address.trim(),
+        area,
+        postalCode: postalCode.trim(),
+        address2: hasAddress2 && address2.trim() ? address2.trim() : undefined,
+        area2: hasAddress2 && address2.trim() ? area2 : undefined,
+        postalCode2: hasAddress2 && address2.trim() ? postalCode2.trim() : undefined,
+        password: registerPassword.trim() || '123456',
+      });
+      setRegisteredMemberPhone(cleanPhone);
     }
 
     // Prepare WhatsApp Message to official number +60126189919
@@ -268,8 +316,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
           : '') +
         (notes ? `*Dietary Notes (忌口备注):* ${notes}%0A` : '') +
-        `*Payment Method:* DuitNow QR (Chill Healthy Trading)%0A` +
-        `%0A已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗%0A` +
+        (paymentMethod === 'duitnow'
+          ? `*Payment Method:* DuitNow QR (Chill Healthy Trading)%0A已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗%0A`
+          : `*Payment Method:* WhatsApp Direct Pay%0A已提交配套订单，请提供转账方式/DuitNow QR，协助开通订餐！🥗%0A`) +
         `Website: www.chill-healthy.com`;
 
       if (paymentMethod === 'whatsapp') {
@@ -280,20 +329,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         .map((item) => `- ${item.title} x${item.quantity} (RM ${(item.price * item.quantity).toFixed(2)})`)
         .join('%0A');
 
+      const paymentMethodText =
+        paymentMethod === 'duitnow'
+          ? `*Payment:* DuitNow QR (Chill Healthy Trading)%0A已完成付款，附上付款凭证水单，请查收并安排配送！🥗`
+          : `*Payment:* WhatsApp Direct Pay%0A已提交单点餐品订单，请向我发送付款转账方式 / DuitNow QR 收款码，谢谢！🥗`;
+
       const msg =
-        `*New Order: ${generatedId}*%0A` +
-        `Customer: ${name}%0A` +
-        `Phone: ${phone}%0A` +
-        `Type: Delivery%0A` +
+        `*📣 New Ala Carte Order: ${generatedId} | 单点外卖订单*%0A` +
+        `Customer (顾客姓名): ${name}%0A` +
+        `Phone (手机号码): ${phone}%0A` +
+        (registerAsMember || currentMember || registeredMemberPhone
+          ? `Member Status: Registered Member (${cleanPhone})%0A`
+          : '') +
+        `Type: Fresh Bento Delivery%0A` +
         `Date: ${deliveryDate} | Slot: ${deliverySlot}%0A` +
-        `Address: ${address}, ${area} ${postalCode}%0A` +
-        `Items:%0A${itemsText}%0A` +
+        `Address 1: ${address}, ${area} ${postalCode}%0A` +
+        (hasAddress2 && address2 ? `Address 2: ${address2}, ${area2} ${postalCode2}%0A` : '') +
+        `Items (单点餐品):%0A${itemsText}%0A` +
         `Subtotal: RM ${subtotal.toFixed(2)}%0A` +
         `Delivery Fee: ${deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}%0A` +
         `*Total Amount: RM ${grandTotal.toFixed(2)}*%0A` +
-        (notes ? `Notes: ${notes}%0A` : '') +
-        `*Payment:* DuitNow QR (Chill Healthy Trading)%0A` +
-        `已完成付款，附上付款凭证，请查收并安排配送！🥗`;
+        (notes ? `Notes (忌口备注): ${notes}%0A` : '') +
+        `${paymentMethodText}%0A` +
+        `Website: www.chill-healthy.com`;
 
       if (paymentMethod === 'whatsapp') {
         window.open(`https://wa.me/${whatsappLinkNumber}?text=${msg}`, '_blank');
@@ -310,21 +368,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const whatsappLinkNumber = '60126189919';
 
+  const itemsListForWA = cart
+    .map((item) => `• ${item.title} x${item.quantity} (RM ${(item.price * item.quantity).toFixed(2)})`)
+    .join('%0A');
+
   const confirmOrderWhatsAppMessage =
     `*📣 Confirm Order | 订单付款凭单确认*%0A` +
     `感谢您下单我们的【潮轻食健康餐】❤️%0A` +
     `*Order ID:* ${orderId}%0A` +
     `*Registered Name (注册姓名):* ${name}%0A` +
     `*Phone (联系电话):* ${phone}%0A` +
-    (planItem ? `*Package (所选配套):* ${planItem.title}%0A` : '') +
+    (registerAsMember || currentMember || registeredMemberPhone
+      ? `*Member Account:* Registered Member (${registeredMemberPhone || normalizeMalaysianPhone(phone)})%0A`
+      : '') +
+    (planItem
+      ? `*Package (所选配套):* ${planItem.title}%0A`
+      : `*Items (所选单点餐盒):*%0A${itemsListForWA}%0A`) +
     (appliedReferralMember
       ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (${appliedReferralMember.name})%0A`
       : referralCodeInput.trim()
       ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
       : '') +
+    `*Delivery Date (送餐日期):* ${deliveryDate}%0A` +
     `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
-    `*Total Paid (支付金额):* RM ${grandTotal.toFixed(2)}%0A` +
-    `已通过 DuitNow QR 付款给 Chill Healthy Trading，附上付款凭单水单截图，请协助确认！🥗`;
+    `*Delivery Address (送达地址):* ${address}, ${area} ${postalCode}%0A` +
+    (hasAddress2 && address2 ? `*Address 2:* ${address2}, ${area2} ${postalCode2}%0A` : '') +
+    `*Total Due (结账总额):* RM ${grandTotal.toFixed(2)}%0A` +
+    (paymentMethod === 'duitnow'
+      ? `已通过 DuitNow QR 付款给 Chill Healthy Trading，附上付款凭单水单截图，请协助确认！🥗`
+      : `已选择 WhatsApp Direct Pay，请协助提供转账方式 / DuitNow QR 收款码完成付款，谢谢！🥗`);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -387,12 +459,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                   <div className="text-xs flex-1">
                     <p className="font-bold text-emerald-950">
-                      {language === 'en' ? 'Step 2 | WhatsApp Payment Slip & Name' : '第二步 | 付款后 WhatsApp 发送凭证水单'}
+                      {paymentMethod === 'duitnow'
+                        ? language === 'en'
+                          ? 'Step 2 | WhatsApp Payment Slip & Name'
+                          : '第二步 | 付款后 WhatsApp 发送凭证水单'
+                        : language === 'en'
+                        ? 'Step 2 | WhatsApp to Us for Payment Mode'
+                        : '第二步 | WhatsApp 联系客服获取付款方式'}
                     </p>
                     <p className="text-emerald-800 mt-0.5">
-                      {language === 'en'
-                        ? `After payment, kindly send your receipt/slip via WhatsApp to +60126189919 with your name "${name}" so our kitchen team can activate your account.`
-                        : `DuitNow 付款后，请将付款凭单截图发送到官方 WhatsApp (+60126189919)，附上注册名字「${name}」，以便我们立即为您开启订餐权限。`}
+                      {paymentMethod === 'duitnow'
+                        ? language === 'en'
+                          ? `After payment, kindly send your receipt/slip via WhatsApp to +60126189919 with your name "${name}" so our kitchen team can activate your account.`
+                          : `DuitNow 付款后，请将付款凭单截图发送到官方 WhatsApp (+60126189919)，附上注册名字「${name}」，以便我们立即为您开启订餐权限。`
+                        : language === 'en'
+                        ? `Kindly WhatsApp +60126189919 to obtain payment transfer details or QR code to confirm your plan order.`
+                        : `请通过 WhatsApp (+60126189919) 联系客服获取银行转账资料或 DuitNow QR 收款码以确认配套。`}
                     </p>
                     <a
                       href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
@@ -401,7 +483,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       className="inline-flex items-center gap-1.5 mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{language === 'en' ? 'WhatsApp Us Now (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)'}</span>
+                      <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'WhatsApp Slip Now (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)') : (language === 'en' ? 'WhatsApp Us for Payment (+60126189919)' : 'WhatsApp 获取付款方式 (+60126189919)')}</span>
                     </a>
                   </div>
                 </div>
@@ -451,54 +533,110 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 )}
               </div>
             ) : (
-              /* Receipt Box for Individual Bentos */
-              <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200/80 text-left text-xs space-y-2">
-                <div className="flex justify-between font-medium text-stone-600">
-                  <span>{language === 'en' ? 'Customer:' : '收件人:'}</span>
-                  <span className="font-bold text-stone-900">
-                    {name} ({phone})
-                  </span>
-                </div>
-                <div className="flex justify-between font-medium text-stone-600">
-                  <span>{language === 'en' ? 'Delivery Date & Slot:' : '送达日期与时段:'}</span>
-                  <span className="font-bold text-stone-900">
-                    {deliveryDate} · {deliverySlot}
-                  </span>
-                </div>
-                <div className="flex justify-between font-medium text-stone-600">
-                  <span>{language === 'en' ? 'Address:' : '送达地址:'}</span>
-                  <span className="font-bold text-stone-900 text-right max-w-xs">
-                    {address}, {area} {postalCode}
-                  </span>
-                </div>
-                <div className="flex justify-between font-medium text-stone-600">
-                  <span>{language === 'en' ? 'Delivery Fee:' : '配送费用:'}</span>
-                  <span className="font-bold text-emerald-700">
-                    {deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-stone-200 flex justify-between font-extrabold text-sm text-stone-900">
-                  <span>{language === 'en' ? 'Total Amount:' : '支付金额:'}</span>
-                  <span className="text-emerald-800 font-heading text-base">RM {grandTotal.toFixed(2)}</span>
+              /* 3-Step Guide for Ala Carte Bento Buyers (Same seamless experience as per membership) */
+              <div className="bg-stone-50 rounded-2xl p-4 sm:p-5 border border-stone-200 text-left space-y-4">
+                <div className="text-xs font-bold text-stone-800 uppercase tracking-wider border-b border-stone-200 pb-2">
+                  {language === 'en' ? 'Order Details & Next Steps:' : '单点外卖订单明细与后续步骤：'}
                 </div>
 
-                {/* WhatsApp Slip notice */}
-                <div className="pt-2">
-                  <a
-                    href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>{language === 'en' ? 'Send Payment Slip via WhatsApp (+60126189919)' : 'WhatsApp 发送付款凭证水单 (+60126189919)'}</span>
-                  </a>
+                {/* Step 1 Check */}
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                    ✓
+                  </div>
+                  <div className="text-xs flex-1">
+                    <p className="font-bold text-stone-900">
+                      {language === 'en' ? 'Step 1 | Ala Carte Order Placed & Payment Method Selected' : '第一步 | 单点订单已提交 · 付款方式已选定'}
+                    </p>
+                    <div className="mt-1 space-y-1 text-stone-600">
+                      <div className="flex justify-between">
+                        <span>{language === 'en' ? 'Delivery Date & Slot:' : '送达日期与时段:'}</span>
+                        <span className="font-bold text-stone-900">{deliveryDate} · {deliverySlot}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>{language === 'en' ? 'Delivery Address:' : '送达地址:'}</span>
+                        <span className="font-bold text-stone-900 text-right">{address}, {area} {postalCode}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-stone-200 font-bold text-stone-900">
+                        <span>{language === 'en' ? 'Total Amount Due:' : '支付金额:'}</span>
+                        <span className="text-emerald-800 font-heading text-sm">RM {grandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Step 2 WhatsApp / Payment Mode */}
+                <div className="flex items-start gap-3 bg-emerald-50/80 p-3 rounded-xl border border-emerald-200">
+                  <div className="w-6 h-6 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                    2
+                  </div>
+                  <div className="text-xs flex-1">
+                    <p className="font-bold text-emerald-950">
+                      {paymentMethod === 'duitnow'
+                        ? language === 'en'
+                          ? 'Step 2 | WhatsApp Payment Slip & Name'
+                          : '第二步 | 付款后 WhatsApp 发送凭证水单'
+                        : language === 'en'
+                        ? 'Step 2 | WhatsApp to Us for Payment Mode'
+                        : '第二步 | WhatsApp 联系客服确认付款方式'}
+                    </p>
+                    <p className="text-emerald-800 mt-0.5">
+                      {paymentMethod === 'duitnow'
+                        ? language === 'en'
+                          ? `After DuitNow QR payment, kindly WhatsApp your slip to +60126189919 with your name "${name}" so our kitchen team can verify and dispatch immediately.`
+                          : `DuitNow QR 付款后，请将付款凭单截图发送到官方 WhatsApp (+60126189919)，附上名字「${name}」，以便厨房核验并安排即时制作配送。`
+                        : language === 'en'
+                        ? `Kindly WhatsApp +60126189919 to obtain payment instructions or DuitNow QR code for your ala carte meal.`
+                        : `请点击下方直接发送 WhatsApp 至官方客服 (+60126189919)，索取付款转账方式或 DuitNow QR 收款码完成付款。`}
+                    </p>
+                    <a
+                      href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'Send Slip via WhatsApp (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)') : (language === 'en' ? 'WhatsApp Us for Payment Mode (+60126189919)' : 'WhatsApp 获取付款方式 (+60126189919)')}</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Step 3 Kitchen Preparation */}
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                    3
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-bold text-stone-900">
+                      {language === 'en' ? 'Step 3 | Fresh Preparation & Scheduled Delivery' : '第三步 | 厨房现做鲜食并准时配送'}
+                    </p>
+                    <p className="text-stone-500 mt-0.5">
+                      {language === 'en'
+                        ? `Chef prepares freshly cooked meal boxes for delivery on ${deliveryDate} during ${deliverySlot}.`
+                        : `后厨将于 ${deliveryDate} 送餐时段（${deliverySlot}）准时鲜烹并由专属配送车队送达。`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Member Account Created Notice if registered */}
+                {(registerAsMember || currentMember || registeredMemberPhone) && (
+                  <div className="p-3 rounded-xl bg-emerald-100/70 border border-emerald-300 text-left text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                      <Crown className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? '🎉 Member Account Linked & Active!' : '🎉 会员账户已建立/已关联！'}</span>
+                    </div>
+                    <p className="text-emerald-900 text-[11px] leading-relaxed">
+                      {language === 'en'
+                        ? `Your eligible Malaysian mobile number (${registeredMemberPhone || normalizeMalaysianPhone(phone)}) is your official Member ID (Default password: 123456). You can access the Member Portal anytime to track deliveries or upgrade to a meal plan!`
+                        : `您的马来西亚手机号（${registeredMemberPhone || normalizeMalaysianPhone(phone)}）已作为官方会员登录账号（初始密码：123456）。您可随时进入会员中心查看历史订单、保存地址或随时升级周期配套！`}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              {hasPlan && onOpenMemberPortal ? (
+              {onOpenMemberPortal && (hasPlan || registerAsMember || currentMember || registeredMemberPhone) ? (
                 <button
                   onClick={() => {
                     handleFinish();
@@ -507,7 +645,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   className="flex-1 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20"
                 >
                   <Sparkles className="w-4 h-4" />
-                  <span>{language === 'en' ? 'Go to Member Portal to Select Daily Meals' : '进入会员中心挑选每天餐点'}</span>
+                  <span>
+                    {hasPlan
+                      ? language === 'en'
+                        ? 'Go to Member Portal to Select Daily Meals'
+                        : '进入会员中心挑选每天餐点'
+                      : language === 'en'
+                      ? 'Go to Member Portal Dashboard'
+                      : '进入会员中心查看账户'}
+                  </span>
                 </button>
               ) : null}
 
@@ -565,19 +711,88 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  {language === 'en' ? 'Phone / WhatsApp *' : '手机 / WhatsApp号码 *'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-stone-700 block">
+                    {language === 'en' ? 'Malaysian Handphone / WhatsApp *' : '马来西亚手机号码 / WhatsApp *'}
+                  </label>
+                  {phone && (
+                    <span className="text-[10px] font-bold">
+                      {isValidMalaysianHandphone(phone) ? (
+                        <span className="text-emerald-700 flex items-center gap-0.5">
+                          <CheckCircle className="w-3 h-3 text-emerald-600" />
+                          <span>🇲🇾 {language === 'en' ? 'Valid Mobile' : '有效手机号'}</span>
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 flex items-center gap-0.5">
+                          <AlertCircle className="w-3 h-3 text-amber-600" />
+                          <span>🇲🇾 01x-xxxxxxx</span>
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="tel"
                   required
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setPhoneError('');
+                  }}
                   placeholder="e.g. 012-618 9919"
-                  className="w-full text-xs px-3 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className={`w-full text-xs px-3 py-2.5 rounded-xl border ${
+                    phone && !isValidMalaysianHandphone(phone)
+                      ? 'border-amber-400 bg-amber-50/40 text-stone-900'
+                      : 'border-stone-200 text-stone-900'
+                  } focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold`}
                 />
+                {phoneError && (
+                  <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-medium">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{phoneError}</span>
+                  </p>
+                )}
               </div>
             </div>
+
+            {/* Member Account / Registration option (for customer buying ala carte or new to membership) */}
+            {!currentMember ? (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-amber-500/10 border border-emerald-300 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={registerAsMember}
+                    onChange={(e) => setRegisterAsMember(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-amber-600" />
+                    <span>
+                      {language === 'en'
+                        ? 'Register as Member with this phone number (Free Membership)'
+                        : '同时注册为潮轻食会员 (免费入会 · 自动保存地址 · 手机号一键登录)'}
+                    </span>
+                  </span>
+                </label>
+                {registerAsMember && (
+                  <div className="pl-6 text-[11px] text-stone-600 space-y-1">
+                    <p>
+                      {language === 'en'
+                        ? '💡 Your Malaysian handphone number will be your official Member Login ID (Default password: 123456). Accounts start with 0 meals so you can freely order ala carte or subscribe to a meal plan anytime!'
+                        : '💡 您的有效马来西亚手机号将自动作为会员登录账号（初始默认密码：123456）。账号初始0餐，既可随时单点外卖，也可随时升级周期餐包享天天免运！'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>
+                  {language === 'en' ? 'Logged in as Member:' : '已以会员身份登录：'}{' '}
+                  <strong>{currentMember.name}</strong> ({currentMember.memberNumber || currentMember.phone})
+                </span>
+              </div>
+            )}
 
             {/* Delivery Address 1 (Main: Office or Home) */}
             <div className="space-y-3 bg-stone-50/80 p-3.5 rounded-2xl border border-stone-200">
