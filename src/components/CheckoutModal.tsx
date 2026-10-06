@@ -18,8 +18,9 @@ import {
   Check,
   AlertCircle,
   Crown,
+  Copy,
 } from 'lucide-react';
-import { CartItem, Language, SiteSettings, MemberAccount } from '../types';
+import { CartItem, Language, SiteSettings, MemberAccount, MealRedemption } from '../types';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
 import { getMalaysiaHolidayInfo } from '../utils/malaysiaHolidays';
 import {
@@ -34,6 +35,11 @@ import {
   getMalaysianPhoneError,
   formatMalaysianPhone,
 } from '../utils/malaysiaPhone';
+import {
+  generateUniqueOrderNumber,
+  buildOrderConfirmationAutoReply,
+  buildCustomerWhatsAppAutoReplyUrl,
+} from '../utils/whatsapp';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -44,6 +50,7 @@ interface CheckoutModalProps {
   members?: MemberAccount[];
   currentMember?: MemberAccount | null;
   onOrderCompleted: () => void;
+  onOrderPlaced?: (order: MealRedemption) => void;
   onPackageOrdered?: (
     planItem: CartItem,
     customer: {
@@ -81,6 +88,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   members = [],
   currentMember = null,
   onOrderCompleted,
+  onOrderPlaced,
   onPackageOrdered,
   onOpenMemberPortal,
   onRegisterCustomer,
@@ -207,8 +215,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [copiedOrderNo, setCopiedOrderNo] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleCopyOrderNo = () => {
+    if (orderId && navigator.clipboard) {
+      navigator.clipboard.writeText(orderId);
+      setCopiedOrderNo(true);
+      setTimeout(() => setCopiedOrderNo(false), 2500);
+    }
+  };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   // Standardized delivery fee: RM15 for order < RM100; FREE on RM100 and above or meal packages
@@ -254,8 +271,49 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
-    const generatedId = `CH-${Math.floor(100000 + Math.random() * 900000)}`;
+    // Generate unique order number (format CH-YYMMDD-XXXX e.g. CH-261006-8492)
+    const generatedId = generateUniqueOrderNumber('CH');
     setOrderId(generatedId);
+
+    // Save order record for Back End Office tracking
+    const itemsSummaryText = hasPlan
+      ? (planItem?.title || 'Meal Plan Package')
+      : cart.map((c) => `${c.title} x${c.quantity}`).join(', ');
+
+    const newOrderRecord: MealRedemption = {
+      id: generatedId,
+      orderNumber: generatedId,
+      orderType: hasPlan ? 'Package Subscription' : 'Ala Carte Bento',
+      memberId: cleanPhone,
+      memberName: name.trim(),
+      memberPhone: cleanPhone,
+      deliveryDate: hasPlan
+        ? (planItem?.planDetails?.days ? `${planItem.planDetails.days}-Day Plan` : deliveryDate)
+        : deliveryDate,
+      deliverySlot: deliverySlot,
+      deliveryAddress: address.trim(),
+      area,
+      postalCode: postalCode.trim(),
+      mealId: hasPlan ? (planItem?.cartItemId || 'plan') : (cart[0]?.cartItemId || 'alacarte'),
+      mealName: hasPlan ? (planItem?.title || 'Meal Plan') : (cart[0]?.title || 'Ala Carte Bento'),
+      mealNameZh: hasPlan
+        ? (planItem?.titleZh || '健康餐饮配套')
+        : cart.map((c) => `${c.titleZh || c.title} x${c.quantity}`).join('，'),
+      mealImage: hasPlan ? (planItem?.image || '') : (cart[0]?.image || ''),
+      quantity: hasPlan ? 1 : cart.reduce((s, c) => s + c.quantity, 0),
+      totalAmount: grandTotal,
+      paymentMethod: paymentMethod === 'duitnow' ? 'DuitNow QR' : 'WhatsApp Direct Pay',
+      itemsSummary: itemsSummaryText,
+      status: 'Pending',
+      dietaryNotes: notes,
+      createdAt: new Date().toISOString(),
+      recipeStandard: hasPlan ? 'Standard Chef Recipe' : 'Customized Ala Carte',
+      autoReplySent: false,
+    };
+
+    if (onOrderPlaced) {
+      onOrderPlaced(newOrderRecord);
+    }
 
     // If package order, trigger package provision
     if (hasPlan && planItem && onPackageOrdered) {
@@ -368,9 +426,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const whatsappLinkNumber = '60126189919';
 
+  const registeredOrEnteredPhone = registeredMemberPhone || normalizeMalaysianPhone(phone) || phone;
+
   const itemsListForWA = cart
     .map((item) => `• ${item.title} x${item.quantity} (RM ${(item.price * item.quantity).toFixed(2)})`)
     .join('%0A');
+
+  const customerAutoReplyUrl = buildCustomerWhatsAppAutoReplyUrl(registeredOrEnteredPhone, {
+    orderNumber: orderId,
+    customerName: name.trim() || (language === 'en' ? 'Valued Customer' : '尊敬的顾客'),
+    customerPhone: registeredOrEnteredPhone,
+    items: hasPlan
+      ? (planItem?.title || 'Meal Plan Package')
+      : cart.map((c) => `• ${c.title} x${c.quantity} (RM ${(c.price * c.quantity).toFixed(2)})`).join('\n'),
+    deliveryDate: hasPlan ? (planItem?.planDetails?.days ? `${planItem.planDetails.days}-Day Plan` : deliveryDate) : deliveryDate,
+    deliverySlot: deliverySlot,
+    deliveryAddress: `${address}, ${area} ${postalCode}`,
+    totalAmount: grandTotal,
+    paymentMethod: paymentMethod === 'duitnow' ? 'DuitNow QR' : 'WhatsApp Direct Pay',
+    dietaryNotes: notes,
+    orderType: hasPlan ? 'Package Subscription' : 'Ala Carte Bento',
+  });
 
   const confirmOrderWhatsAppMessage =
     `*📣 Confirm Order | 订单付款凭单确认*%0A` +
@@ -425,9 +501,38 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-stone-900 mt-1">
                 {language === 'en' ? 'Thank You for Choosing CHILL Healthy!' : '感谢您下单【潮轻食健康配套】❤️'}
               </h2>
-              <p className="text-xs sm:text-sm text-stone-500 mt-1">
-                Order ID: <span className="font-mono font-bold text-stone-800">{orderId}</span>
-              </p>
+            </div>
+
+            {/* Dedicated Unique Order Tracking Number Highlight Card */}
+            <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-left shadow-xs">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-md">
+                    {language === 'en' ? 'Unique Order Tracking No.' : '专属订单跟踪编号'}
+                  </span>
+                  <span className="text-xs text-stone-500 font-medium">
+                    {hasPlan ? (language === 'en' ? 'Meal Plan' : '健康餐配套') : (language === 'en' ? 'Ala Carte' : '单点外卖')}
+                  </span>
+                </div>
+                <p className="font-mono font-black text-2xl sm:text-3xl text-emerald-950 mt-1 tracking-tight select-all">
+                  #{orderId}
+                </p>
+                <p className="text-[11px] text-emerald-800 mt-0.5">
+                  {language === 'en'
+                    ? 'Use this unique order number for all back-end kitchen tracking & delivery verification.'
+                    : '后厨与系统管理后台均以此唯一编号核对，客户与客服可凭此快速查询追踪。'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyOrderNo}
+                className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+                title="Copy Order Number"
+              >
+                {copiedOrderNo ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedOrderNo ? (language === 'en' ? 'Copied!' : '已复制！') : (language === 'en' ? 'Copy Order No.' : '复制订单编号')}</span>
+              </button>
             </div>
 
             {hasPlan ? (
@@ -476,15 +581,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         ? `Kindly WhatsApp +60126189919 to obtain payment transfer details or QR code to confirm your plan order.`
                         : `请通过 WhatsApp (+60126189919) 联系客服获取银行转账资料或 DuitNow QR 收款码以确认配套。`}
                     </p>
-                    <a
-                      href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'WhatsApp Slip Now (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)') : (language === 'en' ? 'WhatsApp Us for Payment (+60126189919)' : 'WhatsApp 获取付款方式 (+60126189919)')}</span>
-                    </a>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <a
+                        href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'Send Slip to Shop WhatsApp (+60126189919)' : '发水单至官方 WhatsApp (+60126189919)') : (language === 'en' ? 'WhatsApp Shop for Payment (+60126189919)' : 'WhatsApp 联系客服获取付款方式 (+60126189919)')}</span>
+                      </a>
+
+                      <a
+                        href={customerAutoReplyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors"
+                        title="Auto reply to registered number"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? `Auto-Reply to My WhatsApp (${registeredOrEnteredPhone})` : `接收确认回执至我的 WhatsApp (${registeredOrEnteredPhone})`}</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
 
@@ -589,15 +707,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         ? `Kindly WhatsApp +60126189919 to obtain payment instructions or DuitNow QR code for your ala carte meal.`
                         : `请点击下方直接发送 WhatsApp 至官方客服 (+60126189919)，索取付款转账方式或 DuitNow QR 收款码完成付款。`}
                     </p>
-                    <a
-                      href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-2 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'Send Slip via WhatsApp (+60126189919)' : '立即发 WhatsApp 水单 (+60126189919)') : (language === 'en' ? 'WhatsApp Us for Payment Mode (+60126189919)' : 'WhatsApp 获取付款方式 (+60126189919)')}</span>
-                    </a>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <a
+                        href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>{paymentMethod === 'duitnow' ? (language === 'en' ? 'Send Slip to Shop WhatsApp (+60126189919)' : '发水单至官方 WhatsApp (+60126189919)') : (language === 'en' ? 'WhatsApp Shop for Payment Mode (+60126189919)' : 'WhatsApp 联系客服确认付款方式 (+60126189919)')}</span>
+                      </a>
+
+                      <a
+                        href={customerAutoReplyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors"
+                        title="Auto reply to registered number"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? `Auto-Reply to My WhatsApp (${registeredOrEnteredPhone})` : `接收确认回执至我的 WhatsApp (${registeredOrEnteredPhone})`}</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
 
@@ -1205,6 +1336,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     orderId="NEW-CHECKOUT"
                     language={language}
                     whatsappNumber="60126189919"
+                    siteSettings={siteSettings}
                   />
                   <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
                     <span className="text-base shrink-0">⚠️</span>

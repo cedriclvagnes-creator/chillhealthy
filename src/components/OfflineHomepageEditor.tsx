@@ -34,7 +34,6 @@ import { OrderGuideSection } from './OrderGuideSection';
 import { BrandStorySection } from './BrandStorySection';
 import { InstagramFeedSection } from './InstagramFeedSection';
 import { DeliverySection } from './DeliverySection';
-import { ReviewsSection } from './ReviewsSection';
 import { Footer } from './Footer';
 
 interface OfflineHomepageEditorProps {
@@ -759,9 +758,6 @@ export const OfflineHomepageEditor: React.FC<OfflineHomepageEditorProps> = ({
           isEditMode={isStagingEditMode}
           onEditDelivery={() => setActiveModal('delivery')}
         />
-
-        {/* Customer Reviews Section */}
-        <ReviewsSection language={language} />
 
         {/* Footer */}
         <Footer

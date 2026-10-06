@@ -58,6 +58,10 @@ import {
   getMalaysianPhoneError,
   formatMalaysianPhone,
 } from '../utils/malaysiaPhone';
+import {
+  generateUniqueOrderNumber,
+  buildCustomerWhatsAppAutoReplyUrl,
+} from '../utils/whatsapp';
 
 interface MemberPortalModalProps {
   isOpen: boolean;
@@ -263,6 +267,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   // Daily Meal Redemption Confirmed Popup & Double-Booking Awareness state
   const [redemptionSuccessPopup, setRedemptionSuccessPopup] = useState<{
     isOpen: boolean;
+    orderNumber?: string;
     deliveryDate: string;
     formattedDate: string;
     mealName: string;
@@ -277,6 +282,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     isBatch?: boolean;
     batchDaysCount?: number;
   } | null>(null);
+  const [copiedOrderNo, setCopiedOrderNo] = useState(false);
 
   // Double-booking pre-confirmation alert warning
   const [doubleBookingWarning, setDoubleBookingWarning] = useState<{
@@ -637,7 +643,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
 
     const doSubmitRedemption = () => {
+      const orderNo = generateUniqueOrderNumber('CH');
       const success = onRedeemMeal({
+        orderNumber: orderNo,
+        orderType: 'Meal Plan Redemption',
         memberId: currentMember.id,
         memberName: currentMember.name,
         memberPhone: currentMember.phone,
@@ -653,6 +662,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         quantity: mealQuantity,
         dietaryNotes,
         recipeStandard: 'Standard Chef Recipe' as const,
+        autoReplySent: false,
       });
 
       if (success) {
@@ -661,6 +671,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         // Pop up the official confirmation notification modal to ensure awareness and avoid double booking
         setRedemptionSuccessPopup({
           isOpen: true,
+          orderNumber: orderNo,
           deliveryDate: selectedDate,
           formattedDate: formatDisplayDate(selectedDate),
           mealName: chosenMeal.name,
@@ -722,10 +733,13 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
+    const batchOrderNo = generateUniqueOrderNumber('CH');
     const redemptionsList = upcomingWorkdays.map((dateStr) => {
       const mealId = batchSchedule[dateStr] || menuItems[0]?.id;
       const meal = menuItems.find((m) => m.id === mealId) || menuItems[0];
       return {
+        orderNumber: batchOrderNo,
+        orderType: 'Meal Plan Redemption' as const,
         memberId: currentMember.id,
         memberName: currentMember.name,
         memberPhone: currentMember.phone,
@@ -741,6 +755,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         quantity: 1,
         dietaryNotes,
         recipeStandard: 'Standard Chef Recipe' as const,
+        autoReplySent: false,
       };
     });
 
@@ -755,6 +770,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
     setRedemptionSuccessPopup({
       isOpen: true,
+      orderNumber: batchOrderNo,
       deliveryDate: `${upcomingWorkdays[0]} ~ ${upcomingWorkdays[upcomingWorkdays.length - 1]}`,
       formattedDate: `${formatDisplayDate(upcomingWorkdays[0])} — ${formatDisplayDate(upcomingWorkdays[upcomingWorkdays.length - 1])}`,
       mealName: `${daysCount} Advance Scheduled Workday Bentos`,
@@ -3387,6 +3403,91 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
             </div>
 
             <div className="p-5 sm:p-6 space-y-4">
+              {/* Unique Order Number Banner */}
+              {redemptionSuccessPopup.orderNumber && (
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded">
+                      {language === 'en' ? 'Unique Order Tracking No.' : '专属订餐编号'}
+                    </span>
+                    <p className="font-mono font-black text-xl text-emerald-950 mt-0.5 select-all">
+                      #{redemptionSuccessPopup.orderNumber}
+                    </p>
+                    <p className="text-[10px] text-emerald-700 mt-0.5">
+                      {language === 'en'
+                        ? 'Recorded in kitchen back-office for easy tracking reference.'
+                        : '已同步录入后厨管理后台，双方凭此唯一编号高效对账。'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.clipboard && redemptionSuccessPopup.orderNumber) {
+                        navigator.clipboard.writeText(redemptionSuccessPopup.orderNumber);
+                        setCopiedOrderNo(true);
+                        setTimeout(() => setCopiedOrderNo(false), 2500);
+                      }
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-transform active:scale-95"
+                    title="Copy Order Number"
+                  >
+                    {copiedOrderNo ? <Check className="w-3.5 h-3.5 text-emerald-200" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedOrderNo ? (language === 'en' ? 'Copied!' : '已复制！') : (language === 'en' ? 'Copy No.' : '复制编号')}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* WhatsApp Auto-Reply Confirmation to Customer */}
+              {redemptionSuccessPopup.orderNumber && currentMember && (
+                <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-left space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-xs text-sky-950 flex items-center gap-1.5">
+                      <MessageCircle className="w-4 h-4 text-sky-600 shrink-0" />
+                      <span>
+                        {language === 'en'
+                          ? 'Send Confirmation Auto-Reply to My WhatsApp'
+                          : '发送确认自动回执至注册手机 WhatsApp'}
+                      </span>
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-sky-200 text-sky-900 px-2 py-0.5 rounded-full">
+                      {currentMember.phone}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-sky-800 leading-relaxed">
+                    {language === 'en'
+                      ? `Click below to send the official booking confirmation auto-reply slip directly to your registered WhatsApp (${currentMember.phone}):`
+                      : `订餐已完成！点击下方一键发送官方订餐确认回执至您的注册 WhatsApp（${currentMember.phone}）留存凭据：`}
+                  </p>
+                  <a
+                    href={buildCustomerWhatsAppAutoReplyUrl(currentMember.phone, {
+                      orderNumber: redemptionSuccessPopup.orderNumber,
+                      customerName: currentMember.name,
+                      customerPhone: currentMember.phone,
+                      items: `${redemptionSuccessPopup.quantity}x ${redemptionSuccessPopup.mealName}`,
+                      deliveryDate: redemptionSuccessPopup.deliveryDate,
+                      deliverySlot: redemptionSuccessPopup.deliverySlot,
+                      deliveryAddress: `${redemptionSuccessPopup.deliveryAddress}, ${redemptionSuccessPopup.area} ${redemptionSuccessPopup.postalCode}`,
+                      totalAmount: 'Package Meal Credit Deducted / 会员餐券抵扣',
+                      paymentMethod: 'Member Package Credit',
+                      quotaRemaining: redemptionSuccessPopup.remainingMealsAfter,
+                      dietaryNotes: dietaryNotes,
+                      orderType: 'Meal Plan Redemption',
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>
+                      {language === 'en'
+                        ? `Auto-Reply to WhatsApp (${currentMember.phone})`
+                        : `发送确认回执至我的 WhatsApp (${currentMember.phone})`}
+                    </span>
+                  </a>
+                </div>
+              )}
+
               {/* Double-Booking Prevention Awareness Box */}
               <div className="p-4 rounded-2xl bg-amber-50/95 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
                 <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">

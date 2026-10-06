@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, RefreshCw, CheckCircle2, MessageCircle, ExternalLink, QrCode } from 'lucide-react';
-import { Language } from '../types';
+import { Language, SiteSettings } from '../types';
 
 interface DuitNowPaymentCardProps {
   language: Language;
   amount?: number;
   orderId?: string;
   whatsappNumber?: string;
+  siteSettings?: SiteSettings;
+  onUpdateQrImage?: (imageUrl: string | null) => void;
 }
 
 const STORAGE_KEY = 'chillhealthy_duitnow_qr_custom';
@@ -16,18 +18,26 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   amount,
   orderId,
   whatsappNumber = '0126189919',
+  siteSettings,
+  onUpdateQrImage,
 }) => {
-  const [customQrImage, setCustomQrImage] = useState<string | null>(null);
+  const [customQrImage, setCustomQrImage] = useState<string | null>(() => {
+    return siteSettings?.paymentQrUrl || null;
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (siteSettings?.paymentQrUrl) {
+      setCustomQrImage(siteSettings.paymentQrUrl);
+      return;
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) setCustomQrImage(saved);
     } catch {
       // ignore
     }
-  }, []);
+  }, [siteSettings?.paymentQrUrl]);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -41,6 +51,7 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
       } catch {
         // storage fallback
       }
+      onUpdateQrImage?.(result);
     };
     reader.readAsDataURL(file);
   };
@@ -52,7 +63,12 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
     } catch {
       // ignore
     }
+    onUpdateQrImage?.(null);
   };
+
+  const merchantName = siteSettings?.paymentMerchantName || 'Chill Healthy Trading';
+  const duitNowId = siteSettings?.paymentDuitNowId || siteSettings?.whatsappNumber || '0126189919';
+  const effectiveQr = customQrImage || siteSettings?.paymentQrUrl;
 
   const cleanPhone = whatsappNumber.replace(/\D/g, '') || '0126189919';
   const whatsappTarget = cleanPhone.startsWith('60') ? cleanPhone : `60${cleanPhone.replace(/^0/, '')}`;
@@ -61,7 +77,7 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
     `*Chill Healthy Trading - DuitNow QR Payment Receipt*%0A` +
       (orderId ? `Order ID: ${orderId}%0A` : '') +
       (amount ? `Amount Paid: RM ${amount.toFixed(2)}%0A` : '') +
-      `I have completed payment via DuitNow QR to *Chill Healthy Trading*.%0A` +
+      `I have completed payment via DuitNow QR to *${merchantName}*.%0A` +
       `Attached is my payment transfer receipt. Please confirm my order! ❤️`
   );
 
@@ -122,10 +138,10 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
 
         {/* QR Code Graphic Container */}
         <div className="w-52 h-52 sm:w-60 sm:h-60 p-2 bg-white rounded-xl flex items-center justify-center border border-stone-100 shadow-2xs relative">
-          {customQrImage ? (
+          {effectiveQr ? (
             <img
-              src={customQrImage}
-              alt="DuitNow QR Chill Healthy Trading"
+              src={effectiveQr}
+              alt={`DuitNow QR ${merchantName}`}
               className="w-full h-full object-contain"
             />
           ) : (
@@ -250,8 +266,13 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
 
         {/* Merchant Name under QR */}
         <h4 className="font-heading font-extrabold text-stone-900 text-base sm:text-lg mt-2 tracking-tight">
-          Chill Healthy Trading
+          {merchantName}
         </h4>
+        {duitNowId && (
+          <span className="text-[11px] font-mono font-semibold text-stone-500">
+            DuitNow ID: {duitNowId}
+          </span>
+        )}
 
         {/* Pink Banner */}
         <div className="w-full bg-[#e5006b] text-white py-1.5 px-3 rounded-md mt-2 shadow-xs">

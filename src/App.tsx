@@ -9,12 +9,12 @@ import { MealDetailModal } from './components/MealDetailModal';
 import { BrandStorySection } from './components/BrandStorySection';
 import { InstagramFeedSection } from './components/InstagramFeedSection';
 import { DeliverySection } from './components/DeliverySection';
-import { ReviewsSection } from './components/ReviewsSection';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MemberPortalModal } from './components/MemberPortalModal';
 import { BackOfficeModal } from './components/BackOfficeModal';
 import { UrgeBuyPlanModal } from './components/UrgeBuyPlanModal';
+import { TopInstagramVideoShowcase } from './components/TopInstagramVideoShowcase';
 import { Footer } from './components/Footer';
 import {
   Language,
@@ -49,6 +49,7 @@ import {
 } from './utils/packageExpiry';
 import { synchronizeMalaysiaWeekdayBankHolidays } from './utils/malaysiaHolidays';
 import { normalizeMalaysianPhone } from './utils/malaysiaPhone';
+import { generateUniqueOrderNumber } from './utils/whatsapp';
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -75,6 +76,21 @@ export default function App() {
           ? parsed.kitchenPhotoUrl
           : validCrafted || DEFAULT_SITE_SETTINGS.kitchenPhotoUrl;
 
+        const effectiveTopVideo =
+          parsed.topInstagramVideoUrl &&
+          !parsed.topInstagramVideoUrl.includes('mixkit.co') &&
+          !parsed.topInstagramVideoUrl.includes('flower.mp4') &&
+          !parsed.topInstagramVideoUrl.includes('DJ_W5ChJSjc') &&
+          !parsed.topInstagramVideoUrl.includes('instagram.com') &&
+          !parsed.topInstagramVideoUrl.includes('instagr.am')
+            ? parsed.topInstagramVideoUrl
+            : '/instagram_reel_DdyTG7it2_J.mp4';
+
+        const effectiveTopReelUrl =
+          (parsed.topInstagramReelUrl && !parsed.topInstagramReelUrl.includes('DJ_W5ChJSjc'))
+            ? parsed.topInstagramReelUrl
+            : 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==';
+
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
@@ -84,6 +100,8 @@ export default function App() {
           whatsappDisplay: '+60126189919',
           kitchenPhotoUrl: effectiveKitchenPhoto,
           heroComboPhotoUrl: parsed.heroComboPhotoUrl || savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
+          topInstagramVideoUrl: effectiveTopVideo,
+          topInstagramReelUrl: effectiveTopReelUrl,
         };
       }
       const initialSync = synchronizeMalaysiaWeekdayBankHolidays([], new Date(), 3);
@@ -539,10 +557,13 @@ export default function App() {
       ? activatePackageOnFirstOrder(currentMember.activePackage, firstMealDate, suspendedDates)
       : currentMember.activePackage;
 
-    // Create redemption ticket
+    // Create redemption ticket with standardized unique order number
+    const orderNo = redemptionData.orderNumber || generateUniqueOrderNumber('CH');
     const newRedemption: MealRedemption = {
       ...redemptionData,
-      id: `RED-${Date.now().toString().slice(-6)}`,
+      id: orderNo,
+      orderNumber: orderNo,
+      orderType: redemptionData.orderType || 'Meal Plan Redemption',
       status: 'Pending',
       createdAt: new Date().toISOString(),
       recipeStandard: redemptionData.recipeStandard || 'Standard Chef Recipe',
@@ -599,13 +620,18 @@ export default function App() {
       ? activatePackageOnFirstOrder(currentMember.activePackage, firstMealDate, suspendedDates)
       : currentMember.activePackage;
 
-    const newTickets: MealRedemption[] = redemptionsList.map((r, i) => ({
-      ...r,
-      id: `RED-${Date.now().toString().slice(-5)}${i}`,
-      status: 'Pending',
-      createdAt: new Date().toISOString(),
-      recipeStandard: r.recipeStandard || 'Standard Chef Recipe',
-    }));
+    const newTickets: MealRedemption[] = redemptionsList.map((r, i) => {
+      const orderNo = r.orderNumber || generateUniqueOrderNumber('CH');
+      return {
+        ...r,
+        id: orderNo,
+        orderNumber: orderNo,
+        orderType: r.orderType || 'Meal Plan Redemption',
+        status: 'Pending',
+        createdAt: new Date().toISOString(),
+        recipeStandard: r.recipeStandard || 'Standard Chef Recipe',
+      };
+    });
 
     const updatedMember: MemberAccount = {
       ...currentMember,
@@ -1309,6 +1335,14 @@ export default function App() {
 
       {/* Main Content Sections */}
       <main className="flex-1">
+        {/* Highest Viewed IG Video Showcase Hosted at Top of Home Page */}
+        <TopInstagramVideoShowcase
+          language={language}
+          siteSettings={siteSettings}
+          onExploreMenu={() => scrollToSection('menu')}
+          onViewPlans={() => scrollToSection('plans')}
+        />
+
         <HeroBanner
           language={language}
           onExploreMenu={() => scrollToSection('menu')}
@@ -1364,8 +1398,6 @@ export default function App() {
           language={language}
           siteSettings={siteSettings}
         />
-
-        <ReviewsSection language={language} />
       </main>
 
       {/* Footer with WhatsApp, Member & Back Office Links */}
@@ -1451,6 +1483,15 @@ export default function App() {
           onPackageOrdered={handlePackageOrdered}
           onOpenMemberPortal={() => setIsMemberPortalOpen(true)}
           onRegisterCustomer={handleRegisterCustomerFromCheckout}
+          onOrderPlaced={(orderRecord) => {
+            setRedemptions((prev) => {
+              const updated = [orderRecord, ...prev];
+              try {
+                localStorage.setItem('chillhealthy_redemptions', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }}
         />
       )}
 

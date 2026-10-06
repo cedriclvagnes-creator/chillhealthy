@@ -47,6 +47,7 @@ import {
   Camera,
   Grid2X2,
   Landmark,
+  Instagram,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -67,7 +68,13 @@ import {
 } from '../utils/malaysiaHolidays';
 import { ChillLogo } from './ChillLogo';
 import { MEAL_ITEMS } from '../data/menuData';
-import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
+import {
+  buildWhatsAppUrl,
+  OFFICIAL_WA_DISPLAY,
+  buildCustomerWhatsAppAutoReplyUrl,
+  buildOrderConfirmationAutoReply,
+} from '../utils/whatsapp';
+import { DuitNowPaymentCard } from './DuitNowPaymentCard';
 import { OfficialReceiptModal } from './OfficialReceiptModal';
 import { createDefaultOfficialReceipt, generateReceiptNumber } from '../utils/receipt';
 import {
@@ -176,6 +183,9 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [kitchenDateFilter, setKitchenDateFilter] = useState('all');
   const [kitchenSlotFilter, setKitchenSlotFilter] = useState<'all' | 'lunch' | 'dinner'>('all');
   const [kitchenStatusFilter, setKitchenStatusFilter] = useState<'all' | 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered'>('all');
+  const [kitchenOrderTypeFilter, setKitchenOrderTypeFilter] = useState<'all' | 'Ala Carte Bento' | 'Meal Plan Redemption' | 'Package Subscription'>('all');
+  const [previewAutoReplyOrder, setPreviewAutoReplyOrder] = useState<MealRedemption | null>(null);
+  const [copiedReplyText, setCopiedReplyText] = useState<boolean>(false);
   const [editingOrder, setEditingOrder] = useState<MealRedemption | null>(null);
   const [customTurnOffDate, setCustomTurnOffDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
@@ -189,6 +199,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [formSettings, setFormSettings] = useState<SiteSettings>({ ...siteSettings });
   const kitchenPhotoFileInputRef = useRef<HTMLInputElement>(null);
   const heroComboPhotoFileInputRef = useRef<HTMLInputElement>(null);
+  const paymentQrFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync formSettings whenever siteSettings updates from external changes
   useEffect(() => {
@@ -564,7 +575,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
         const mem = members.find((m) => m.id === r.memberId || m.phone === r.memberPhone);
         return {
           'No.': index + 1,
-          'Order / Ticket ID': r.id,
+          'Order Number': r.orderNumber || r.id,
+          'Order Type': r.orderType || 'Meal Plan Redemption',
           'Member Customer Name': r.memberName,
           'Member Phone / Login ID': r.memberPhone,
           'Subscribed Meal Package': mem?.activePackage ? mem.activePackage.planName : 'Healthy Meal Package',
@@ -853,6 +865,57 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
       // ignore
     }
     triggerToast(language === 'en' ? '✓ Reset to 4-Dish Ala Carte Grid' : '✓ 已恢复四款精选单点拼图展示');
+  };
+
+  // Upload Payment QR Code from Device (DuitNow QR Instant Pay)
+  const handlePaymentQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      triggerToast(language === 'en' ? 'Please select a valid image file' : '请选择有效的图片文件');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      triggerToast(language === 'en' ? 'Image file size is too large (max 8MB)' : '图片大小超过限制（最大8MB）');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        const updated = {
+          ...formSettings,
+          paymentQrUrl: result,
+        };
+        setFormSettings(updated);
+        onUpdateSiteSettings(updated);
+        try {
+          localStorage.setItem('chillhealthy_duitnow_qr_custom', result);
+        } catch {
+          // ignore
+        }
+        triggerToast(language === 'en' ? '✓ Payment QR Code updated and live on checkout!' : '✓ 支付收款QR码已更新并在前台结账实时生效！');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetPaymentQr = () => {
+    const updated = {
+      ...formSettings,
+      paymentQrUrl: '',
+    };
+    setFormSettings(updated);
+    onUpdateSiteSettings(updated);
+    try {
+      localStorage.removeItem('chillhealthy_duitnow_qr_custom');
+    } catch {
+      // ignore
+    }
+    triggerToast(language === 'en' ? '✓ Reset to official default DuitNow QR' : '✓ 已恢复官方默认 DuitNow QR 收款码');
   };
 
   // Save Package changes
@@ -1586,6 +1649,397 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           </button>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* =========================================================================
+                      CARD 2: DUITNOW QR CODE & PAYMENT SETTINGS (Update QR code at back end office)
+                      ========================================================================= */}
+                  <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs space-y-6">
+                    <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-5 h-5 text-pink-600" />
+                          <h4 className="font-heading font-extrabold text-base sm:text-lg text-stone-900">
+                            {language === 'en' ? 'DuitNow Payment QR Code & Merchant Settings' : '结账付款二维码与商户收款设置'}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {language === 'en'
+                            ? 'Upload or update the DuitNow QR image displayed on customer checkout & order payment modals.'
+                            : '在此更新或替换前台结账时显示的 DuitNow QR 收款码图片与商户信息，保存后全站即时生效。'}
+                        </p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-pink-50 border border-pink-200 text-pink-800 text-[11px] font-bold self-start sm:self-auto">
+                        {language === 'en' ? 'Live on Customer Checkout' : '实时同步至前台结账'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                      {/* Left: QR Form Inputs */}
+                      <div className="md:col-span-7 space-y-4">
+                        {/* File Upload Hidden Input */}
+                        <input
+                          type="file"
+                          ref={paymentQrFileInputRef}
+                          onChange={handlePaymentQrFileUpload}
+                          accept="image/*"
+                          className="hidden"
+                        />
+
+                        {/* Upload Button & Reset */}
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Upload New Payment QR Image' : '上传新的收款二维码图片'}
+                          </label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => paymentQrFileInputRef.current?.click()}
+                              className="px-4 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                            >
+                              <Camera className="w-4 h-4" />
+                              <span>{language === 'en' ? 'Choose Image File from Device' : '从本地设备选择二维码图片'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleResetPaymentQr}
+                              className="px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                              title="Reset to default official DuitNow QR"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>{language === 'en' ? 'Reset to Default QR' : '恢复默认收款码'}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Or Paste Image URL */}
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Or Paste QR Code Image URL' : '或直接粘贴二维码图片 URL 链接'}
+                          </label>
+                          <input
+                            type="text"
+                            value={formSettings.paymentQrUrl || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const updated = { ...formSettings, paymentQrUrl: val };
+                              setFormSettings(updated);
+                              onUpdateSiteSettings(updated);
+                              try {
+                                if (val) localStorage.setItem('chillhealthy_duitnow_qr_custom', val);
+                                else localStorage.removeItem('chillhealthy_duitnow_qr_custom');
+                              } catch {}
+                            }}
+                            placeholder="https://... or data:image/..."
+                            className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Merchant Name & Bank Details */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'Merchant Name' : '收款商户抬头名称'}
+                            </label>
+                            <input
+                              type="text"
+                              value={formSettings.paymentMerchantName || 'Chill Healthy Trading'}
+                              onChange={(e) =>
+                                setFormSettings({
+                                  ...formSettings,
+                                  paymentMerchantName: e.target.value,
+                                })
+                              }
+                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'DuitNow ID / Phone' : 'DuitNow ID / 收款手机号'}
+                            </label>
+                            <input
+                              type="text"
+                              value={formSettings.paymentDuitNowId || '0126189919'}
+                              onChange={(e) =>
+                                setFormSettings({
+                                  ...formSettings,
+                                  paymentDuitNowId: e.target.value,
+                                })
+                              }
+                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onUpdateSiteSettings(formSettings);
+                              triggerToast(language === 'en' ? '✓ Payment QR & Merchant settings saved!' : '✓ 支付收款码与商户信息已保存！');
+                            }}
+                            className="w-full py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{language === 'en' ? 'Save & Sync Payment Settings' : '保存并同步收款设置'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right: Live Interactive Card Preview */}
+                      <div className="md:col-span-5 bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2">
+                          {language === 'en' ? 'Live Checkout Preview' : '前台顾客看到的即时预览'}
+                        </span>
+                        <div className="scale-95 origin-top w-full">
+                          <DuitNowPaymentCard
+                            language={language}
+                            amount={88.0}
+                            orderId="SAMPLE-ORD"
+                            siteSettings={formSettings}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* =========================================================================
+                      CARD 3: TOP OF HOMEPAGE INSTAGRAM VIDEO SHOWCASE SETTINGS
+                      ========================================================================= */}
+                  <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs space-y-6">
+                    <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Instagram className="w-5 h-5 text-pink-600" />
+                          <h4 className="font-heading font-extrabold text-base sm:text-lg text-stone-900">
+                            {language === 'en' ? 'Top of Homepage Instagram Video Showcase' : '首页顶部爆款 IG 视频展示管理'}
+                          </h4>
+                        </div>
+                        <p className="text-xs text-stone-500 mt-0.5">
+                          {language === 'en'
+                            ? 'Configure the highest-viewed Instagram reel hosted at the very top of the homepage.'
+                            : '设置并展示您在 Instagram 上播放量最高的爆款探店/厨房实拍视频，提升前台顾客信任与转化。'}
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer self-start sm:self-auto">
+                        <input
+                          type="checkbox"
+                          checked={formSettings.showTopInstagramVideo !== false}
+                          onChange={(e) => {
+                            const updated = { ...formSettings, showTopInstagramVideo: e.target.checked };
+                            setFormSettings(updated);
+                            onUpdateSiteSettings(updated);
+                            triggerToast(e.target.checked ? '✓ Top IG Video enabled' : '⚠️ Top IG Video disabled');
+                          }}
+                          className="rounded text-pink-600 focus:ring-pink-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-stone-800">
+                          {language === 'en' ? 'Enable at Top of Home Page' : '在首页顶部启用展示'}
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Instagram Reel Link (Just paste any link!) */}
+                      <div className="bg-stone-50 p-3.5 sm:p-4 rounded-2xl border border-stone-200">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <label className="text-xs font-bold text-stone-900 flex items-center gap-1.5">
+                            <Instagram className="w-4 h-4 text-pink-600" />
+                            <span>{language === 'en' ? 'Instagram Reel Link (Just Paste Link)' : 'Instagram 视频链接 (直接在此粘贴链接即可)'}</span>
+                          </label>
+                          <span className="text-[11px] font-mono font-bold text-pink-700 bg-pink-100/70 px-2.5 py-0.5 rounded-full border border-pink-200">
+                            @chillhealthybox
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="text"
+                              value={formSettings.topInstagramReelUrl || ''}
+                              onChange={(e) => {
+                                const val = e.target.value.trim();
+                                setFormSettings({
+                                  ...formSettings,
+                                  topInstagramReelUrl: val,
+                                  topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
+                                });
+                              }}
+                              placeholder="https://www.instagram.com/reel/DdyTG7it2_J/?stkn=..."
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-pink-500 font-mono bg-white shadow-2xs"
+                            />
+                            {formSettings.topInstagramReelUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setFormSettings({ ...formSettings, topInstagramReelUrl: '' })}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1"
+                                title="Clear link"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const text = await navigator.clipboard.readText();
+                                  if (text) {
+                                    setFormSettings({
+                                      ...formSettings,
+                                      topInstagramReelUrl: text.trim(),
+                                    });
+                                    triggerToast(language === 'en' ? '✓ Pasted link from clipboard!' : '✓ 已从剪贴板粘贴链接！');
+                                  }
+                                } catch {
+                                  triggerToast(language === 'en' ? 'Please paste using Ctrl+V or ⌘+V' : '请使用快捷键 Ctrl+V 或 ⌘+V 粘贴');
+                                }
+                              }}
+                              className="px-3 py-2 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Paste link from clipboard"
+                            >
+                              <Copy className="w-3.5 h-3.5 text-stone-700" />
+                              <span>{language === 'en' ? 'Paste' : '一键粘贴'}</span>
+                            </button>
+
+                            {formSettings.topInstagramReelUrl && (
+                              <a
+                                href={formSettings.topInstagramReelUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-2 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Test link"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>{language === 'en' ? 'Test' : '测试'}</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-stone-200/60">
+                          <p className="text-[11px] text-stone-500">
+                            💡 {language === 'en'
+                              ? 'Paste any Instagram Reel link. Exclusively features @chillhealthybox official store.'
+                              : '只需直接粘贴 Instagram Reel 链接即可生效，仅展示 @chillhealthybox 官方账号。'}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramReelUrl: 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==',
+                                topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
+                              });
+                              triggerToast(language === 'en' ? '✓ Reset to official DdyTG7it2_J link' : '✓ 已恢复为官方最新视频链接 (DdyTG7it2_J)');
+                            }}
+                            className="text-[11px] font-bold text-pink-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>{language === 'en' ? 'Default to DdyTG7it2_J' : '恢复官方推荐视频 (DdyTG7it2_J)'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-stone-700 block mb-1">
+                          {language === 'en' ? 'Optional Direct Video Stream URL (.mp4)' : '可选直链视频流 URL (.mp4 本地或 CDN 直链)'}
+                        </label>
+                        <input
+                          type="text"
+                          value={formSettings.topInstagramVideoUrl || ''}
+                          onChange={(e) => {
+                            const val = e.target.value.trim();
+                            if (val.includes('instagram.com') || val.includes('instagr.am')) {
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramReelUrl: val,
+                                topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
+                              });
+                              triggerToast(language === 'en' ? '✓ Instagram Reel link routed & active!' : '✓ 已识别 Instagram 视频链接并自动应用！');
+                            } else {
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramVideoUrl: val,
+                              });
+                            }
+                          }}
+                          placeholder="/instagram_reel_DdyTG7it2_J.mp4"
+                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500 font-mono"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Views Badge Text' : '播放量展示标签'}
+                          </label>
+                          <input
+                            type="text"
+                            value={formSettings.topInstagramVideoViews || 'Official Reel'}
+                            onChange={(e) =>
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramVideoViews: e.target.value,
+                              })
+                            }
+                            placeholder="Official Reel"
+                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Headline Title (English)' : '标题文案 (English)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={formSettings.topInstagramVideoTitleEn || '🥗【CHILL Healthy Box】Official Healthy Meal Prep'}
+                            onChange={(e) =>
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramVideoTitleEn: e.target.value,
+                              })
+                            }
+                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold text-stone-700 block mb-1">
+                            {language === 'en' ? 'Headline Title (华语中文)' : '标题文案 (华语中文)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={formSettings.topInstagramVideoTitleZh || '🥗【潮轻食官方】专注做好健康餐 · 午餐与晚餐新鲜直达'}
+                            onChange={(e) =>
+                              setFormSettings({
+                                ...formSettings,
+                                topInstagramVideoTitleZh: e.target.value,
+                              })
+                            }
+                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onUpdateSiteSettings(formSettings);
+                          triggerToast(language === 'en' ? '✓ Instagram Video Showcase settings saved!' : '✓ 首页爆款 IG 视频设置已成功保存！');
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Save Video Settings' : '保存视频设置'}</span>
+                      </button>
                     </div>
                   </div>
 
@@ -2765,11 +3219,14 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 const filteredRedemptions = redemptions.filter((red) => {
                   const matchSearch =
                     !kitchenSearch ||
+                    (red.orderNumber && red.orderNumber.toLowerCase().includes(kitchenSearch.toLowerCase())) ||
+                    red.id.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
                     red.memberName.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
                     red.memberPhone.includes(kitchenSearch) ||
                     red.mealName.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
                     red.deliveryAddress.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
-                    red.area.toLowerCase().includes(kitchenSearch.toLowerCase());
+                    red.area.toLowerCase().includes(kitchenSearch.toLowerCase()) ||
+                    (red.orderType && red.orderType.toLowerCase().includes(kitchenSearch.toLowerCase()));
 
                   const matchSlot =
                     kitchenSlotFilter === 'all' ||
@@ -2784,7 +3241,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     kitchenStatusFilter === 'all' ||
                     red.status === kitchenStatusFilter;
 
-                  return matchSearch && matchSlot && matchDate && matchStatus;
+                  const matchOrderType =
+                    kitchenOrderTypeFilter === 'all' ||
+                    (red.orderType || 'Meal Plan Redemption') === kitchenOrderTypeFilter;
+
+                  return matchSearch && matchSlot && matchDate && matchStatus && matchOrderType;
                 });
 
                 const uniqueDates = Array.from(new Set(redemptions.map((r) => r.deliveryDate))).sort();
@@ -2793,7 +3254,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   try {
                     const dataToExport = filteredRedemptions.map((r, index) => ({
                       'No.': index + 1,
-                      'Order ID': r.id,
+                      'Order Number': r.orderNumber || r.id,
+                      'Order Type': r.orderType || 'Meal Plan Redemption',
                       'Delivery Date': r.deliveryDate,
                       'Delivery Slot': r.deliverySlot,
                       'Customer Name': r.memberName,
@@ -2805,6 +3267,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       'Postal Code': r.postalCode,
                       'Dietary / Prep Notes': r.dietaryNotes || 'None',
                       'Order Status': r.status,
+                      'WA Confirmation Sent': r.autoReplySent ? 'Yes (Sent)' : 'No (Pending)',
                       'Order Timestamp': r.createdAt || r.redeemedAt || '',
                     }));
 
@@ -2822,11 +3285,12 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 };
 
                 const handleExportCSV = () => {
-                  const headers = ['No,Order ID,Date,Slot,Customer,Phone,Meal EN,Meal ZH,Address,Area,Postal Code,Notes,Status,Timestamp'];
+                  const headers = ['No,Order Number,Order Type,Date,Slot,Customer,Phone,Meal EN,Meal ZH,Address,Area,Postal Code,Notes,Status,WA Reply Sent,Timestamp'];
                   const rows = filteredRedemptions.map((r, i) =>
                     [
                       i + 1,
-                      `"${r.id}"`,
+                      `"${r.orderNumber || r.id}"`,
+                      `"${r.orderType || 'Meal Plan Redemption'}"`,
                       `"${r.deliveryDate}"`,
                       `"${r.deliverySlot}"`,
                       `"${r.memberName}"`,
@@ -2838,6 +3302,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       `"${r.postalCode || ''}"`,
                       `"${(r.dietaryNotes || '').replace(/"/g, '""')}"`,
                       `"${r.status}"`,
+                      `"${r.autoReplySent ? 'Yes' : 'No'}"`,
                       `"${r.createdAt || r.redeemedAt || ''}"`,
                     ].join(',')
                   );
@@ -3393,17 +3858,32 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     </div>
 
                     {/* Filter & Search Toolbar */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
                       {/* Search */}
                       <div className="relative">
                         <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
-                          placeholder={language === 'en' ? 'Search customer, phone, meal, address...' : '搜索姓名、手机、餐品或地址...'}
+                          placeholder={language === 'en' ? 'Search Order #, customer, phone, meal...' : '搜索订单编号 #、姓名、手机、餐品...'}
                           value={kitchenSearch}
                           onChange={(e) => setKitchenSearch(e.target.value)}
                           className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                         />
+                      </div>
+
+                      {/* Order Type Filter */}
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-stone-400 shrink-0" />
+                        <select
+                          value={kitchenOrderTypeFilter}
+                          onChange={(e) => setKitchenOrderTypeFilter(e.target.value as any)}
+                          className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50 font-bold"
+                        >
+                          <option value="all">{language === 'en' ? 'All Order Types' : '所有订单类型'}</option>
+                          <option value="Ala Carte Bento">{language === 'en' ? 'Ala Carte Bento (单点外卖)' : '单点外卖 (Ala Carte)'}</option>
+                          <option value="Meal Plan Redemption">{language === 'en' ? 'Plan Redemption (每日选餐)' : '套餐每日选餐 (Plan)'}</option>
+                          <option value="Package Subscription">{language === 'en' ? 'Plan Subscriptions (套餐订购)' : '套餐订购 (Subscription)'}</option>
+                        </select>
                       </div>
 
                       {/* Date Filter */}
@@ -3466,123 +3946,213 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           <p className="text-xs">{language === 'en' ? 'No matching orders found.' : '没有找到符合条件的订单。'}</p>
                         </div>
                       ) : (
-                        filteredRedemptions.map((red) => (
-                          <div
-                            key={red.id}
-                            className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-emerald-300"
-                          >
-                            <div className="flex items-start gap-3">
-                              <img
-                                src={red.mealImage}
-                                alt={red.mealName}
-                                className="w-14 h-14 rounded-xl object-cover shrink-0 border border-stone-200 shadow-2xs"
-                              />
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h5 className="font-bold text-sm text-stone-900">{red.mealName}</h5>
-                                  <span className="text-xs text-stone-400">({red.mealNameZh})</span>
-                                  <span className="text-[10px] bg-stone-100 text-stone-600 font-mono px-2 py-0.5 rounded">
-                                    #{red.id.slice(-6)}
-                                  </span>
-                                </div>
+                        filteredRedemptions.map((red) => {
+                          const orderNo = red.orderNumber || red.id;
+                          const autoReplyMsg = buildOrderConfirmationAutoReply({
+                            orderNumber: orderNo,
+                            customerName: red.memberName,
+                            customerPhone: red.memberPhone,
+                            items: `${red.quantity || 1}x ${red.mealName} (${red.mealNameZh})`,
+                            deliveryDate: red.deliveryDate,
+                            deliverySlot: red.deliverySlot,
+                            deliveryAddress: `${red.deliveryAddress}, ${red.area} ${red.postalCode}`,
+                            dietaryNotes: red.dietaryNotes,
+                            orderType: red.orderType || 'Meal Plan Redemption',
+                          });
 
-                                <p className="text-xs font-medium text-emerald-800 mt-0.5">
-                                  {language === 'en' ? 'Customer:' : '客户：'} <span className="font-bold text-stone-900">{red.memberName}</span> ·{' '}
-                                  <a href={`tel:${red.memberPhone}`} className="hover:underline text-emerald-700 font-semibold">
-                                    {red.memberPhone}
-                                  </a>
-                                </p>
+                          return (
+                            <div
+                              key={red.id}
+                              className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all hover:border-emerald-300"
+                            >
+                              <div className="flex items-start gap-3 min-w-0">
+                                <img
+                                  src={red.mealImage}
+                                  alt={red.mealName}
+                                  className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200 shadow-2xs"
+                                />
+                                <div className="min-w-0">
+                                  {/* Meal Title & Badges */}
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h5 className="font-bold text-sm sm:text-base text-stone-900 truncate">{red.mealName}</h5>
+                                    <span className="text-xs text-stone-500">({red.mealNameZh})</span>
+                                  </div>
 
-                                <p className="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
-                                  <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                                  <span>
-                                    {red.deliveryAddress}, {red.area} ({red.postalCode})
-                                  </span>
-                                </p>
+                                  {/* Dedicated Unique Tracking Reference & Order Type */}
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-300 rounded-lg px-2.5 py-0.5 shadow-2xs">
+                                      <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                                        {language === 'en' ? 'Order No:' : '专属订单号:'}
+                                      </span>
+                                      <span className="text-xs font-mono font-black text-emerald-950 select-all">
+                                        #{orderNo}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(orderNo);
+                                          triggerToast(language === 'en' ? `✓ Copied Order No: #${orderNo}` : `✓ 已复制订单编号: #${orderNo}`);
+                                        }}
+                                        className="p-0.5 ml-0.5 rounded hover:bg-emerald-200/70 text-emerald-700 transition-colors cursor-pointer"
+                                        title="Copy Order Number"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
 
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 mt-1">
-                                  <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200">
-                                    📅 {red.deliveryDate}
-                                  </span>
-                                  <span className="bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-md border border-amber-200">
-                                    ⏰ {red.deliverySlot}
-                                  </span>
-                                  {red.dietaryNotes && (
-                                    <span className="text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-medium">
-                                      ⚠️ Note: {red.dietaryNotes}
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                      red.orderType === 'Ala Carte Bento'
+                                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                        : red.orderType === 'Package Subscription'
+                                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                        : 'bg-teal-100 text-teal-900 border border-teal-200'
+                                    }`}>
+                                      {red.orderType || 'Meal Plan Redemption'}
                                     </span>
-                                  )}
+
+                                    {red.autoReplySent ? (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3 text-sky-600" />
+                                        <span>{language === 'en' ? 'WA Auto-Reply Sent' : '已发 WhatsApp 回执'}</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                                        {language === 'en' ? 'WA Auto-Reply Pending' : '待发 WhatsApp 回执'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Customer Info */}
+                                  <p className="text-xs font-medium text-emerald-800 mt-1">
+                                    {language === 'en' ? 'Customer:' : '客户：'}{' '}
+                                    <span className="font-bold text-stone-900">{red.memberName}</span> ·{' '}
+                                    <a
+                                      href={`https://wa.me/60${red.memberPhone.replace(/\D/g, '').replace(/^(60|0)/, '')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="hover:underline text-emerald-700 font-bold inline-flex items-center gap-1"
+                                      title="Open customer WhatsApp"
+                                    >
+                                      <span>{red.memberPhone}</span>
+                                    </a>
+                                  </p>
+
+                                  <p className="text-xs text-stone-600 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                    <span>
+                                      {red.deliveryAddress}, {red.area} ({red.postalCode})
+                                    </span>
+                                  </p>
+
+                                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 mt-1.5">
+                                    <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded-md border border-emerald-200">
+                                      📅 {red.deliveryDate}
+                                    </span>
+                                    <span className="bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-md border border-amber-200">
+                                      ⏰ {red.deliverySlot}
+                                    </span>
+                                    {red.dietaryNotes && (
+                                      <span className="text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md font-medium">
+                                        ⚠️ Note: {red.dietaryNotes}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
+
+                              {/* Status and Action Buttons */}
+                              <div className="flex flex-wrap items-center gap-2 justify-end shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-stone-100">
+                                {/* Send Confirmation Auto-Reply to Customer's Registered WhatsApp */}
+                                <a
+                                  href={buildWhatsAppUrl(red.memberPhone, autoReplyMsg)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => {
+                                    if (onUpdateRedemptionOrder) {
+                                      onUpdateRedemptionOrder({ ...red, autoReplySent: true });
+                                    }
+                                    triggerToast(
+                                      language === 'en'
+                                        ? `✓ Opening WhatsApp auto-reply confirmation to ${red.memberPhone}`
+                                        : `✓ 正在调起 WhatsApp 发送订餐确认回执至 ${red.memberPhone}`
+                                    );
+                                  }}
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                                    red.autoReplySent
+                                      ? 'bg-sky-50 text-sky-800 border border-sky-300 hover:bg-sky-100'
+                                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                  }`}
+                                  title="Send booking confirmation auto-reply slip to customer's registered WhatsApp"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                  <span>
+                                    {red.autoReplySent
+                                      ? (language === 'en' ? 'Auto-Reply Sent (Resend)' : '已发回执 (可重发)')
+                                      : (language === 'en' ? 'Send WhatsApp Auto-Reply' : '发送 WhatsApp 确认回执')}
+                                  </span>
+                                </a>
+
+                                {/* Preview Auto-Reply Message */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewAutoReplyOrder(red)}
+                                  className="p-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-medium transition-colors cursor-pointer border border-stone-200"
+                                  title="Preview auto-reply confirmation slip message text"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+
+                                {/* Edit Order Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingOrder({ ...red })}
+                                  className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                                  title="Edit customer delivery location, date, or meal selection"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5 text-emerald-700" />
+                                  <span>{language === 'en' ? 'Edit Order' : '修改订单/餐品'}</span>
+                                </button>
+
+                                {/* Status dropdown */}
+                                <select
+                                  value={red.status}
+                                  onChange={(e) =>
+                                    onUpdateRedemptionStatus(red.id, e.target.value as MealRedemption['status'])
+                                  }
+                                  className={`text-xs font-bold px-3 py-2 rounded-xl border cursor-pointer ${
+                                    red.status === 'Delivered'
+                                      ? 'bg-stone-100 text-stone-800 border-stone-300'
+                                      : red.status === 'Out for Delivery'
+                                      ? 'bg-sky-50 text-sky-800 border-sky-300'
+                                      : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                  }`}
+                                >
+                                  <option value="Pending">Pending Review</option>
+                                  <option value="Prepping in Kitchen">Prepping in Kitchen</option>
+                                  <option value="Out for Delivery">Out for Delivery</option>
+                                  <option value="Delivered">Delivered ✓</option>
+                                </select>
+
+                                {/* Delete Meal & Automatically Restore Quota */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOrderToDelete(red);
+                                    setDeletionReasonInput(
+                                      language === 'en'
+                                        ? `Delivery cancelled by admin for ${red.deliveryDate} (${red.deliverySlot}). Quota +${red.quantity || 1} restored to customer balance.`
+                                        : `管理员取消 ${red.deliveryDate} (${red.deliverySlot}) 送餐，+${red.quantity || 1} 餐配额已全额返还至顾客账户余额。`
+                                    );
+                                  }}
+                                  className="px-2.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-red-200"
+                                  title="Delete meal order and automatically restore quota to customer account"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                                </button>
+                              </div>
                             </div>
-
-                            {/* Status and Action Buttons */}
-                            <div className="flex flex-wrap items-center gap-2 justify-end shrink-0">
-                              {/* Edit Order Button */}
-                              <button
-                                type="button"
-                                onClick={() => setEditingOrder({ ...red })}
-                                className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
-                                title="Edit customer delivery location, date, or meal selection"
-                              >
-                                <Edit2 className="w-3.5 h-3.5 text-emerald-700" />
-                                <span>{language === 'en' ? 'Edit Order' : '修改订单/餐品'}</span>
-                              </button>
-
-                              {/* Status dropdown */}
-                              <select
-                                value={red.status}
-                                onChange={(e) =>
-                                  onUpdateRedemptionStatus(red.id, e.target.value as MealRedemption['status'])
-                                }
-                                className={`text-xs font-bold px-3 py-2 rounded-xl border cursor-pointer ${
-                                  red.status === 'Delivered'
-                                    ? 'bg-stone-100 text-stone-800 border-stone-300'
-                                    : red.status === 'Out for Delivery'
-                                    ? 'bg-sky-50 text-sky-800 border-sky-300'
-                                    : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                }`}
-                              >
-                                <option value="Pending">Pending Review</option>
-                                <option value="Prepping in Kitchen">Prepping in Kitchen</option>
-                                <option value="Out for Delivery">Out for Delivery</option>
-                                <option value="Delivered">Delivered ✓</option>
-                              </select>
-
-                              {/* WhatsApp Direct Link */}
-                              <a
-                                href={buildWhatsAppUrl(
-                                  red.memberPhone,
-                                  `Hi ${red.memberName}, CHILL Healthy kitchen update for your meal ${red.mealName}: Status is ${red.status}!`
-                                )}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5" />
-                                <span>WhatsApp</span>
-                              </a>
-
-                              {/* Delete Meal & Automatically Restore Quota */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOrderToDelete(red);
-                                  setDeletionReasonInput(
-                                    language === 'en'
-                                      ? `Delivery cancelled by admin for ${red.deliveryDate} (${red.deliverySlot}). Quota +${red.quantity || 1} restored to customer balance.`
-                                      : `管理员取消 ${red.deliveryDate} (${red.deliverySlot}) 送餐，+${red.quantity || 1} 餐配额已全额返还至顾客账户余额。`
-                                  );
-                                }}
-                                className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-red-200"
-                                title="Delete meal order and automatically restore quota to customer account"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                                <span>{language === 'en' ? 'Delete & Restore' : '删单还餐'}</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
 
@@ -3943,6 +4513,123 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   : `确认删单并退还 +${refundAmt} 餐`}
                               </span>
                             </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* =========================================================
+                      SUB-MODAL: PREVIEW & SEND CUSTOMER WHATSAPP AUTO-REPLY
+                      ========================================================= */}
+                  {previewAutoReplyOrder && (() => {
+                    const orderNo = previewAutoReplyOrder.orderNumber || previewAutoReplyOrder.id;
+                    const msgText = buildOrderConfirmationAutoReply({
+                      orderNumber: orderNo,
+                      customerName: previewAutoReplyOrder.memberName,
+                      customerPhone: previewAutoReplyOrder.memberPhone,
+                      items: `${previewAutoReplyOrder.quantity || 1}x ${previewAutoReplyOrder.mealName} (${previewAutoReplyOrder.mealNameZh})`,
+                      deliveryDate: previewAutoReplyOrder.deliveryDate,
+                      deliverySlot: previewAutoReplyOrder.deliverySlot,
+                      deliveryAddress: `${previewAutoReplyOrder.deliveryAddress}, ${previewAutoReplyOrder.area} ${previewAutoReplyOrder.postalCode}`,
+                      dietaryNotes: previewAutoReplyOrder.dietaryNotes,
+                      orderType: previewAutoReplyOrder.orderType || 'Meal Plan Redemption',
+                    });
+
+                    const waUrl = buildWhatsAppUrl(previewAutoReplyOrder.memberPhone, msgText);
+
+                    return (
+                      <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 space-y-4 max-h-[90vh] flex flex-col">
+                          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+                                <MessageCircle className="w-5 h-5 text-emerald-700" />
+                              </div>
+                              <div>
+                                <h5 className="font-heading font-extrabold text-base text-stone-900">
+                                  {language === 'en' ? 'WhatsApp Confirmation Auto-Reply' : 'WhatsApp 订餐确认回执预览'}
+                                </h5>
+                                <p className="text-xs text-stone-500">
+                                  {language === 'en' ? 'Dispatched to customer registered phone:' : '发送至顾客注册手机号：'}{' '}
+                                  <strong className="text-stone-800 font-mono">{previewAutoReplyOrder.memberPhone}</strong>
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAutoReplyOrder(null)}
+                              className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Order Summary Ribbon */}
+                          <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between gap-3 text-xs">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-stone-500 block">
+                                {language === 'en' ? 'Order Number' : '专属订单编号'}
+                              </span>
+                              <span className="font-mono font-black text-sm text-emerald-950">
+                                #{orderNo}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] uppercase font-bold text-stone-500 block">
+                                {language === 'en' ? 'Customer' : '顾客姓名'}
+                              </span>
+                              <span className="font-bold text-stone-900">
+                                {previewAutoReplyOrder.memberName}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Formatted Message Preview */}
+                          <div className="flex-1 overflow-y-auto space-y-1.5">
+                            <label className="text-xs font-bold text-stone-700 flex items-center justify-between">
+                              <span>{language === 'en' ? 'Message Content Slip' : '自动回执文本预览'}</span>
+                              <span className="text-[10px] text-stone-400 font-normal">
+                                {language === 'en' ? 'Pre-formatted with emoji & order specs' : '排版格式化包含编号、餐品、送餐地址'}
+                              </span>
+                            </label>
+                            <div className="p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-200 text-xs font-mono text-stone-800 whitespace-pre-wrap leading-relaxed select-all">
+                              {msgText}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="pt-2 border-t border-stone-200 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(msgText);
+                                setCopiedReplyText(true);
+                                setTimeout(() => setCopiedReplyText(false), 2500);
+                                triggerToast(language === 'en' ? '✓ Copied message to clipboard!' : '✓ 已复制回执文本！');
+                              }}
+                              className="px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200 shrink-0"
+                            >
+                              {copiedReplyText ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                              <span>{copiedReplyText ? (language === 'en' ? 'Copied!' : '已复制！') : (language === 'en' ? 'Copy Text' : '复制文本')}</span>
+                            </button>
+
+                            <a
+                              href={waUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => {
+                                if (onUpdateRedemptionOrder) {
+                                  onUpdateRedemptionOrder({ ...previewAutoReplyOrder, autoReplySent: true });
+                                }
+                                setPreviewAutoReplyOrder(null);
+                                triggerToast(language === 'en' ? `✓ Opening WhatsApp to ${previewAutoReplyOrder.memberPhone}` : `✓ 正在发送回执至 ${previewAutoReplyOrder.memberPhone}`);
+                              }}
+                              className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer hover:scale-[1.01] active:scale-95"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                              <span>{language === 'en' ? 'Open WhatsApp & Send Slip' : '调起 WhatsApp 立即发送'}</span>
+                            </a>
                           </div>
                         </div>
                       </div>

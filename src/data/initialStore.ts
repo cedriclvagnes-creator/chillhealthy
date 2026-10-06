@@ -34,6 +34,21 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   heroComboPhotoUrl: '',
   heroComboMode: 'grid',
   autoSyncMalaysiaBankHolidays: true,
+  // Payment QR customization settings
+  paymentQrUrl: '',
+  paymentMerchantName: 'Chill Healthy Trading',
+  paymentBankName: 'Public Bank / DuitNow QR',
+  paymentAccountNo: '3219-8920-11',
+  paymentDuitNowId: '0126189919',
+  paymentInstructionsEn: 'Scan via any Malaysian bank app, TNG eWallet, ShopeePay, or GrabPay.',
+  paymentInstructionsZh: '支持马来西亚各大银行 App、Touch n Go eWallet、ShopeePay 扫码即付。',
+  // Highest-viewed Instagram Video hosted at top of homepage
+  topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
+  topInstagramReelUrl: 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==',
+  topInstagramVideoTitleEn: '🥗【CHILL Healthy Box】Official Healthy Meal Prep & Daily Bento Highlights',
+  topInstagramVideoTitleZh: '🥗【潮轻食官方】专注做好健康餐 · 午餐与晚餐新鲜直达',
+  topInstagramVideoViews: 'Official Reel',
+  showTopInstagramVideo: true,
 };
 
 export const INITIAL_MEMBERS: MemberAccount[] = [
@@ -162,6 +177,8 @@ export const INITIAL_MEMBERS: MemberAccount[] = [
 export const INITIAL_REDEMPTIONS: MealRedemption[] = [
   {
     id: 'red-2026-001',
+    orderNumber: 'CH-260919-8102',
+    orderType: 'Meal Plan Redemption',
     memberId: '0126189919',
     memberName: 'Agnes Lim',
     memberPhone: '0126189919',
@@ -174,12 +191,17 @@ export const INITIAL_REDEMPTIONS: MealRedemption[] = [
     mealName: 'Norwegian Grilled Salmon Bento',
     mealNameZh: '香煎挪威三文鱼糙米餐盒',
     mealImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+    quantity: 1,
     status: 'Prepping in Kitchen',
     dietaryNotes: 'Dressing on side, extra broccoli if possible',
     createdAt: '2026-09-18 19:30',
+    autoReplySent: true,
+    autoReplySentAt: '2026-09-18 19:32',
   },
   {
     id: 'red-2026-002',
+    orderNumber: 'CH-260919-9431',
+    orderType: 'Meal Plan Redemption',
     memberId: 'mem-102',
     memberName: 'Marcus Tan',
     memberPhone: '0123344556',
@@ -192,8 +214,11 @@ export const INITIAL_REDEMPTIONS: MealRedemption[] = [
     mealName: 'Slow-Cooked Lemon Herb Chicken Breast',
     mealNameZh: '慢煮柠檬香草鸡胸餐盒',
     mealImage: 'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=800&q=80',
+    quantity: 1,
     status: 'Out for Delivery',
     dietaryNotes: 'Call upon arrival',
     createdAt: '2026-09-18 17:15',
+    autoReplySent: true,
+    autoReplySentAt: '2026-09-18 17:16',
   },
 ];

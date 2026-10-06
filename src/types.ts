@@ -155,6 +155,21 @@ export interface SiteSettings {
   kitchenPhotoUrl?: string; // Photo beside "Why CHILL Healthy Bento Tastes So Much Better"
   heroComboPhotoUrl?: string; // Photo for Combination of Ala Carte Meals at top of homepage
   heroComboMode?: 'photo' | 'grid' | 'spread'; // Display mode for Combination photo (photo, 4-dish grid, or table spread)
+  // Payment QR customization (editable at Back End Office)
+  paymentQrUrl?: string;
+  paymentMerchantName?: string;
+  paymentBankName?: string;
+  paymentAccountNo?: string;
+  paymentDuitNowId?: string;
+  paymentInstructionsEn?: string;
+  paymentInstructionsZh?: string;
+  // Highest-viewed Instagram Video hosted at top of homepage
+  topInstagramVideoUrl?: string;
+  topInstagramReelUrl?: string;
+  topInstagramVideoTitleEn?: string;
+  topInstagramVideoTitleZh?: string;
+  topInstagramVideoViews?: string;
+  showTopInstagramVideo?: boolean;
 }
 
 export interface HomepageContent {
@@ -271,6 +286,8 @@ export interface OfficialReceipt {
 
 export interface MealRedemption {
   id: string;
+  orderNumber?: string; // Standardized unique order number e.g. CH-261006-8492
+  orderType?: 'Ala Carte Bento' | 'Meal Plan Redemption' | 'Package Subscription';
   memberId: string;
   memberName: string;
   memberPhone: string;
@@ -284,11 +301,16 @@ export interface MealRedemption {
   mealNameZh: string;
   mealImage: string;
   quantity?: number;
+  totalAmount?: number;
+  paymentMethod?: string;
+  itemsSummary?: string;
   status: 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   dietaryNotes?: string;
   createdAt: string;
   redeemedAt?: string;
   recipeStandard?: 'Standard Chef Recipe' | 'Customized Ala Carte';
+  autoReplySent?: boolean;
+  autoReplySentAt?: string;
 }
 
 export interface MealDeletionRefundRecord {
