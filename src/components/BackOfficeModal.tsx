@@ -1862,11 +1862,13 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                               value={formSettings.topInstagramReelUrl || ''}
                               onChange={(e) => {
                                 const val = e.target.value.trim();
-                                setFormSettings({
+                                const updated = {
                                   ...formSettings,
                                   topInstagramReelUrl: val,
                                   topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
-                                });
+                                };
+                                setFormSettings(updated);
+                                onUpdateSiteSettings(updated);
                               }}
                               placeholder="https://www.instagram.com/reel/DdyTG7it2_J/?stkn=..."
                               className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-300 focus:ring-2 focus:ring-pink-500 font-mono bg-white shadow-2xs"
@@ -1874,8 +1876,12 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             {formSettings.topInstagramReelUrl && (
                               <button
                                 type="button"
-                                onClick={() => setFormSettings({ ...formSettings, topInstagramReelUrl: '' })}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1"
+                                onClick={() => {
+                                  const updated = { ...formSettings, topInstagramReelUrl: '' };
+                                  setFormSettings(updated);
+                                  onUpdateSiteSettings(updated);
+                                }}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs px-1 cursor-pointer"
                                 title="Clear link"
                               >
                                 ✕
@@ -1890,21 +1896,25 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 try {
                                   const text = await navigator.clipboard.readText();
                                   if (text) {
-                                    setFormSettings({
+                                    const val = text.trim();
+                                    const updated = {
                                       ...formSettings,
-                                      topInstagramReelUrl: text.trim(),
-                                    });
-                                    triggerToast(language === 'en' ? '✓ Pasted link from clipboard!' : '✓ 已从剪贴板粘贴链接！');
+                                      topInstagramReelUrl: val,
+                                      topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
+                                    };
+                                    setFormSettings(updated);
+                                    onUpdateSiteSettings(updated);
+                                    triggerToast(language === 'en' ? '✓ Pasted link from clipboard & applied!' : '✓ 已从剪贴板粘贴链接并立即生效！');
                                   }
                                 } catch {
-                                  triggerToast(language === 'en' ? 'Please paste using Ctrl+V or ⌘+V' : '请使用快捷键 Ctrl+V 或 ⌘+V 粘贴');
+                                  triggerToast(language === 'en' ? 'Please paste directly into the box using Ctrl+V or ⌘+V' : '请直接在输入框使用 Ctrl+V 或 ⌘+V 粘贴');
                                 }
                               }}
-                              className="px-3 py-2 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                              className="px-3.5 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                               title="Paste link from clipboard"
                             >
-                              <Copy className="w-3.5 h-3.5 text-stone-700" />
-                              <span>{language === 'en' ? 'Paste' : '一键粘贴'}</span>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>{language === 'en' ? 'Paste Link' : '一键粘贴链接'}</span>
                             </button>
 
                             {formSettings.topInstagramReelUrl && (
@@ -1912,11 +1922,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 href={formSettings.topInstagramReelUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-3 py-2 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
-                                title="Test link"
+                                className="px-3 py-2.5 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Open link in Instagram"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
-                                <span>{language === 'en' ? 'Test' : '测试'}</span>
+                                <span>{language === 'en' ? 'Open' : '测试'}</span>
                               </a>
                             )}
                           </div>
@@ -1925,19 +1935,21 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-stone-200/60">
                           <p className="text-[11px] text-stone-500">
                             💡 {language === 'en'
-                              ? 'Paste any Instagram Reel link. Exclusively features @chillhealthybox official store.'
-                              : '只需直接粘贴 Instagram Reel 链接即可生效，仅展示 @chillhealthybox 官方账号。'}
+                              ? 'Just paste any Instagram Reel link here to auto-play on the homepage. Default is official DdyTG7it2_J reel.'
+                              : '只需在此粘贴任意 Instagram 视频链接即可在前台自动播放。默认链接为官方推荐视频 (DdyTG7it2_J)。'}
                           </p>
 
                           <button
                             type="button"
                             onClick={() => {
-                              setFormSettings({
+                              const updated = {
                                 ...formSettings,
                                 topInstagramReelUrl: 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==',
                                 topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
-                              });
-                              triggerToast(language === 'en' ? '✓ Reset to official DdyTG7it2_J link' : '✓ 已恢复为官方最新视频链接 (DdyTG7it2_J)');
+                              };
+                              setFormSettings(updated);
+                              onUpdateSiteSettings(updated);
+                              triggerToast(language === 'en' ? '✓ Reset to official DdyTG7it2_J link' : '✓ 已恢复为官方推荐视频链接 (DdyTG7it2_J)');
                             }}
                             className="text-[11px] font-bold text-pink-600 hover:underline flex items-center gap-1 cursor-pointer"
                           >
@@ -1947,66 +1959,21 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-xs font-bold text-stone-700 block mb-1">
-                          {language === 'en' ? 'Optional Direct Video Stream URL (.mp4)' : '可选直链视频流 URL (.mp4 本地或 CDN 直链)'}
-                        </label>
-                        <input
-                          type="text"
-                          value={formSettings.topInstagramVideoUrl || ''}
-                          onChange={(e) => {
-                            const val = e.target.value.trim();
-                            if (val.includes('instagram.com') || val.includes('instagr.am')) {
-                              setFormSettings({
-                                ...formSettings,
-                                topInstagramReelUrl: val,
-                                topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
-                              });
-                              triggerToast(language === 'en' ? '✓ Instagram Reel link routed & active!' : '✓ 已识别 Instagram 视频链接并自动应用！');
-                            } else {
-                              setFormSettings({
-                                ...formSettings,
-                                topInstagramVideoUrl: val,
-                              });
-                            }
-                          }}
-                          placeholder="/instagram_reel_DdyTG7it2_J.mp4"
-                          className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-xs font-bold text-stone-700 block mb-1">
-                            {language === 'en' ? 'Views Badge Text' : '播放量展示标签'}
-                          </label>
-                          <input
-                            type="text"
-                            value={formSettings.topInstagramVideoViews || 'Official Reel'}
-                            onChange={(e) =>
-                              setFormSettings({
-                                ...formSettings,
-                                topInstagramVideoViews: e.target.value,
-                              })
-                            }
-                            placeholder="Official Reel"
-                            className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
-                          />
-                        </div>
-
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs font-bold text-stone-700 block mb-1">
                             {language === 'en' ? 'Headline Title (English)' : '标题文案 (English)'}
                           </label>
                           <input
                             type="text"
-                            value={formSettings.topInstagramVideoTitleEn || '🥗【CHILL Healthy Box】Official Healthy Meal Prep'}
-                            onChange={(e) =>
-                              setFormSettings({
+                            value={formSettings.topInstagramVideoTitleEn || 'Focus on Healthy Meals (专注做健康餐)'}
+                            onChange={(e) => {
+                              const updated = {
                                 ...formSettings,
                                 topInstagramVideoTitleEn: e.target.value,
-                              })
-                            }
+                              };
+                              setFormSettings(updated);
+                            }}
                             className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
                           />
                         </div>
@@ -2017,13 +1984,14 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           </label>
                           <input
                             type="text"
-                            value={formSettings.topInstagramVideoTitleZh || '🥗【潮轻食官方】专注做好健康餐 · 午餐与晚餐新鲜直达'}
-                            onChange={(e) =>
-                              setFormSettings({
+                            value={formSettings.topInstagramVideoTitleZh || '专注做健康餐'}
+                            onChange={(e) => {
+                              const updated = {
                                 ...formSettings,
                                 topInstagramVideoTitleZh: e.target.value,
-                              })
-                            }
+                              };
+                              setFormSettings(updated);
+                            }}
                             className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500"
                           />
                         </div>

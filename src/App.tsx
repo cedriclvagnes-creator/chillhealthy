@@ -91,6 +91,14 @@ export default function App() {
             ? parsed.topInstagramReelUrl
             : 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==';
 
+        const effectiveTopTitleZh =
+          (!parsed.topInstagramVideoTitleZh ||
+           parsed.topInstagramVideoTitleZh.includes('爆款') ||
+           parsed.topInstagramVideoTitleZh.includes('120万') ||
+           parsed.topInstagramVideoTitleZh.includes('潮轻食官方 · 坚持新鲜现做'))
+            ? '专注做健康餐'
+            : parsed.topInstagramVideoTitleZh;
+
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
@@ -102,6 +110,8 @@ export default function App() {
           heroComboPhotoUrl: parsed.heroComboPhotoUrl || savedHeroComboPhoto || DEFAULT_SITE_SETTINGS.heroComboPhotoUrl,
           topInstagramVideoUrl: effectiveTopVideo,
           topInstagramReelUrl: effectiveTopReelUrl,
+          topInstagramVideoTitleZh: effectiveTopTitleZh,
+          topInstagramVideoTitleEn: parsed.topInstagramVideoTitleEn || 'Focus on Healthy Meals (专注做健康餐)',
         };
       }
       const initialSync = synchronizeMalaysiaWeekdayBankHolidays([], new Date(), 3);

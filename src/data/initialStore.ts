@@ -45,8 +45,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   // Highest-viewed Instagram Video hosted at top of homepage
   topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
   topInstagramReelUrl: 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==',
-  topInstagramVideoTitleEn: '🥗【CHILL Healthy Box】Official Healthy Meal Prep & Daily Bento Highlights',
-  topInstagramVideoTitleZh: '🥗【潮轻食官方】专注做好健康餐 · 午餐与晚餐新鲜直达',
+  topInstagramVideoTitleEn: 'Focus on Healthy Meals (专注做健康餐)',
+  topInstagramVideoTitleZh: '专注做健康餐',
   topInstagramVideoViews: 'Official Reel',
   showTopInstagramVideo: true,
 };
