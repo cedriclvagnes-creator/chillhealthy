@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, ShieldCheck, MessageCircle } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, ShieldCheck, MessageCircle, Calendar } from 'lucide-react';
 import { CartItem, Language } from '../types';
+import { getPlanValidityDays, getDetailedPackageValidity, getTodayStr } from '../utils/packageExpiry';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -134,10 +135,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       )}
 
                       {item.planDetails && (
-                        <div className="space-y-1.5 mt-1">
-                          <div className="text-[11px] text-stone-500">
+                        <div className="space-y-1 mt-1">
+                          <div className="text-[11px] text-stone-500 font-medium">
                             {item.planDetails.days} Days · {item.planDetails.mealsTotal} Meals total
                           </div>
+                          {(() => {
+                            const vDays = getPlanValidityDays(item.planDetails.planId || item.title);
+                            const valDetails = getDetailedPackageValidity(getTodayStr(), vDays);
+                            return (
+                              <div className="space-y-1">
+                                <div className="text-[10px] text-emerald-850 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 inline-flex items-center gap-1 font-bold">
+                                  <Calendar className="w-3 h-3 text-emerald-600" />
+                                  <span>
+                                    {language === 'en'
+                                      ? `${vDays} Days Validity · Until ${valDetails.expiryDate}`
+                                      : `${vDays}天工作日有效 · 至 ${valDetails.expiryDate}`}
+                                  </span>
+                                </div>
+                                <div className="text-[9px] text-stone-500 font-medium">
+                                  {language === 'en'
+                                    ? '🇲🇾 Mon–Fri only · Klang Valley public holidays auto-extended'
+                                    : '🇲🇾 仅限周一至五 · 巴生谷法定公假自动顺延'}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Interactive Upsize Option for this Specific Plan */}
                           {onTogglePlanUpsize && (() => {

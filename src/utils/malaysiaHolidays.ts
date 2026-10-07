@@ -48,6 +48,7 @@ const RAW_MALAYSIA_BANK_HOLIDAYS: RawHoliday[] = [
   { date: '2024-09-16', nameEn: 'Malaysia Day', nameZh: '马来西亚日' },
   { date: '2024-09-16', nameEn: "Prophet Muhammad's Birthday", nameZh: '先知穆罕默德诞辰' },
   { date: '2024-10-31', nameEn: 'Deepavali', nameZh: '屠妖节' },
+  { date: '2024-12-11', nameEn: "Sultan of Selangor's Birthday", nameZh: '雪兰莪苏丹诞辰' },
   { date: '2024-12-25', nameEn: 'Christmas Day', nameZh: '圣诞节' },
 
   // --- 2025 ---
@@ -68,6 +69,7 @@ const RAW_MALAYSIA_BANK_HOLIDAYS: RawHoliday[] = [
   { date: '2025-09-05', nameEn: "Prophet Muhammad's Birthday", nameZh: '先知穆罕默德诞辰' },
   { date: '2025-09-16', nameEn: 'Malaysia Day', nameZh: '马来西亚日' },
   { date: '2025-10-20', nameEn: 'Deepavali', nameZh: '屠妖节' },
+  { date: '2025-12-11', nameEn: "Sultan of Selangor's Birthday", nameZh: '雪兰莪苏丹诞辰' },
   { date: '2025-12-25', nameEn: 'Christmas Day', nameZh: '圣诞节' },
 
   // --- 2026 ---
@@ -87,6 +89,7 @@ const RAW_MALAYSIA_BANK_HOLIDAYS: RawHoliday[] = [
   { date: '2026-08-31', nameEn: 'National Day (Merdeka Day)', nameZh: '国庆日' },
   { date: '2026-09-16', nameEn: 'Malaysia Day', nameZh: '马来西亚日' },
   { date: '2026-11-08', nameEn: 'Deepavali', nameZh: '屠妖节' },
+  { date: '2026-12-11', nameEn: "Sultan of Selangor's Birthday", nameZh: '雪兰莪苏丹诞辰' },
   { date: '2026-12-25', nameEn: 'Christmas Day', nameZh: '圣诞节' },
 
   // --- 2027 ---
@@ -107,6 +110,7 @@ const RAW_MALAYSIA_BANK_HOLIDAYS: RawHoliday[] = [
   { date: '2027-08-31', nameEn: 'National Day (Merdeka Day)', nameZh: '国庆日' },
   { date: '2027-09-16', nameEn: 'Malaysia Day', nameZh: '马来西亚日' },
   { date: '2027-10-28', nameEn: 'Deepavali', nameZh: '屠妖节' },
+  { date: '2027-12-11', nameEn: "Sultan of Selangor's Birthday", nameZh: '雪兰莪苏丹诞辰' },
   { date: '2027-12-25', nameEn: 'Christmas Day', nameZh: '圣诞节' },
 
   // --- 2028 ---

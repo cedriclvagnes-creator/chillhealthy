@@ -48,6 +48,10 @@ import {
   Grid2X2,
   Landmark,
   Instagram,
+  CheckSquare,
+  Square,
+  Send,
+  Layers,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -97,6 +101,7 @@ interface BackOfficeModalProps {
   onUpdateMenuItems: (items: MealItem[]) => void;
   redemptions: MealRedemption[];
   onUpdateRedemptionStatus: (id: string, newStatus: MealRedemption['status']) => void;
+  onBatchUpdateRedemptionStatus?: (ids: string[], newStatus: MealRedemption['status']) => void;
   members: MemberAccount[];
   onUpdateMemberCredits: (memberId: string, deltaMeals: number) => void;
   initialTab?: 'settings' | 'packages' | 'menu' | 'redemptions' | 'members';
@@ -125,6 +130,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onUpdateMenuItems,
   redemptions,
   onUpdateRedemptionStatus,
+  onBatchUpdateRedemptionStatus,
   members,
   onUpdateMemberCredits,
   initialTab = 'settings',
@@ -234,6 +240,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   // Daily 5:00 PM Member Order Report state
   const [dailyReportDate, setDailyReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
+  // Multi-Select on meal box status update state
+  const [selectedRedemptionIds, setSelectedRedemptionIds] = useState<string[]>([]);
+  const [batchTargetStatus, setBatchTargetStatus] = useState<MealRedemption['status']>('Prepping in Kitchen');
+  const [isBatchNotifyModalOpen, setIsBatchNotifyModalOpen] = useState<boolean>(false);
+
   // Customer Member Package Management state
   const [memberSearch, setMemberSearch] = useState('');
   const [memberStatusFilter, setMemberStatusFilter] = useState<'all' | 'active' | 'exhausted' | 'low'>('all');
@@ -289,6 +300,70 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 3500);
+  };
+
+  const handleApplyBatchStatus = (newStatus: MealRedemption['status']) => {
+    if (selectedRedemptionIds.length === 0) {
+      triggerToast(language === 'en' ? 'Please select at least one meal box.' : '请至少选择一个餐盒订单。');
+      return;
+    }
+
+    if (onBatchUpdateRedemptionStatus) {
+      onBatchUpdateRedemptionStatus(selectedRedemptionIds, newStatus);
+    } else {
+      selectedRedemptionIds.forEach((id) => onUpdateRedemptionStatus(id, newStatus));
+    }
+
+    triggerToast(
+      language === 'en'
+        ? `✓ Updated ${selectedRedemptionIds.length} meal box(es) to "${newStatus}"!`
+        : `✓ 成功将 ${selectedRedemptionIds.length} 个餐盒状态批量更新为 "${newStatus}"！`
+    );
+  };
+
+  const buildStatusUpdateCustomerMessage = (red: MealRedemption, status: MealRedemption['status']): string => {
+    const orderNo = red.orderNumber || red.id;
+    let statusHeadline = '';
+    let statusBody = '';
+
+    if (status === 'Prepping in Kitchen') {
+      statusHeadline = '🍳 厨房备餐中 (Prepping in Kitchen)';
+      statusBody =
+        `您的健康餐盒已于中央厨房由主厨团队按 65°C 低温慢煮标准新鲜备餐与热封打包。\n` +
+        `预计将于今日送餐时段准时送达，请留意配送骑手联系！`;
+    } else if (status === 'Out for Delivery') {
+      statusHeadline = '🚴 骑士派送中 (Out for Delivery)';
+      statusBody =
+        `您的健康餐盒已出库并交由配送骑手专送中！\n` +
+        `骑手正在全速赶往您的送餐地址，请保持电话畅通，享受热腾腾的鲜制餐品。`;
+    } else if (status === 'Delivered') {
+      statusHeadline = '✅ 餐盒已顺利送达 (Delivered)';
+      statusBody =
+        `您的健康餐盒已安全送达指定地址！\n` +
+        `祝您用餐愉快，每一口都是用心手作的健康美味。如有任何反馈欢迎随时联系客服！❤️`;
+    } else {
+      statusHeadline = '📋 订单待处理 (Pending Review)';
+      statusBody = `后厨已接收您的订餐预约，正在安排当日食材采购与排期。`;
+    }
+
+    return (
+      `🍱 *CHILL Healthy 潮轻食 · 餐盒状态更新*\n` +
+      `*Meal Box Status Update Notification*\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `尊敬的 *${red.memberName}*，您好！\n\n` +
+      `📋 *订单编号 / Order No:* #${orderNo}\n` +
+      `🥗 *预订餐品 / Item:* ${red.quantity || 1}x ${red.mealName} (${red.mealNameZh})\n` +
+      `📅 *送餐日期 / Delivery Date:* ${red.deliveryDate}\n` +
+      `⏰ *送餐时段 / Delivery Slot:* ${red.deliverySlot}\n` +
+      `📍 *送达地址 / Address:* ${red.deliveryAddress}, ${red.area} (${red.postalCode})\n` +
+      (red.dietaryNotes ? `⚠️ *忌口备注 / Dietary:* ${red.dietaryNotes}\n` : '') +
+      `\n🔔 *最新餐盒状态 / Latest Status:*\n` +
+      `*${statusHeadline}*\n\n` +
+      `${statusBody}\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `📞 潮轻食客服 WhatsApp: ${OFFICIAL_WA_DISPLAY}\n` +
+      `🌐 官网会员中心: www.chill-healthy.com`
+    );
   };
 
   const handleOpenReceiptForMember = (mem: MemberAccount, receipt?: OfficialReceipt) => {
@@ -2429,9 +2504,12 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                               value={selectedPlanForEdit.mealsTotal}
                               onChange={(e) => {
                                 const meals = parseInt(e.target.value, 10) || 1;
+                                const standardVDays = meals === 5 ? 8 : meals === 10 ? 15 : 30;
                                 setSelectedPlanForEdit({
                                   ...selectedPlanForEdit,
                                   mealsTotal: meals,
+                                  validityDays: standardVDays,
+                                  days: standardVDays,
                                   pricePerMeal: Number((selectedPlanForEdit.totalPrice / meals).toFixed(2)),
                                 });
                               }}
@@ -2514,6 +2592,49 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                               }
                               className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 text-amber-700 font-bold"
                             />
+                          </div>
+                        </div>
+
+                        {/* Package Validity Standard & Klang Valley Holiday Synchronization */}
+                        <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <label className="text-xs font-bold text-emerald-950 block">
+                                Package Validity (Mon–Fri Days) *
+                              </label>
+                              <span className="text-[10px] text-stone-500">
+                                Official Standard: 20 meals = 30 days, 10 meals = 15 days, 5 meals = 8 days
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="180"
+                                required
+                                value={selectedPlanForEdit.validityDays || getPlanValidityDays(selectedPlanForEdit)}
+                                onChange={(e) => {
+                                  const val = Math.max(1, parseInt(e.target.value, 10) || 30);
+                                  setSelectedPlanForEdit({
+                                    ...selectedPlanForEdit,
+                                    validityDays: val,
+                                    days: val,
+                                  });
+                                }}
+                                className="w-24 text-xs px-3 py-1.5 rounded-xl border border-emerald-300 font-bold bg-white text-emerald-900 focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <span className="text-xs text-stone-600 font-bold">Weekdays</span>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-[11px] text-emerald-800 flex items-center justify-between border-t border-emerald-200/60 pt-1.5">
+                            <span>Estimated Expiry (from today · Klang Valley holidays synced):</span>
+                            <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-900">
+                              {calculateMonFriExpiryDate(
+                                getTodayStr(),
+                                selectedPlanForEdit.validityDays || getPlanValidityDays(selectedPlanForEdit),
+                                siteSettings.disabledDeliveryDates || []
+                              )}
+                            </span>
                           </div>
                         </div>
 
@@ -3906,6 +4027,108 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Multi-Select & Batch Status Management Toolbar */}
+                    <div className="bg-white p-3 sm:p-4 rounded-2xl border-2 border-emerald-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                      {/* Left: Select All Checkbox & Count */}
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={filteredRedemptions.length > 0 && filteredRedemptions.every((r) => selectedRedemptionIds.includes(r.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRedemptionIds(filteredRedemptions.map((r) => r.id));
+                              } else {
+                                setSelectedRedemptionIds([]);
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span className="font-bold text-xs text-stone-900">
+                            {language === 'en' ? 'Select All' : '全选当前订单'}
+                          </span>
+                        </label>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                              selectedRedemptionIds.length > 0
+                                ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                : 'bg-stone-100 text-stone-600'
+                            }`}
+                          >
+                            {selectedRedemptionIds.length} / {filteredRedemptions.length}{' '}
+                            {language === 'en' ? 'Selected' : '已选择'}
+                          </span>
+
+                          {selectedRedemptionIds.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRedemptionIds([])}
+                              className="text-[11px] text-stone-500 hover:text-stone-800 underline cursor-pointer"
+                            >
+                              {language === 'en' ? 'Clear' : '清除选择'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: Batch Actions Bar */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-stone-600">
+                          {language === 'en' ? 'Batch Status:' : '批量更新状态:'}
+                        </span>
+                        <select
+                          value={batchTargetStatus}
+                          onChange={(e) => setBatchTargetStatus(e.target.value as MealRedemption['status'])}
+                          className="text-xs font-bold px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 cursor-pointer focus:ring-2 focus:ring-emerald-600"
+                        >
+                          <option value="Pending">Pending Review</option>
+                          <option value="Prepping in Kitchen">Prepping in Kitchen</option>
+                          <option value="Out for Delivery">Out for Delivery</option>
+                          <option value="Delivered">Delivered ✓</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          disabled={selectedRedemptionIds.length === 0}
+                          onClick={() => handleApplyBatchStatus(batchTargetStatus)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
+                            selectedRedemptionIds.length > 0
+                              ? 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer active:scale-95'
+                              : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                          }`}
+                          title="Apply selected status to all checked meal boxes"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>
+                            {language === 'en'
+                              ? `Apply Status (${selectedRedemptionIds.length})`
+                              : `更新选中状态 (${selectedRedemptionIds.length})`}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={selectedRedemptionIds.length === 0}
+                          onClick={() => setIsBatchNotifyModalOpen(true)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
+                            selectedRedemptionIds.length > 0
+                              ? 'bg-sky-600 hover:bg-sky-700 text-white cursor-pointer active:scale-95'
+                              : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                          }`}
+                          title="Send batch WhatsApp status update to customers"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>
+                            {language === 'en'
+                              ? `Notify Customers (${selectedRedemptionIds.length})`
+                              : `通知客户 (${selectedRedemptionIds.length})`}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Orders List */}
                     <div className="space-y-3">
                       {filteredRedemptions.length === 0 ? (
@@ -3916,6 +4139,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       ) : (
                         filteredRedemptions.map((red) => {
                           const orderNo = red.orderNumber || red.id;
+                          const isSelected = selectedRedemptionIds.includes(red.id);
                           const autoReplyMsg = buildOrderConfirmationAutoReply({
                             orderNumber: orderNo,
                             customerName: red.memberName,
@@ -3931,9 +4155,31 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           return (
                             <div
                               key={red.id}
-                              className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all hover:border-emerald-300"
+                              className={`p-4 rounded-2xl border transition-all ${
+                                isSelected
+                                  ? 'border-emerald-500 bg-emerald-50/20 ring-2 ring-emerald-500/30 shadow-sm'
+                                  : 'border-stone-200 bg-white shadow-2xs hover:border-emerald-300'
+                              } flex flex-col lg:flex-row lg:items-center justify-between gap-4`}
                             >
                               <div className="flex items-start gap-3 min-w-0">
+                                {/* Multi-Select Checkbox */}
+                                <div className="pt-1 shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      if (e.target.checked) {
+                                        setSelectedRedemptionIds((prev) => [...prev, red.id]);
+                                      } else {
+                                        setSelectedRedemptionIds((prev) => prev.filter((id) => id !== red.id));
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                    title="Select this meal box for batch status update"
+                                  />
+                                </div>
+
                                 <img
                                   src={red.mealImage}
                                   alt={red.mealName}
@@ -4603,6 +4849,172 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       </div>
                     );
                   })()}
+
+                  {/* =========================================================
+                      SUB-MODAL: BATCH CUSTOMER WHATSAPP STATUS NOTIFICATION
+                      ========================================================= */}
+                  {isBatchNotifyModalOpen && (() => {
+                    const selectedOrders = redemptions.filter((r) => selectedRedemptionIds.includes(r.id));
+
+                    return (
+                      <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-2xl rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 space-y-4 max-h-[90vh] flex flex-col">
+                          {/* Header */}
+                          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-xl bg-sky-100 text-sky-800">
+                                <MessageCircle className="w-5 h-5 text-sky-700" />
+                              </div>
+                              <div>
+                                <h5 className="font-heading font-extrabold text-base text-stone-900">
+                                  {language === 'en'
+                                    ? `Send WhatsApp Status Update (${selectedOrders.length} Customers)`
+                                    : `批量发送 WhatsApp 状态更新 (${selectedOrders.length} 位客户)`}
+                                </h5>
+                                <p className="text-xs text-stone-500">
+                                  {language === 'en'
+                                    ? `Notifying selected customers of status: "${batchTargetStatus}"`
+                                    : `通知已选客户最新餐盒状态："${batchTargetStatus}"`}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsBatchNotifyModalOpen(false)}
+                              className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 cursor-pointer"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Target Status Banner */}
+                          <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sky-950">
+                                {language === 'en' ? 'Updating Status To:' : '目标餐盒状态：'}
+                              </span>
+                              <span className="font-black px-2.5 py-0.5 rounded-lg bg-sky-200 text-sky-900">
+                                {batchTargetStatus}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  selectedOrders.forEach((o) => {
+                                    if (onUpdateRedemptionOrder) {
+                                      onUpdateRedemptionOrder({ ...o, autoReplySent: true });
+                                    }
+                                  });
+                                  triggerToast(language === 'en' ? '✓ Marked all selected as WA Sent' : '✓ 已将所选订单标记为已发 WhatsApp');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-white border border-sky-300 text-sky-800 font-bold text-[11px] hover:bg-sky-100 cursor-pointer"
+                              >
+                                {language === 'en' ? 'Mark All Sent' : '全部标记已发'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Selected Customer Orders List */}
+                          <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+                            {selectedOrders.map((order, idx) => {
+                              const orderNo = order.orderNumber || order.id;
+                              const waMsg = buildStatusUpdateCustomerMessage(order, batchTargetStatus);
+                              const waUrl = buildWhatsAppUrl(order.memberPhone, waMsg);
+
+                              return (
+                                <div
+                                  key={order.id}
+                                  className="p-3.5 rounded-2xl border border-stone-200 bg-stone-50/70 hover:bg-white hover:border-sky-300 transition-all space-y-2"
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-5 h-5 rounded-full bg-stone-200 text-stone-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                        {idx + 1}
+                                      </span>
+                                      <span className="font-bold text-stone-900 text-xs">
+                                        {order.memberName}
+                                      </span>
+                                      <span className="font-mono text-[11px] text-stone-500">
+                                        ({order.memberPhone})
+                                      </span>
+                                      <span className="font-mono text-[10px] font-bold bg-stone-200 text-stone-800 px-1.5 py-0.5 rounded">
+                                        #{orderNo}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(waMsg);
+                                          triggerToast(language === 'en' ? `✓ Copied message for ${order.memberName}` : `✓ 已复制 ${order.memberName} 的通知消息`);
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-600 hover:text-stone-900 cursor-pointer"
+                                        title="Copy message text"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      <a
+                                        href={waUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={() => {
+                                          if (onUpdateRedemptionOrder) {
+                                            onUpdateRedemptionOrder({ ...order, autoReplySent: true });
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                                      >
+                                        <Send className="w-3.5 h-3.5" />
+                                        <span>{language === 'en' ? 'Send WhatsApp' : '发送 WhatsApp'}</span>
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-[11px] text-stone-600 flex flex-wrap items-center gap-2">
+                                    <span className="font-medium text-emerald-800">
+                                      {order.quantity || 1}x {order.mealName} ({order.mealNameZh})
+                                    </span>
+                                    <span>·</span>
+                                    <span>📅 {order.deliveryDate} ({order.deliverySlot})</span>
+                                  </div>
+
+                                  <div className="p-2.5 rounded-xl bg-white border border-stone-200/80 text-[10px] text-stone-600 font-mono line-clamp-2">
+                                    {waMsg}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Footer Actions */}
+                          <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setIsBatchNotifyModalOpen(false)}
+                              className="px-4 py-2 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              {language === 'en' ? 'Close' : '关闭'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleApplyBatchStatus(batchTargetStatus);
+                                setIsBatchNotifyModalOpen(false);
+                              }}
+                              className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>{language === 'en' ? 'Apply Status & Done' : '更新状态并完成'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 /* =========================================================
@@ -4907,7 +5319,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       totalMeals: Number(newMemTotalMeals) || 20,
                       remainingMeals: Number(newMemRemainingMeals) || 20,
                       purchasedDate: new Date().toISOString().split('T')[0],
-                      expiryDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                      expiryDate: calculateMonFriExpiryDate(getTodayStr(), Number(newMemTotalMeals) >= 30 ? 30 : 20, siteSettings.disabledDeliveryDates || []),
+                      validityDays: Number(newMemTotalMeals) >= 30 ? 30 : Number(newMemTotalMeals) >= 20 ? 20 : 14,
+                      isActivated: false, // Activation based on 1st meal customer ordered, not purchase date
+                      firstRedeemedDate: undefined,
                     },
                     creditsHistory: [
                       {
@@ -5198,6 +5613,15 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                             {expiryInfo.statusLabelEn}
                                           </span>
                                         </div>
+                                        {mem.activePackage.specialCaseExtension && (
+                                          <div className="text-[10px] text-amber-900 font-extrabold bg-amber-100 border border-amber-300 px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs">
+                                            <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                            <span>
+                                              {language === 'en' ? 'Special Case Active' : '管理员特批顺延生效中'}: {mem.activePackage.specialCaseAdjustedExpiryDate || mem.activePackage.expiryDate}
+                                              {mem.activePackage.specialCaseNotes ? ` (${mem.activePackage.specialCaseNotes})` : ''}
+                                            </span>
+                                          </div>
+                                        )}
                                         {mem.activePackage.autoRevivedMeals ? (
                                           <div className="text-[10px] text-amber-700 font-bold bg-amber-100/70 px-2 py-0.5 rounded-md">
                                             🎉 Includes {mem.activePackage.autoRevivedMeals} auto-revived meals from expired plan
@@ -5460,8 +5884,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         totalMeals: 20,
                                         remainingMeals: 20,
                                         purchasedDate: getTodayStr(),
-                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
-                                        validityDays: 20,
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 30, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: 30,
                                         isActivated: false,
                                       };
                                       setEditingMember({
@@ -5482,6 +5906,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                     value={editingMember.activePackage?.remainingMeals ?? 0}
                                     onChange={(e) => {
                                       const val = Math.max(0, parseInt(e.target.value) || 0);
+                                      const vDays = getPlanValidityDays(val);
                                       const curPkg = editingMember.activePackage || {
                                         planId: 'custom-pkg',
                                         planName: 'Healthy Meal Plan',
@@ -5489,8 +5914,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         totalMeals: val,
                                         remainingMeals: val,
                                         purchasedDate: getTodayStr(),
-                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
-                                        validityDays: 20,
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), vDays, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: vDays,
                                         isActivated: false,
                                       };
                                       setEditingMember({
@@ -5510,6 +5935,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                     value={editingMember.activePackage?.totalMeals ?? 20}
                                     onChange={(e) => {
                                       const val = Math.max(1, parseInt(e.target.value) || 1);
+                                      const vDays = getPlanValidityDays(val);
                                       const curPkg = editingMember.activePackage || {
                                         planId: 'custom-pkg',
                                         planName: 'Healthy Meal Plan',
@@ -5517,8 +5943,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         totalMeals: val,
                                         remainingMeals: val,
                                         purchasedDate: getTodayStr(),
-                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), 20, siteSettings.disabledDeliveryDates || []),
-                                        validityDays: 20,
+                                        expiryDate: calculateMonFriExpiryDate(getTodayStr(), vDays, siteSettings.disabledDeliveryDates || []),
+                                        validityDays: vDays,
                                         isActivated: false,
                                       };
                                       setEditingMember({
@@ -5645,6 +6071,132 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   >
                                     🔄 Recalculate Mon–Fri Expiry (Auto-skip off-days)
                                   </button>
+                                </div>
+
+                                {/* Special Case Validity Extension & Override (Admin Only) */}
+                                <div className="sm:col-span-2 lg:col-span-4 p-4 bg-amber-50/80 rounded-2xl border-2 border-amber-300 space-y-3">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                                      <span className="font-extrabold text-xs text-amber-950 uppercase tracking-wider">
+                                        ⭐ Special Case Validity Extension & Override (Admin Only / 特批顺延)
+                                      </span>
+                                    </div>
+                                    <label className="inline-flex items-center gap-2 cursor-pointer bg-white px-3 py-1 rounded-xl border border-amber-300 shadow-2xs select-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(editingMember.activePackage?.specialCaseExtension)}
+                                        onChange={(e) => {
+                                          if (!editingMember.activePackage) return;
+                                          const isExt = e.target.checked;
+                                          const currentExpiry = editingMember.activePackage.expiryDate || getTodayStr();
+                                          setEditingMember({
+                                            ...editingMember,
+                                            activePackage: {
+                                              ...editingMember.activePackage,
+                                              specialCaseExtension: isExt,
+                                              specialCaseAdjustedExpiryDate: isExt
+                                                ? (editingMember.activePackage.specialCaseAdjustedExpiryDate || currentExpiry)
+                                                : undefined,
+                                              specialCaseNotes: isExt
+                                                ? (editingMember.activePackage.specialCaseNotes || 'Admin special case approved')
+                                                : undefined,
+                                            },
+                                          });
+                                        }}
+                                        className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                                      />
+                                      <span className="font-bold text-xs text-amber-900">
+                                        Enable Special Case Override
+                                      </span>
+                                    </label>
+                                  </div>
+
+                                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                                    Customers are NOT allowed to select dates after their package validity ends. Enable this special case override to unlock customer date selection and extend their validity.
+                                  </p>
+
+                                  {editingMember.activePackage?.specialCaseExtension && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200">
+                                      <div>
+                                        <label className="font-bold text-amber-950 block mb-1 text-[11px]">
+                                          Special Case Adjusted Expiry Date *
+                                        </label>
+                                        <input
+                                          type="date"
+                                          required
+                                          value={editingMember.activePackage?.specialCaseAdjustedExpiryDate || editingMember.activePackage?.expiryDate || ''}
+                                          onChange={(e) => {
+                                            if (!editingMember.activePackage) return;
+                                            setEditingMember({
+                                              ...editingMember,
+                                              activePackage: {
+                                                ...editingMember.activePackage,
+                                                specialCaseAdjustedExpiryDate: e.target.value,
+                                                expiryDate: e.target.value,
+                                              },
+                                            });
+                                          }}
+                                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white font-bold text-xs focus:ring-2 focus:ring-amber-600"
+                                        />
+
+                                        {/* Quick extensions */}
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                          <span className="text-[10px] text-amber-700 font-medium block w-full">Quick Extensions:</span>
+                                          {[
+                                            { label: '+5 Days', days: 5 },
+                                            { label: '+10 Days', days: 10 },
+                                            { label: '+20 Days', days: 20 },
+                                            { label: '+30 Days', days: 30 },
+                                          ].map((btn) => (
+                                            <button
+                                              key={btn.days}
+                                              type="button"
+                                              onClick={() => {
+                                                if (!editingMember.activePackage) return;
+                                                const baseDate = editingMember.activePackage.specialCaseAdjustedExpiryDate || editingMember.activePackage.expiryDate || getTodayStr();
+                                                const newExp = calculateMonFriExpiryDate(baseDate, btn.days, siteSettings.disabledDeliveryDates || []);
+                                                setEditingMember({
+                                                  ...editingMember,
+                                                  activePackage: {
+                                                    ...editingMember.activePackage,
+                                                    specialCaseAdjustedExpiryDate: newExp,
+                                                    expiryDate: newExp,
+                                                  },
+                                                });
+                                                triggerToast(`✓ Adjusted special case expiry date to ${newExp} (+${btn.days} workdays)`);
+                                              }}
+                                              className="px-2 py-0.5 text-[10px] font-bold bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg cursor-pointer transition-colors"
+                                            >
+                                              {btn.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="font-bold text-amber-950 block mb-1 text-[11px]">
+                                          Special Case Approval Reason / Note
+                                        </label>
+                                        <textarea
+                                          rows={3}
+                                          value={editingMember.activePackage?.specialCaseNotes || ''}
+                                          onChange={(e) => {
+                                            if (!editingMember.activePackage) return;
+                                            setEditingMember({
+                                              ...editingMember,
+                                              activePackage: {
+                                                ...editingMember.activePackage,
+                                                specialCaseNotes: e.target.value,
+                                              },
+                                            });
+                                          }}
+                                          placeholder="e.g. Medical leave, company trip, hospitalization extension approved by admin"
+                                          className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs focus:ring-2 focus:ring-amber-600"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

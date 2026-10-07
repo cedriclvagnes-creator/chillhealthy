@@ -61,7 +61,14 @@ import {
 import {
   generateUniqueOrderNumber,
   buildCustomerWhatsAppAutoReplyUrl,
+  buildWhatsAppUrl,
 } from '../utils/whatsapp';
+import {
+  getEffectivePackageExpiry,
+  getPlanValidityDays,
+  getDetailedPackageValidity,
+  getTodayStr,
+} from '../utils/packageExpiry';
 
 interface MemberPortalModalProps {
   isOpen: boolean;
@@ -281,6 +288,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     remainingMealsAfter: number;
     isBatch?: boolean;
     batchDaysCount?: number;
+    whatsappMessage?: string;
   } | null>(null);
   const [copiedOrderNo, setCopiedOrderNo] = useState(false);
 
@@ -308,16 +316,42 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const upcomingWorkdays = useMemo(() => getUpcomingWorkdays(5), []);
   const [batchSchedule, setBatchSchedule] = useState<{ [date: string]: string }>({});
 
+  // Active Package Expiry, First Meal Activation & Admin Special Case Evaluation
+  const activePkg = currentMember?.activePackage;
+  const expInfo = useMemo(() => {
+    if (!activePkg) return null;
+    return getEffectivePackageExpiry(activePkg, siteSettings.disabledDeliveryDates || []);
+  }, [activePkg, siteSettings.disabledDeliveryDates]);
+
+  const isSpecialCase = Boolean(activePkg?.specialCaseExtension);
+  const effectiveExpiryDate = expInfo?.effectiveExpiryDate || activePkg?.expiryDate || '';
+  const isExpired = Boolean(expInfo?.isExpired && !isSpecialCase);
+  const isPendingFirstMeal = Boolean(activePkg && (!activePkg.isActivated || !activePkg.firstRedeemedDate));
+
+  // Customer is NOT allowed to see dates of selection after package validity ends, unless adjusted by admin for special cases
+  const visibleWorkdays = useMemo(() => {
+    if (!upcomingWorkdays || upcomingWorkdays.length === 0) return [];
+    if (!activePkg || isSpecialCase || !effectiveExpiryDate || isPendingFirstMeal) {
+      return upcomingWorkdays;
+    }
+    if (isExpired) {
+      return [];
+    }
+    // Filter to only workdays strictly on or before effective expiry date
+    return upcomingWorkdays.filter((wDate) => wDate <= effectiveExpiryDate);
+  }, [upcomingWorkdays, activePkg, isSpecialCase, effectiveExpiryDate, isPendingFirstMeal, isExpired]);
+
   // Initialize batch planner with defaults
   useEffect(() => {
     if (menuItems.length > 0 && Object.keys(batchSchedule).length === 0) {
       const initial: { [date: string]: string } = {};
-      upcomingWorkdays.forEach((dateStr, idx) => {
+      const targetDays = visibleWorkdays.length > 0 ? visibleWorkdays : upcomingWorkdays;
+      targetDays.forEach((dateStr, idx) => {
         initial[dateStr] = menuItems[idx % menuItems.length]?.id || menuItems[0]?.id;
       });
       setBatchSchedule(initial);
     }
-  }, [menuItems, upcomingWorkdays]);
+  }, [menuItems, visibleWorkdays, upcomingWorkdays]);
 
   // Sync member addresses when currentMember changes
   useEffect(() => {
@@ -581,6 +615,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
+    // Restriction: Customer is NOT allowed to select date after package validity ends, unless special case adjusted by admin
+    if (!isSpecialCase && !isPendingFirstMeal && effectiveExpiryDate && dateVal > effectiveExpiryDate) {
+      alert(
+        language === 'en'
+          ? `⚠️ Package Validity Restriction: Your package validity ended on ${effectiveExpiryDate}. You are not allowed to select dates after your package validity end date. Please contact admin for special case adjustment or renew your package.`
+          : `⚠️ 配套有效期限制：您的配套有效期截至 ${effectiveExpiryDate} 为止，无法选择到期之后的日期。特殊情况请联系管理员在后台特批调整，或续订新配套。`
+      );
+      setSelectedDate(getNextWorkday(1));
+      return;
+    }
+
     setSelectedDate(dateVal);
   };
 
@@ -640,6 +685,16 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
+    // Restriction: Customer is NOT allowed to select/order dates after package validity ends
+    if (!isSpecialCase && !isPendingFirstMeal && effectiveExpiryDate && selectedDate > effectiveExpiryDate) {
+      alert(
+        language === 'en'
+          ? `⚠️ Package Validity Restriction: Your package validity ended on ${effectiveExpiryDate}. You cannot submit meal redemptions after validity has ended. Special cases can be adjusted by Admin.`
+          : `⚠️ 配套有效期限制：您的配套有效期已于 ${effectiveExpiryDate} 届满，无法提交到期之后的送餐预约。特殊情况需由管理员在后台特批顺延调整。`
+      );
+      return;
+    }
+
     const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
 
     const doSubmitRedemption = () => {
@@ -668,6 +723,24 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       if (success) {
         const remainingAfter = Math.max(0, (currentMember.activePackage?.remainingMeals || 1) - mealQuantity);
 
+        // Pre-build optional notification message for CHILL Healthy Kitchen WhatsApp
+        const kitchenNotificationMsg =
+          `🍱 *CHILL Healthy 潮轻食 · 会员每日订餐凭据*\n` +
+          `*Member Meal Booking Notification*\n` +
+          `━━━━━━━━━━━━━━━━━━━\n` +
+          `📋 *订单编号 / Order No:* #${orderNo}\n` +
+          `👤 *会员姓名 / Member Name:* ${currentMember.name}\n` +
+          `📞 *会员电话 / Phone:* ${currentMember.phone}\n` +
+          `🥗 *预订餐品 / Item:* ${mealQuantity}x ${chosenMeal.name} (${chosenMeal.nameZh})\n` +
+          `📅 *送餐日期 / Date:* ${selectedDate}\n` +
+          `⏰ *送餐时段 / Slot:* ${selectedSlot}\n` +
+          `📍 *配送地址 / Address:* ${currentAddress}, ${currentArea} ${currentPostal}\n` +
+          (dietaryNotes ? `⚠️ *忌口备注 / Dietary:* ${dietaryNotes}\n` : '') +
+          `🎟️ *剩余套餐餐券 / Balance:* ${remainingAfter} 餐\n` +
+          `📦 *状态:* 已排入后厨备餐排期 (Kitchen Prepping)\n` +
+          `━━━━━━━━━━━━━━━━━━━\n` +
+          `🌐 会员已成功提交订餐。`;
+
         // Pop up the official confirmation notification modal to ensure awareness and avoid double booking
         setRedemptionSuccessPopup({
           isOpen: true,
@@ -683,6 +756,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           area: currentArea,
           postalCode: currentPostal,
           remainingMealsAfter: remainingAfter,
+          whatsappMessage: kitchenNotificationMsg,
         });
 
         setRedemptionSuccessMsg(
@@ -723,7 +797,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const handleBatchSubmit = () => {
     if (!currentMember || !currentMember.activePackage) return;
 
-    const daysCount = upcomingWorkdays.length;
+    const targetDays = visibleWorkdays.length > 0 ? visibleWorkdays : upcomingWorkdays;
+    const daysCount = targetDays.length;
+    if (daysCount === 0) {
+      alert(
+        language === 'en'
+          ? 'No selectable workdays within your package validity. Please check expiry or request an admin adjustment.'
+          : '当前配套有效期内无可选工作日。请检查配套有效期或联系管理员特批顺延。'
+      );
+      return;
+    }
+
     if (currentMember.activePackage.remainingMeals < daysCount) {
       alert(
         language === 'en'
@@ -734,7 +818,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
 
     const batchOrderNo = generateUniqueOrderNumber('CH');
-    const redemptionsList = upcomingWorkdays.map((dateStr) => {
+    const redemptionsList = targetDays.map((dateStr) => {
       const mealId = batchSchedule[dateStr] || menuItems[0]?.id;
       const meal = menuItems.find((m) => m.id === mealId) || menuItems[0];
       return {
@@ -768,11 +852,26 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
     const remainingAfter = Math.max(0, currentMember.activePackage.remainingMeals - daysCount);
 
+    // Pre-build optional batch notification message for CHILL Healthy Kitchen WhatsApp
+    const batchKitchenMsg =
+      `🍱 *CHILL Healthy 潮轻食 · 会员整周排餐预订凭据*\n` +
+      `*Member Weekly Batch Schedule Booking*\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `📋 *批次订单号 / Batch Order No:* #${batchOrderNo}\n` +
+      `👤 *会员姓名 / Member Name:* ${currentMember.name}\n` +
+      `📞 *会员电话 / Phone:* ${currentMember.phone}\n` +
+      `📅 *排餐周期 / Scheduled Dates:* ${daysCount} 个工作日 (${targetDays[0]} ~ ${targetDays[targetDays.length - 1]})\n` +
+      `⏰ *送餐时段 / Slot:* Lunch (10:00 AM – 2:00 PM)\n` +
+      `📍 *配送地址 / Address:* ${currentAddress}, ${currentArea} ${currentPostal}\n` +
+      `🎟️ *剩余套餐餐券 / Balance:* ${remainingAfter} 餐\n` +
+      `━━━━━━━━━━━━━━━━━━━\n` +
+      `🌐 会员已提交整周排餐预订。`;
+
     setRedemptionSuccessPopup({
       isOpen: true,
       orderNumber: batchOrderNo,
-      deliveryDate: `${upcomingWorkdays[0]} ~ ${upcomingWorkdays[upcomingWorkdays.length - 1]}`,
-      formattedDate: `${formatDisplayDate(upcomingWorkdays[0])} — ${formatDisplayDate(upcomingWorkdays[upcomingWorkdays.length - 1])}`,
+      deliveryDate: `${targetDays[0]} ~ ${targetDays[targetDays.length - 1]}`,
+      formattedDate: `${formatDisplayDate(targetDays[0])} — ${formatDisplayDate(targetDays[targetDays.length - 1])}`,
       mealName: `${daysCount} Advance Scheduled Workday Bentos`,
       mealNameZh: `${daysCount} 个工作日提前整周排餐`,
       mealImage: menuItems[0]?.image || '',
@@ -784,6 +883,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       remainingMealsAfter: remainingAfter,
       isBatch: true,
       batchDaysCount: daysCount,
+      whatsappMessage: batchKitchenMsg,
     });
 
     setRedemptionSuccessMsg(
@@ -1781,11 +1881,63 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         ? 'No Active Package'
                         : '暂无生效配套'}
                     </p>
-                    {currentMember.activePackage?.expiryDate && (
-                      <span className="text-[10px] text-emerald-400 font-semibold">
-                        Valid until: {currentMember.activePackage.expiryDate} (30 days validity)
-                      </span>
-                    )}
+                    {currentMember.activePackage && (() => {
+                      const expInfo = getEffectivePackageExpiry(currentMember.activePackage, siteSettings.disabledDeliveryDates || []);
+                      const vDays = expInfo.validityDays || getPlanValidityDays(currentMember.activePackage.planId);
+                      const isPendingActivation = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
+                      const hasSpecialCase = Boolean(currentMember.activePackage.specialCaseExtension);
+                      const isPackExpired = Boolean(expInfo.isExpired && !hasSpecialCase);
+
+                      return (
+                        <div className="mt-1 space-y-1">
+                          {isPendingActivation ? (
+                            <>
+                              <span className="text-[11px] text-sky-400 font-extrabold flex items-center gap-1">
+                                <span>⏳ {language === 'en' ? 'Status: Pending First Meal Order' : '状态：等待首餐预订激活'}</span>
+                              </span>
+                              <span className="text-[10px] text-stone-300 block">
+                                {language === 'en'
+                                  ? `• Validity standard: ${vDays} Mon–Fri weekdays (${vDays === 30 ? '20 meals' : vDays === 15 ? '10 meals' : '5 meals'})`
+                                  : `• 有效期标准：${vDays} 个工作日（${vDays === 30 ? '20餐' : vDays === 15 ? '10餐' : '5餐'}）`}
+                              </span>
+                              <span className="text-[10px] text-amber-300/90 block">
+                                {language === 'en'
+                                  ? '• Date of activation begins on first meal you order (not purchase date)'
+                                  : '• 有效期以首个预订送餐日正式激活起算（绝非购买配套日期）'}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className={`text-[11px] font-extrabold ${isPackExpired ? 'text-red-400' : 'text-emerald-400'}`}>
+                                  📅 {language === 'en' ? 'Validity Date: Until' : '有效截止日期：至'} {expInfo.effectiveExpiryDate || currentMember.activePackage.expiryDate}
+                                </span>
+                                {hasSpecialCase && (
+                                  <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded">
+                                    ⭐ {language === 'en' ? 'Special Case Active' : '特批顺延生效中'}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-stone-300 block">
+                                {language === 'en'
+                                  ? `• ${vDays} Mon–Fri weekdays (Activated on ${currentMember.activePackage.firstRedeemedDate} · ${expInfo.remainingWorkdays} workdays left)`
+                                  : `• 共 ${vDays} 个工作日（于 ${currentMember.activePackage.firstRedeemedDate} 激活 · 剩余 ${expInfo.remainingWorkdays} 个工作日）`}
+                              </span>
+                              {hasSpecialCase && currentMember.activePackage.specialCaseNotes && (
+                                <span className="text-[10px] text-amber-300 block">
+                                  • {language === 'en' ? 'Special Case Note: ' : '特批说明：'}{currentMember.activePackage.specialCaseNotes}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-amber-300/90 block">
+                                {language === 'en'
+                                  ? '• Mon–Fri only · Klang Valley public holidays auto-extend validity date +1 day'
+                                  : '• 仅限周一至五 · 巴生谷公假自动顺延 +1 天工作日'}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="h-9 w-px bg-stone-700 hidden sm:block" />
@@ -2165,68 +2317,164 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
                       {/* Delivery Date & Time Window */}
                       <div className="space-y-3 pt-1 border-t border-stone-100">
-                        <div>
-                          <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center justify-between">
-                            <span className="flex items-center gap-1.5">
-                              <Calendar className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>{language === 'en' ? 'Delivery Date (Monday – Friday Only) *' : '送餐日期 (仅限周一至周五) *'}</span>
-                            </span>
-                            <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200">
-                              {language === 'en' ? 'Weekdays Only' : '工作日专送'}
-                            </span>
-                          </label>
-                          <input
-                            type="date"
-                            required
-                            min={getNextWorkday(1)}
-                            value={selectedDate}
-                            onChange={(e) => handleDateChange(e.target.value)}
-                            className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
-                          />
+                        {isExpired && !isSpecialCase ? (
+                          <div className="p-4 rounded-2xl bg-red-50 border border-red-300 text-red-950 space-y-2.5">
+                            <div className="flex items-center gap-2 font-black text-xs text-red-800">
+                              <Lock className="w-4 h-4 text-red-600 shrink-0" />
+                              <span>
+                                {language === 'en'
+                                  ? 'Package Validity Ended · Date Selection Closed'
+                                  : '配套有效期已届满 · 选餐日期已锁定关闭'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-red-900">
+                              {language === 'en'
+                                ? `Your meal package validity officially ended on ${effectiveExpiryDate}. Customer date selection is disabled after package expiry.`
+                                : `您的配套有效日期已于 ${effectiveExpiryDate} 正式到期。根据系统规则，配套到期后将关闭订餐选日权限。`}
+                            </p>
+                            <div className="p-3 rounded-xl bg-white border border-red-200 text-[11px] text-stone-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                              <span>
+                                {language === 'en'
+                                  ? 'Need an extension for a special case (e.g. medical leave or emergency)?'
+                                  : '如因特殊情况（如病假就医或突发出差）需特批顺延？'}
+                              </span>
+                              <a
+                                href={buildWhatsAppUrl(
+                                  siteSettings.whatsappNumber,
+                                  `Hi Admin, my meal package (${activePkg?.planName}) validity ended on ${effectiveExpiryDate}. Requesting special case validity adjustment / extension for my account (${currentMember.name}, ${currentMember.phone}).`
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                <span>{language === 'en' ? 'Request Admin Special Case Adjustment' : '联系管理员特批调整'}</span>
+                              </a>
+                            </div>
+                            <p className="text-[10px] text-stone-500 italic">
+                              {language === 'en'
+                                ? 'Note: Validity dates can be adjusted via the Admin Page only for special cases.'
+                                : '提示：管理员可在后台管理页面针对特殊情况灵活调整有效期并解除选日锁定。'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div>
+                            {/* Special Case Extension Banner */}
+                            {isSpecialCase && (
+                              <div className="mb-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-emerald-50 border border-emerald-300 text-[11px] text-emerald-950 flex items-start gap-2 shadow-2xs">
+                                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-extrabold text-emerald-900 block">
+                                    ⭐ {language === 'en' ? 'Admin Special Case Adjustment Active' : '管理员特批顺延已生效'}
+                                  </span>
+                                  <span>
+                                    {language === 'en'
+                                      ? `Validity extended until ${effectiveExpiryDate}${activePkg?.specialCaseNotes ? ` (${activePkg.specialCaseNotes})` : ''}. Date selection unlocked up to ${effectiveExpiryDate}.`
+                                      : `有效期已特批顺延至 ${effectiveExpiryDate}${activePkg?.specialCaseNotes ? `（原因：${activePkg.specialCaseNotes}）` : ''}，选餐日期已解除限制。`}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
 
-                          {/* Quick Workday Selector Buttons */}
-                          <div className="mt-2 space-y-1">
-                            <span className="text-[10px] text-stone-500 block font-medium">
-                              {language === 'en' ? 'Quick select upcoming workdays:' : '快捷选择即将到来的工作日：'}
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {upcomingWorkdays.map((wDate) => {
-                                const isSelected = selectedDate === wDate;
-                                const isOff = siteSettings.disabledDeliveryDates?.includes(wDate);
-                                const hol = getMalaysiaHolidayInfo(wDate);
-                                const dObj = new Date(wDate + 'T00:00:00');
-                                const dayName = dObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
-                                  weekday: 'short',
-                                  month: 'numeric',
-                                  day: 'numeric',
-                                });
+                            {/* First Meal Order Activation Notice */}
+                            {isPendingFirstMeal && (
+                              <div className="mb-2.5 p-3 rounded-xl bg-sky-50 border border-sky-300 text-[11px] text-sky-950 flex items-start gap-2 shadow-2xs">
+                                <Clock className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-extrabold text-sky-900 block">
+                                    🌟 {language === 'en' ? 'First Meal Activation Rule' : '首餐生效规则'}
+                                  </span>
+                                  <span>
+                                    {language === 'en'
+                                      ? `Your package validity countdown (${expInfo?.validityDays || 30} Mon–Fri weekdays) officially activates on the delivery date of your first meal ordered below, NOT on your package purchase date.`
+                                      : `您的配套有效期（共 ${expInfo?.validityDays || 30} 个工作日）将以您在此选择的首个实际送餐日正式激活起算，绝非购买配套日期。`}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
 
-                                return (
-                                  <button
-                                    key={wDate}
-                                    type="button"
-                                    disabled={isOff}
-                                    onClick={() => handleDateChange(wDate)}
-                                    title={
-                                      isOff && hol
-                                        ? `Malaysia Bank Public Holiday: ${hol.nameEn} / ${hol.nameZh} (Delivery Paused)`
-                                        : undefined
-                                    }
-                                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
-                                        : isOff
-                                        ? 'bg-red-50 text-red-500 border-red-200 line-through cursor-not-allowed'
-                                        : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
-                                    }`}
-                                  >
-                                    {dayName} {isOff && (hol ? `(🇲🇾 ${language === 'en' ? hol.nameEn : hol.nameZh} Off)` : '(Off)')}
-                                  </button>
-                                );
-                              })}
+                            <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>{language === 'en' ? 'Delivery Date (Monday – Friday Only) *' : '送餐日期 (仅限周一至周五) *'}</span>
+                              </span>
+                              <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200">
+                                {language === 'en' ? 'Weekdays Only' : '工作日专送'}
+                              </span>
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              min={getNextWorkday(1)}
+                              max={!isSpecialCase && effectiveExpiryDate ? effectiveExpiryDate : undefined}
+                              value={selectedDate}
+                              onChange={(e) => handleDateChange(e.target.value)}
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-600"
+                            />
+
+                            {/* Quick Workday Selector Buttons */}
+                            <div className="mt-2 space-y-1">
+                              <span className="text-[10px] text-stone-500 block font-medium">
+                                {language === 'en' ? 'Quick select upcoming workdays:' : '快捷选择即将到来的工作日：'}
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {visibleWorkdays.map((wDate) => {
+                                  const isSelected = selectedDate === wDate;
+                                  const isOff = siteSettings.disabledDeliveryDates?.includes(wDate);
+                                  const hol = getMalaysiaHolidayInfo(wDate);
+                                  const dObj = new Date(wDate + 'T00:00:00');
+                                  const dayName = dObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                                    weekday: 'short',
+                                    month: 'numeric',
+                                    day: 'numeric',
+                                  });
+
+                                  return (
+                                    <button
+                                      key={wDate}
+                                      type="button"
+                                      disabled={isOff}
+                                      onClick={() => handleDateChange(wDate)}
+                                      title={
+                                        isOff && hol
+                                          ? `Malaysia Bank Public Holiday: ${hol.nameEn} / ${hol.nameZh} (Delivery Paused)`
+                                          : undefined
+                                      }
+                                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                                          : isOff
+                                          ? 'bg-red-50 text-red-500 border-red-200 line-through cursor-not-allowed'
+                                          : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
+                                      }`}
+                                    >
+                                      {dayName} {isOff && (hol ? `(🇲🇾 ${language === 'en' ? hol.nameEn : hol.nameZh} Off)` : '(Off)')}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Note if workdays were hidden because they are beyond validity */}
+                              {upcomingWorkdays.length > visibleWorkdays.length && (
+                                <span className="text-[10px] text-stone-400 block pt-0.5 italic">
+                                  {language === 'en'
+                                    ? `* Dates after your package validity cutoff (${effectiveExpiryDate}) are hidden. Special cases can be adjusted via Admin Page.`
+                                    : `* 超过配套有效期截止日（${effectiveExpiryDate}）的日期已自动隐藏。特殊情况可通过管理员后台调整。`}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Klang Valley Public Holiday & Validity Rule Notice */}
+                            <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-[11px] text-amber-950 leading-snug">
+                              <span>
+                                🇲🇾 <strong>{language === 'en' ? 'Package Validity & Holiday Policy:' : '配套有效期与公假顺延规则：'}</strong>{' '}
+                                {language === 'en'
+                                  ? 'Deliveries are scheduled Monday to Friday only. Gazetted Malaysia Klang Valley public holidays automatically extend your package validity date by +1 day so you never lose meal days.'
+                                  : '仅限周一至周五工作日送餐。已自动同步马来西亚巴生谷官方公假（公假当天暂停送餐并自动顺延 +1 天工作日，绝不扣减餐期）。'}
+                              </span>
                             </div>
                           </div>
-                        </div>
+                        )}
 
                         <div>
                           <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
@@ -2607,111 +2855,168 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
             {/* Tab 2: ADVANCE MULTI-DAY MEAL PLANNER (整周一次性排餐) */}
             {portalTab === 'planner' && (
               <div className="space-y-4">
-                <div className="bg-emerald-50/80 p-4 sm:p-5 rounded-3xl border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                  <div>
-                    <h4 className="font-heading text-sm sm:text-base font-extrabold text-emerald-950 uppercase tracking-wider">
-                      {language === 'en' ? 'Advance Workday Meal Planner' : '一次性选择好所有餐点 (提前排餐)'}
-                    </h4>
-                    <p className="text-xs text-emerald-800 mt-0.5">
+                {isExpired && !isSpecialCase ? (
+                  <div className="p-5 rounded-3xl bg-red-50 border border-red-300 text-red-950 space-y-3">
+                    <div className="flex items-center gap-2 font-black text-sm text-red-800">
+                      <Lock className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>
+                        {language === 'en'
+                          ? 'Package Validity Ended · Advance Planner Locked'
+                          : '配套有效期已届满 · 提前排餐功能已锁定关闭'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-red-900 leading-relaxed">
                       {language === 'en'
-                        ? 'Schedule your upcoming workdays (Mon – Fri 10:00 AM – 2:00 PM) in 1 click.'
-                        : '一次性安排好未来 5 个工作日的午餐便当，免除每天重复选餐的繁琐。'}
+                        ? `Your meal package validity officially ended on ${effectiveExpiryDate}. Under policy, customer date selection is disabled after package expiry.`
+                        : `您的配套有效日期已于 ${effectiveExpiryDate} 正式到期。根据系统规则，配套到期后将关闭订餐选日权限。`}
                     </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleRandomizeBatch}
-                    className="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-900 font-bold text-xs hover:bg-emerald-100 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
-                  >
-                    <Shuffle className="w-3.5 h-3.5" />
-                    <span>{language === 'en' ? 'Auto-Balance Menu' : '一键营养均衡搭配'}</span>
-                  </button>
-                </div>
-
-                {/* Workdays Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                  {upcomingWorkdays.map((dateStr, index) => {
-                    const selectedDishId = batchSchedule[dateStr] || menuItems[0]?.id;
-                    const dish = menuItems.find((m) => m.id === selectedDishId) || menuItems[0];
-                    const dateObj = new Date(dateStr);
-                    const dayName = dateObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    });
-
-                    return (
-                      <div
-                        key={dateStr}
-                        className="p-3.5 bg-white rounded-2xl border border-stone-200 flex flex-col justify-between hover:border-emerald-400 transition-all shadow-2xs"
+                    <div className="p-3 rounded-2xl bg-white border border-red-200 text-xs text-stone-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <span>
+                        {language === 'en'
+                          ? 'Need a validity extension for a special case (e.g. medical leave or emergency)?'
+                          : '如因特殊情况（如病假就医或突发出差）需特批顺延？'}
+                      </span>
+                      <a
+                        href={buildWhatsAppUrl(
+                          siteSettings.whatsappNumber,
+                          `Hi Admin, my meal package (${activePkg?.planName}) validity ended on ${effectiveExpiryDate}. Requesting special case validity adjustment / extension for advance booking (${currentMember.name}, ${currentMember.phone}).`
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs"
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-900 text-xs font-black flex items-center justify-center">
-                              D{index + 1}
-                            </span>
-                            <span className="text-[11px] text-stone-500 font-semibold">{dayName}</span>
-                          </div>
-
-                          <div className="aspect-video rounded-xl overflow-hidden mb-2 bg-stone-100">
-                            <img
-                              src={dish.image}
-                              alt={dish.name}
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
-                              }}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-
-                          <select
-                            value={selectedDishId}
-                            onChange={(e) =>
-                              setBatchSchedule({ ...batchSchedule, [dateStr]: e.target.value })
-                            }
-                            className="w-full text-xs px-2 py-2 rounded-xl border border-stone-200 bg-white"
-                          >
-                            {menuItems.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {language === 'en' ? m.name : m.nameZh} ({m.calories} kcal)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="text-[10px] text-stone-500 mt-2 text-center">
-                          {dish.calories} kcal · {dish.protein}g protein
-                        </div>
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Request Admin Special Case Adjustment' : '联系管理员特批调整'}</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-emerald-50/80 p-4 sm:p-5 rounded-3xl border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <h4 className="font-heading text-sm sm:text-base font-extrabold text-emerald-950 uppercase tracking-wider">
+                          {language === 'en' ? 'Advance Workday Meal Planner' : '一次性选择好所有餐点 (提前排餐)'}
+                        </h4>
+                        <p className="text-xs text-emerald-800 mt-0.5">
+                          {language === 'en'
+                            ? `Schedule your upcoming workdays (Mon – Fri 10:00 AM – 2:00 PM) in 1 click.${effectiveExpiryDate ? ` (Valid until: ${effectiveExpiryDate})` : ''}`
+                            : `一次性安排好未来工作日的午餐便当，免除每天重复选餐的繁琐。${effectiveExpiryDate ? `（有效截止日期：${effectiveExpiryDate}）` : ''}`}
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
 
-                <div className="p-4 bg-white rounded-2xl border border-stone-200 text-xs text-stone-600 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-                  <span>
-                    {language === 'en' ? 'Deliver to:' : '送餐地址:'}{' '}
-                    <strong className="text-stone-900">{currentAddress}, {currentArea}</strong>
-                  </span>
-                  <span className="text-emerald-800 font-bold">
-                    Total: {upcomingWorkdays.length} meals (deducted from remaining package)
-                  </span>
-                </div>
+                      <button
+                        type="button"
+                        onClick={handleRandomizeBatch}
+                        className="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-900 font-bold text-xs hover:bg-emerald-100 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                      >
+                        <Shuffle className="w-3.5 h-3.5" />
+                        <span>{language === 'en' ? 'Auto-Balance Menu' : '一键营养均衡搭配'}</span>
+                      </button>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleBatchSubmit}
-                  disabled={!currentMember.activePackage || currentMember.activePackage.remainingMeals < upcomingWorkdays.length}
-                  className="w-full py-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>
-                    {language === 'en'
-                      ? `Confirm All ${upcomingWorkdays.length} Days Schedule`
-                      : `一键确认未来 ${upcomingWorkdays.length} 天全部排餐`}
-                  </span>
-                </button>
+                    {/* Workdays Grid (Filtered to dates strictly within validity) */}
+                    {visibleWorkdays.length === 0 ? (
+                      <div className="p-8 text-center bg-white rounded-3xl border border-stone-200 text-stone-500">
+                        <Clock className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+                        <p className="text-xs font-bold text-stone-700">
+                          {language === 'en'
+                            ? `No upcoming workdays available before your package validity cutoff (${effectiveExpiryDate}).`
+                            : `在您的配套有效期截止日（${effectiveExpiryDate}）之前没有可供排期的工作日。`}
+                        </p>
+                        <p className="text-[11px] text-stone-400 mt-1">
+                          {language === 'en'
+                            ? 'Dates after validity end are restricted. Special cases can be adjusted by Admin.'
+                            : '到期后的选日已被限制。特殊情况可通过管理员在后台调整。'}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                          {visibleWorkdays.map((dateStr, index) => {
+                            const selectedDishId = batchSchedule[dateStr] || menuItems[0]?.id;
+                            const dish = menuItems.find((m) => m.id === selectedDishId) || menuItems[0];
+                            const dateObj = new Date(dateStr);
+                            const dayName = dateObj.toLocaleDateString(language === 'en' ? 'en-US' : 'zh-CN', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            });
+
+                            return (
+                              <div
+                                key={dateStr}
+                                className="p-3.5 bg-white rounded-2xl border border-stone-200 flex flex-col justify-between hover:border-emerald-400 transition-all shadow-2xs"
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-900 text-xs font-black flex items-center justify-center">
+                                      D{index + 1}
+                                    </span>
+                                    <span className="text-[11px] text-stone-500 font-semibold">{dayName}</span>
+                                  </div>
+
+                                  <div className="aspect-video rounded-xl overflow-hidden mb-2 bg-stone-100">
+                                    <img
+                                      src={dish.image}
+                                      alt={dish.name}
+                                      referrerPolicy="no-referrer"
+                                      onError={(e) => {
+                                        e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
+                                      }}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+
+                                  <select
+                                    value={selectedDishId}
+                                    onChange={(e) =>
+                                      setBatchSchedule({ ...batchSchedule, [dateStr]: e.target.value })
+                                    }
+                                    className="w-full text-xs px-2 py-2 rounded-xl border border-stone-200 bg-white"
+                                  >
+                                    {menuItems.map((m) => (
+                                      <option key={m.id} value={m.id}>
+                                        {language === 'en' ? m.name : m.nameZh} ({m.calories} kcal)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div className="text-[10px] text-stone-500 mt-2 text-center">
+                                  {dish.calories} kcal · {dish.protein}g protein
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-4 bg-white rounded-2xl border border-stone-200 text-xs text-stone-600 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                          <span>
+                            {language === 'en' ? 'Deliver to:' : '送餐地址:'}{' '}
+                            <strong className="text-stone-900">{currentAddress}, {currentArea}</strong>
+                          </span>
+                          <span className="text-emerald-800 font-bold">
+                            Total: {visibleWorkdays.length} meals (deducted from remaining package)
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleBatchSubmit}
+                          disabled={!currentMember.activePackage || currentMember.activePackage.remainingMeals < visibleWorkdays.length}
+                          className="w-full py-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>
+                            {language === 'en'
+                              ? `Confirm All ${visibleWorkdays.length} Days Schedule`
+                              : `一键确认未来 ${visibleWorkdays.length} 天全部排餐`}
+                          </span>
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -3332,9 +3637,35 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-stone-500">
-                          {pkg.mealsTotal} Meals in 30 Days · {pkg.persons || 1} Person · RM {pkg.pricePerMeal.toFixed(2)}/meal
-                        </p>
+                        {(() => {
+                          const vDays = pkg.validityDays || getPlanValidityDays(pkg);
+                          const valDetails = getDetailedPackageValidity(getTodayStr(), pkg, siteSettings?.disabledDeliveryDates || []);
+                          return (
+                            <div>
+                              <p className="text-xs text-stone-600 font-medium">
+                                {pkg.mealsTotal} {language === 'en' ? 'Meals' : '餐'} · {vDays} {language === 'en' ? 'Days Validity (Mon–Fri)' : '天工作日有效期'} · RM {pkg.pricePerMeal.toFixed(2)}/{language === 'en' ? 'meal' : '餐'}
+                              </p>
+                              <div className="mt-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] space-y-0.5">
+                                <div className="font-extrabold text-emerald-900 flex items-center justify-between">
+                                  <span>{language === 'en' ? 'Estimated Validity Date:' : '预估有效截止日期：'}</span>
+                                  <span className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-950 font-black">
+                                    {valDetails.expiryDate}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-stone-600">
+                                  {language === 'en'
+                                    ? `• ${vDays} Mon–Fri weekdays (${vDays === 30 ? '20 Meals' : vDays === 15 ? '10 Meals' : '5 Meals'} standard)`
+                                    : `• ${vDays}个工作日（${vDays === 30 ? '20餐' : vDays === 15 ? '10餐' : '5餐'}标准）`}
+                                </div>
+                                <div className="text-[10px] text-emerald-800 font-semibold">
+                                  {language === 'en'
+                                    ? '• Klang Valley public holidays automatically extend validity +1 day'
+                                    : '• 自动同步巴生谷官方公假，遇公假顺延 +1 天工作日'}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                         <div className="text-[11px] text-emerald-700 font-semibold mt-2 space-y-0.5">
                           <div>✓ {language === 'en' ? 'Free daily lunch delivery' : '巴生谷每日免费送餐'}</div>
                           <div>✓ {language === 'en' ? '1 account 2 addresses' : '1户口支持双地址切换'}</div>
@@ -3376,41 +3707,62 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       {/* =========================================================================
           POPUP NOTIFICATION 1: DAILY MEAL CONFIRMATION & DOUBLE-BOOKING AWARENESS
           ========================================================================= */}
+      {/* =========================================================================
+          POPUP NOTIFICATION 1: DAILY MEAL REDEMPTION CONFIRMED NOTIFICATION MODAL
+          ========================================================================= */}
       {redemptionSuccessPopup && redemptionSuccessPopup.isOpen && (
-        <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-stone-200 animate-in zoom-in-95">
+        <div
+          className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRedemptionSuccessPopup(null);
+          }}
+        >
+          <div className="relative bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-stone-200 animate-in zoom-in-95 flex flex-col max-h-[90vh] sm:max-h-[88vh] my-auto overflow-hidden">
             {/* Top Emerald Header */}
-            <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white p-5 sm:p-6 relative overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white px-5 py-4 sm:px-6 sm:py-4.5 relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
-              <div className="flex items-center gap-3.5">
-                <div className="p-3 rounded-2xl bg-white/20 text-white border border-white/30 shrink-0">
-                  <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-200" />
+              <div className="flex items-center justify-between gap-3 relative z-10">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2.5 rounded-2xl bg-white/20 text-white border border-white/30 shrink-0">
+                    <CheckCircle className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-200" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest bg-emerald-700/80 text-emerald-200 px-2.5 py-0.5 rounded-md">
+                        {language === 'en' ? 'RESERVATION CONFIRMED' : '订餐排期已确认'}
+                      </span>
+                      {redemptionSuccessPopup.orderNumber && (
+                        <span className="text-[11px] font-mono font-bold bg-white/20 text-white px-2 py-0.5 rounded-md border border-white/30">
+                          #{redemptionSuccessPopup.orderNumber}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-heading font-black text-base sm:text-lg text-white mt-0.5 leading-tight truncate">
+                      {language === 'en' ? 'Daily Meal Successfully Booked!' : '每日健康餐预定成功！'}
+                    </h3>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest bg-emerald-700/80 text-emerald-200 px-2.5 py-0.5 rounded-md">
-                    {language === 'en' ? 'RESERVATION CONFIRMED' : '订餐排期已确认'}
-                  </span>
-                  <h3 className="font-heading font-black text-lg sm:text-xl text-white mt-1 leading-tight">
-                    {language === 'en' ? 'Daily Meal Successfully Booked!' : '每日健康餐预定成功！'}
-                  </h3>
-                  <p className="text-xs text-emerald-100/90 mt-0.5">
-                    {language === 'en'
-                      ? 'Your meal has been securely scheduled with our kitchen team.'
-                      : '您的餐点已成功提交后厨制作排期。'}
-                  </p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setRedemptionSuccessPopup(null)}
+                  className="p-1.5 sm:p-2 rounded-full bg-white/15 hover:bg-white/25 text-white/90 hover:text-white transition-colors cursor-pointer shrink-0"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
-            <div className="p-5 sm:p-6 space-y-4">
-              {/* Unique Order Number Banner */}
+            <div className="p-4 sm:p-5 space-y-3 sm:space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
+              {/* Unique Order Number Banner with Copy */}
               {redemptionSuccessPopup.orderNumber && (
-                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-2xs">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded">
                       {language === 'en' ? 'Unique Order Tracking No.' : '专属订餐编号'}
                     </span>
-                    <p className="font-mono font-black text-xl text-emerald-950 mt-0.5 select-all">
+                    <p className="font-mono font-black text-lg sm:text-xl text-emerald-950 mt-0.5 select-all">
                       #{redemptionSuccessPopup.orderNumber}
                     </p>
                     <p className="text-[10px] text-emerald-700 mt-0.5">
@@ -3429,7 +3781,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         setTimeout(() => setCopiedOrderNo(false), 2500);
                       }
                     }}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-transform active:scale-95"
+                    className="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-transform active:scale-95"
                     title="Copy Order Number"
                   >
                     {copiedOrderNo ? <Check className="w-3.5 h-3.5 text-emerald-200" /> : <Copy className="w-3.5 h-3.5" />}
@@ -3438,63 +3790,76 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 </div>
               )}
 
-              {/* WhatsApp Auto-Reply Confirmation to Customer */}
-              {redemptionSuccessPopup.orderNumber && currentMember && (
-                <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-left space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-xs text-sky-950 flex items-center gap-1.5">
-                      <MessageCircle className="w-4 h-4 text-sky-600 shrink-0" />
-                      <span>
-                        {language === 'en'
-                          ? 'Send Confirmation Auto-Reply to My WhatsApp'
-                          : '发送确认自动回执至注册手机 WhatsApp'}
-                      </span>
+              {/* Member Self-Service Notice: No need to WhatsApp to own phone, always viewable in portal */}
+              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 text-left space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      {language === 'en'
+                        ? 'Order Saved to Member Account'
+                        : '订单已安全存入您的会员中心'}
                     </span>
-                    <span className="text-[10px] font-mono font-bold bg-sky-200 text-sky-900 px-2 py-0.5 rounded-full">
-                      {currentMember.phone}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    {language === 'en' ? 'Self-Service Portal' : '随时自主查阅'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-600 leading-relaxed">
+                  {language === 'en'
+                    ? 'No need to send confirmation to your own WhatsApp — you can log in at any time to view all your scheduled and past deliveries under "Delivery Records".'
+                    : '无需发送确认回执到个人 WhatsApp——您随时登录会员中心，进入【配送记录】即可实时查阅所有已排期餐点与最新备餐进度。'}
+                </p>
+              </div>
+
+              {/* Optional: Send Notification to CHILL Healthy WhatsApp (Customer Choice - Never Forced) */}
+              <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-left space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                    <MessageCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      {language === 'en'
+                        ? 'Optional: Notify CHILL Healthy WhatsApp'
+                        : '可选：发送订餐凭据通知潮轻食客服'}
                     </span>
-                  </div>
-                  <p className="text-[11px] text-sky-800 leading-relaxed">
-                    {language === 'en'
-                      ? `Click below to send the official booking confirmation auto-reply slip directly to your registered WhatsApp (${currentMember.phone}):`
-                      : `订餐已完成！点击下方一键发送官方订餐确认回执至您的注册 WhatsApp（${currentMember.phone}）留存凭据：`}
-                  </p>
+                  </span>
+                  <span className="text-[10px] font-mono font-bold bg-emerald-200/90 text-emerald-900 px-2 py-0.5 rounded-full">
+                    {siteSettings.whatsappDisplay || '+60126189919'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  {language === 'en'
+                    ? 'Our kitchen receives your order schedule automatically. If you wish to send an extra slip directly to CHILL Healthy WhatsApp (+60126189919), you can choose to click below (optional):'
+                    : '后厨排单已自动记录。若您需要向潮轻食官方 WhatsApp (+60126189919) 额外发送一份订餐凭据作为客服备忘，可选择点击下方发送（非必填，自由选择）：'}
+                </p>
+                <div className="pt-0.5">
                   <a
-                    href={buildCustomerWhatsAppAutoReplyUrl(currentMember.phone, {
-                      orderNumber: redemptionSuccessPopup.orderNumber,
-                      customerName: currentMember.name,
-                      customerPhone: currentMember.phone,
-                      items: `${redemptionSuccessPopup.quantity}x ${redemptionSuccessPopup.mealName}`,
-                      deliveryDate: redemptionSuccessPopup.deliveryDate,
-                      deliverySlot: redemptionSuccessPopup.deliverySlot,
-                      deliveryAddress: `${redemptionSuccessPopup.deliveryAddress}, ${redemptionSuccessPopup.area} ${redemptionSuccessPopup.postalCode}`,
-                      totalAmount: 'Package Meal Credit Deducted / 会员餐券抵扣',
-                      paymentMethod: 'Member Package Credit',
-                      quotaRemaining: redemptionSuccessPopup.remainingMealsAfter,
-                      dietaryNotes: dietaryNotes,
-                      orderType: 'Meal Plan Redemption',
-                    })}
+                    href={buildWhatsAppUrl(
+                      siteSettings.whatsappNumber,
+                      redemptionSuccessPopup.whatsappMessage ||
+                        `🍱 *CHILL Healthy 潮轻食 · 会员订餐凭据*\n*Member Booking Slip*\n━━━━━━━━━━━━━━━━━━━\n📋 订单号 / Order No: #${redemptionSuccessPopup.orderNumber}\n👤 会员姓名: ${currentMember?.name}\n📞 会员电话: ${currentMember?.phone}\n🥗 预订餐品: ${redemptionSuccessPopup.quantity}x ${redemptionSuccessPopup.mealName} (${redemptionSuccessPopup.mealNameZh})\n📅 送餐日期: ${redemptionSuccessPopup.formattedDate || redemptionSuccessPopup.deliveryDate}\n⏰ 送餐时段: ${redemptionSuccessPopup.deliverySlot}\n📍 配送地址: ${redemptionSuccessPopup.deliveryAddress}, ${redemptionSuccessPopup.area} ${redemptionSuccessPopup.postalCode}\n🎟️ 剩余餐券: ${redemptionSuccessPopup.remainingMealsAfter} 餐\n━━━━━━━━━━━━━━━━━━━`
+                    )}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>
                       {language === 'en'
-                        ? `Auto-Reply to WhatsApp (${currentMember.phone})`
-                        : `发送确认回执至我的 WhatsApp (${currentMember.phone})`}
+                        ? `Send Slip to CHILL Healthy WhatsApp (Optional)`
+                        : `发送凭据至潮轻食 WhatsApp（可选）`}
                     </span>
                   </a>
                 </div>
-              )}
+              </div>
 
               {/* Double-Booking Prevention Awareness Box */}
-              <div className="p-4 rounded-2xl bg-amber-50/95 border border-amber-200 text-amber-950 space-y-1.5 shadow-2xs">
-                <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{language === 'en' ? 'Awareness: Avoid Double Booking' : '防重复订餐重要提示'}</span>
+              <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 space-y-1 shadow-2xs">
+                <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>{language === 'en' ? 'Reminder: Avoid Double Booking' : '防重复订餐提示'}</span>
                 </div>
-                <p className="text-xs text-amber-800 leading-relaxed">
+                <p className="text-[11px] text-amber-800 leading-relaxed">
                   {language === 'en' ? (
                     <>
                       Your lunch for <strong>{redemptionSuccessPopup.formattedDate}</strong> is locked into our kitchen prep queue.{' '}
@@ -3510,24 +3875,24 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               </div>
 
               {/* Order Summary Card */}
-              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-3">
-                <div className="flex items-center gap-3 pb-3 border-b border-stone-200/70">
+              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-2.5">
+                <div className="flex items-center gap-3 pb-2.5 border-b border-stone-200/70">
                   {redemptionSuccessPopup.mealImage && (
                     <img
                       src={redemptionSuccessPopup.mealImage}
                       alt={redemptionSuccessPopup.mealName}
-                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover border border-stone-200 shrink-0 shadow-2xs"
+                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-stone-200 shrink-0 shadow-2xs"
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-heading font-bold text-sm text-stone-900 truncate">
+                    <h4 className="font-heading font-bold text-xs sm:text-sm text-stone-900 truncate">
                       {language === 'en' ? redemptionSuccessPopup.mealName : redemptionSuccessPopup.mealNameZh}
                     </h4>
                     {language !== 'en' && (
-                      <p className="text-xs text-stone-500 truncate">{redemptionSuccessPopup.mealName}</p>
+                      <p className="text-[11px] text-stone-500 truncate">{redemptionSuccessPopup.mealName}</p>
                     )}
-                    <div className="flex items-center gap-2 mt-1 text-xs">
-                      <span className="font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    <div className="flex items-center gap-2 mt-1 text-[11px]">
+                      <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                         {redemptionSuccessPopup.quantity} {language === 'en' ? 'Box' : '份'}
                       </span>
                       <span className="text-stone-500 font-medium">
@@ -3537,27 +3902,27 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="space-y-0.5">
                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
                       {language === 'en' ? 'Delivery Date & Time' : '送餐日期与时段'}
                     </span>
-                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                      <span>{redemptionSuccessPopup.deliveryDate}</span>
+                    <p className="font-bold text-stone-900 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-emerald-700 shrink-0" />
+                      <span className="truncate">{redemptionSuccessPopup.deliveryDate}</span>
                     </p>
-                    <p className="text-[11px] text-stone-500 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      <span>{redemptionSuccessPopup.deliverySlot}</span>
+                    <p className="text-[10px] text-stone-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-stone-400 shrink-0" />
+                      <span className="truncate">{redemptionSuccessPopup.deliverySlot}</span>
                     </p>
                   </div>
 
                   <div className="space-y-0.5">
                     <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
-                      {language === 'en' ? 'Remaining Package Balance' : '套餐剩余餐券'}
+                      {language === 'en' ? 'Remaining Balance' : '套餐剩余餐券'}
                     </span>
-                    <p className="font-extrabold text-emerald-800 text-sm flex items-center gap-1.5">
-                      <PackageCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <p className="font-extrabold text-emerald-800 text-xs sm:text-sm flex items-center gap-1">
+                      <PackageCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span>
                         {redemptionSuccessPopup.remainingMealsAfter} {language === 'en' ? 'Meals Left' : '餐可用'}
                       </span>
@@ -3565,42 +3930,42 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-stone-200/70 text-xs">
+                <div className="pt-2 border-t border-stone-200/70 text-[11px]">
                   <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">
                     {language === 'en' ? 'Delivery Destination' : '送餐目的地'}
                   </span>
-                  <p className="text-stone-700 flex items-start gap-1.5 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
+                  <p className="text-stone-700 flex items-start gap-1 mt-0.5 leading-tight">
+                    <MapPin className="w-3 h-3 text-stone-400 shrink-0 mt-0.5" />
                     <span>
                       {redemptionSuccessPopup.deliveryAddress}, {redemptionSuccessPopup.area} {redemptionSuccessPopup.postalCode}
                     </span>
                   </p>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRedemptionSuccessPopup(null);
-                    setPortalTab('history');
-                  }}
-                  className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-                >
-                  <History className="w-4 h-4" />
-                  <span>{language === 'en' ? 'View in Delivery Records' : '查阅配送记录'}</span>
-                </button>
+            {/* Sticky Action Buttons Footer - Guaranteed Visible within Viewport */}
+            <div className="p-3.5 sm:p-4 bg-stone-50 border-t border-stone-200 shrink-0 flex flex-col sm:flex-row items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRedemptionSuccessPopup(null);
+                  setPortalTab('history');
+                }}
+                className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-black text-emerald-400 font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+              >
+                <History className="w-4 h-4" />
+                <span>{language === 'en' ? 'View in Delivery Records' : '查阅配送记录'}</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setRedemptionSuccessPopup(null)}
-                  className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{language === 'en' ? 'Got it / Done' : '我知道了 / 完成'}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setRedemptionSuccessPopup(null)}
+                className="w-full sm:w-1/2 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>{language === 'en' ? 'Got it / Done' : '我知道了 / 完成'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -3610,23 +3975,37 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           POPUP NOTIFICATION 2: DOUBLE-BOOKING PRE-CONFIRMATION WARNING MODAL
           ========================================================================= */}
       {doubleBookingWarning && doubleBookingWarning.isOpen && (
-        <div className="fixed inset-0 z-80 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-amber-300 animate-in zoom-in-95">
-            <div className="bg-amber-500 text-white p-5 flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-white/20 text-white shrink-0">
-                <AlertCircle className="w-6 h-6" />
+        <div
+          className="fixed inset-0 z-80 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDoubleBookingWarning(null);
+          }}
+        >
+          <div className="relative bg-white rounded-3xl max-w-md w-full shadow-2xl border border-amber-300 animate-in zoom-in-95 flex flex-col max-h-[90vh] my-auto overflow-hidden">
+            <div className="bg-amber-500 text-white p-4 sm:p-5 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-white/20 text-white shrink-0">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-black text-base text-white">
+                    {language === 'en' ? 'Double Booking Notice' : '重复订餐风险提示'}
+                  </h3>
+                  <p className="text-xs text-amber-100">
+                    {language === 'en' ? 'You already have a scheduled lunch for this date' : '您在该送餐日期已有一笔预定记录'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-heading font-black text-base text-white">
-                  {language === 'en' ? 'Double Booking Notice' : '重复订餐风险提示'}
-                </h3>
-                <p className="text-xs text-amber-100">
-                  {language === 'en' ? 'You already have a scheduled lunch for this date' : '您在该送餐日期已有一笔预定记录'}
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setDoubleBookingWarning(null)}
+                className="p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs text-stone-700">
+            <div className="p-5 sm:p-6 space-y-4 text-xs text-stone-700 overflow-y-auto flex-1">
               <p className="leading-relaxed">
                 {language === 'en' ? (
                   <>
@@ -3644,24 +4023,24 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   ? 'To avoid accidental double booking, please confirm if you intentionally want to add an additional meal box to this delivery date.'
                   : '为避免重复扣除您的套餐餐券，请确认您是否确实需要为该日期加订多一份午餐？'}
               </p>
+            </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setDoubleBookingWarning(null)}
-                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold transition-colors cursor-pointer"
-                >
-                  {language === 'en' ? 'Cancel (Keep Existing)' : '取消（保持原有预定）'}
-                </button>
+            <div className="p-4 bg-stone-50 border-t border-stone-100 shrink-0 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDoubleBookingWarning(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold transition-colors cursor-pointer"
+              >
+                {language === 'en' ? 'Cancel (Keep Existing)' : '取消（保持原有预定）'}
+              </button>
 
-                <button
-                  type="button"
-                  onClick={doubleBookingWarning.onProceed}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors shadow-xs cursor-pointer"
-                >
-                  {language === 'en' ? 'Yes, Book Additional Meal' : '是的，确认加订餐品'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={doubleBookingWarning.onProceed}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors shadow-xs cursor-pointer"
+              >
+                {language === 'en' ? 'Yes, Book Additional Meal' : '是的，确认加订餐品'}
+              </button>
             </div>
           </div>
         </div>

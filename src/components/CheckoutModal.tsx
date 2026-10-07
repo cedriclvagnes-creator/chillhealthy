@@ -40,6 +40,12 @@ import {
   buildOrderConfirmationAutoReply,
   buildCustomerWhatsAppAutoReplyUrl,
 } from '../utils/whatsapp';
+import {
+  calculateMonFriExpiryDate,
+  getPlanValidityDays,
+  getDetailedPackageValidity,
+  getTodayStr,
+} from '../utils/packageExpiry';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -824,6 +830,69 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   : '未满RM100统一运费RM15 · 满RM100全巴生谷免运费！'}
               </p>
             </div>
+
+            {/* Customer Reference: Package Validity Date & Klang Valley Mon-Fri Schedule */}
+            {hasPlan && planItem && (() => {
+              const vDays = getPlanValidityDays(planItem.planDetails?.planId || planItem.title);
+              const startDate = deliveryDate || getTodayStr();
+              const valDetails = getDetailedPackageValidity(
+                startDate,
+                vDays,
+                siteSettings.disabledDeliveryDates || []
+              );
+
+              return (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-stone-50 border border-emerald-300 text-xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 font-extrabold text-emerald-950">
+                      <Calendar className="w-4 h-4 text-emerald-700" />
+                      <span>{language === 'en' ? 'Package Validity Date Reference' : '客户专属：套餐有效期至参考'}</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-700 text-white font-extrabold text-[11px] font-mono shadow-xs">
+                      📅 {language === 'en' ? `${vDays} Mon–Fri Workdays` : `${vDays}天工作日有效期`}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] text-stone-500 uppercase tracking-wider block font-bold">
+                        {language === 'en' ? 'Official Validity Cutoff Date' : '预估有效截止日期 (CUSTOMER REFERENCE)'}
+                      </span>
+                      <span className="font-heading font-black text-emerald-900 text-sm sm:text-base">
+                        {valDetails.expiryDate}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-stone-500 uppercase tracking-wider block font-bold">
+                        {language === 'en' ? 'Validity Standard' : '官方有效期标准'}
+                      </span>
+                      <span className="text-[11px] font-bold text-stone-800">
+                        {vDays === 30
+                          ? (language === 'en' ? '30 Days (20 Meals)' : '30天 (20餐)')
+                          : vDays === 15
+                          ? (language === 'en' ? '15 Days (10 Meals)' : '15天 (10餐)')
+                          : (language === 'en' ? '8 Days (5 Meals)' : '8天 (5餐)')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {valDetails.extendedHolidaysCount > 0 && (
+                    <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                      <span className="font-bold">🇲🇾 {language === 'en' ? 'Klang Valley Holidays Synchronized:' : '巴生谷公假已顺延：'}</span>{' '}
+                      {language === 'en'
+                        ? `+${valDetails.extendedHolidaysCount} day extension applied for ${valDetails.holidaysEncountered.map(h => h.nameEn).join(', ')}`
+                        : `已自动顺延 +${valDetails.extendedHolidaysCount} 天工作日（包含 ${valDetails.holidaysEncountered.map(h => h.nameZh).join('、')}）`}
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    {language === 'en'
+                      ? '🇲🇾 Deliveries are available Monday to Friday only. Gazetted Malaysia Klang Valley public holidays are automatically synchronized and excluded, extending your package validity date by +1 day so you never lose meal days.'
+                      : '🇲🇾 仅限星期一至五工作日送餐。已自动同步马来西亚巴生谷官方公共假期（遇公假自动顺延 +1 天，绝不扣减有效餐期）。'}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Customer Contact */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

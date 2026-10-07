@@ -131,7 +131,17 @@ export default function App() {
   const [packages, setPackages] = useState<MealPlan[]>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_packages_v3');
-      return saved ? JSON.parse(saved) : MEAL_PLANS;
+      if (saved) {
+        const parsed: MealPlan[] = JSON.parse(saved);
+        return parsed.map((p) => {
+          let vDays = p.validityDays;
+          if (p.mealsTotal === 5 || p.days === 5 || p.id.includes('5-day')) vDays = 8;
+          else if (p.mealsTotal === 10 || p.days === 10 || p.id.includes('10-day')) vDays = 15;
+          else if (p.mealsTotal === 20 || p.days === 20 || p.id.includes('20-day') || p.persons >= 2) vDays = 30;
+          return { ...p, validityDays: vDays || 30 };
+        });
+      }
+      return MEAL_PLANS;
     } catch {
       return MEAL_PLANS;
     }
@@ -625,7 +635,11 @@ export default function App() {
 
     // Activate package validity on first meal order if not yet activated!
     const isFirstOrder = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
-    const firstMealDate = redemptionsList[0]?.deliveryDate || getTodayStr();
+    const sortedDeliveryDates = redemptionsList
+      .map((r) => r.deliveryDate)
+      .filter(Boolean)
+      .sort();
+    const firstMealDate = sortedDeliveryDates[0] || getTodayStr();
     const activatedPkg = isFirstOrder
       ? activatePackageOnFirstOrder(currentMember.activePackage, firstMealDate, suspendedDates)
       : currentMember.activePackage;
@@ -940,9 +954,24 @@ export default function App() {
   };
 
   const handleUpdateRedemptionStatus = (id: string, newStatus: MealRedemption['status']) => {
-    setRedemptions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
-    );
+    setRedemptions((prev) => {
+      const next = prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r));
+      try {
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const handleBatchUpdateRedemptionStatus = (ids: string[], newStatus: MealRedemption['status']) => {
+    const idSet = new Set(ids);
+    setRedemptions((prev) => {
+      const next = prev.map((r) => (idSet.has(r.id) ? { ...r, status: newStatus } : r));
+      try {
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleUpdateRedemptionOrder = (updatedOrder: MealRedemption) => {
@@ -1580,6 +1609,7 @@ export default function App() {
           onUpdateMenuItems={handleUpdateMenuItems}
           redemptions={redemptions}
           onUpdateRedemptionStatus={handleUpdateRedemptionStatus}
+          onBatchUpdateRedemptionStatus={handleBatchUpdateRedemptionStatus}
           onUpdateRedemptionOrder={handleUpdateRedemptionOrder}
           onDeleteRedemptionOrder={handleDeleteRedemptionOrder}
           onToggleDisabledDeliveryDate={handleToggleDisabledDeliveryDate}

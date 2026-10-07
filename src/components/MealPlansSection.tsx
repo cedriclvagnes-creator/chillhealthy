@@ -1,8 +1,33 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, Clock, Calendar, ShieldCheck, ArrowRight, UserCheck, Users, HeartPulse, Plus, Edit3, MessageCircle, Building2, Truck } from 'lucide-react';
+import {
+  Check,
+  Sparkles,
+  Clock,
+  Calendar,
+  ShieldCheck,
+  ArrowRight,
+  UserCheck,
+  Users,
+  HeartPulse,
+  Plus,
+  Edit3,
+  MessageCircle,
+  Building2,
+  Truck,
+  Landmark,
+  Calculator,
+  Info,
+  CalendarDays,
+} from 'lucide-react';
 import { MealPlan, Language, CartItem, SiteSettings } from '../types';
 import { MEAL_PLANS } from '../data/menuData';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
+import {
+  calculateMonFriExpiryDate,
+  getPlanValidityDays,
+  getTodayStr,
+  getDetailedPackageValidity,
+} from '../utils/packageExpiry';
 
 interface MealPlansSectionProps {
   language: Language;
@@ -27,6 +52,17 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
   // Track upsize choice per plan ID
   const [upsizeSelections, setUpsizeSelections] = useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = useState<'solo' | 'team' | 'all'>('solo');
+
+  // Customer Reference: Interactive Validity & Holiday Checker
+  const [calcSelectedPlanId, setCalcSelectedPlanId] = useState<string>('plan-20-day-transformation');
+  const [calcStartDate, setCalcStartDate] = useState<string>(() => {
+    const d = new Date();
+    const day = d.getDay();
+    if (day === 6) d.setDate(d.getDate() + 2); // Saturday -> next Monday
+    else if (day === 0) d.setDate(d.getDate() + 1); // Sunday -> next Monday
+    return d.toISOString().split('T')[0];
+  });
+  const [showValidityCalculator, setShowValidityCalculator] = useState<boolean>(true);
 
   // WhatsApp concierge for Big Group orders
   const bigGroupWhatsAppUrl = buildWhatsAppUrl(
@@ -107,9 +143,205 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
           </h2>
           <p className="mt-3 text-stone-300 text-sm sm:text-base leading-relaxed">
             {isEn
-              ? 'Choose from 5-Day Workday Passes, 10-Day Fat-Loss Kickstarts, and 20-Day Monthly Plans for 1 to 6 persons. Free Klang Valley delivery included.'
-              : '精选单人 5 天工作日午餐卡、10 天轻体减脂冲刺、20 天蜕变月计划，以及 2 至 6 人团订配套。包含巴生谷全境免运费。'}
+              ? 'Choose from 5-Day Workday Passes (8 days validity), 10-Day Fat-Loss Kickstarts (15 days validity), and 20-Day Monthly Plans (30 days validity) for 1 to 6 persons. Free Klang Valley delivery included.'
+              : '精选单人 5 天工作日午餐卡（8天有效期）、10 天轻体减脂冲刺（15天有效期）、20 天蜕变月计划（30天有效期），以及 2 至 6 人团订配套。包含巴生谷全境免运费。'}
           </p>
+
+          {/* Validity Policy & Malaysia Klang Valley Public Holiday Synchronization Reference */}
+          <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-stone-900/90 to-emerald-950/80 border border-emerald-500/50 text-left sm:text-center shadow-xl">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 text-xs">
+              <span className="font-extrabold flex items-center gap-1.5 text-emerald-300 shrink-0 text-sm">
+                <Landmark className="w-4 h-4 text-emerald-400" />
+                <span>{isEn ? 'Package Validity Standard & Holiday Schedule:' : '配套有效期官方标准与公假顺延规则：'}</span>
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-bold">
+                <span className="bg-emerald-900/90 px-3 py-1 rounded-xl border border-emerald-500/60 text-white shadow-xs">
+                  🍱 20 Meals → <strong className="text-emerald-300">30 Days Validity</strong>
+                </span>
+                <span className="bg-emerald-900/90 px-3 py-1 rounded-xl border border-emerald-500/60 text-white shadow-xs">
+                  🥗 10 Meals → <strong className="text-emerald-300">15 Days Validity</strong>
+                </span>
+                <span className="bg-emerald-900/90 px-3 py-1 rounded-xl border border-emerald-500/60 text-white shadow-xs">
+                  🥢 5 Meals → <strong className="text-emerald-300">8 Days Validity</strong>
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-stone-300 mt-2.5 sm:mt-2 leading-relaxed max-w-3xl mx-auto">
+              {isEn
+                ? '🇲🇾 Deliveries are scheduled Monday to Friday only. All official Malaysia Klang Valley public holidays (Federal & Selangor) are automatically synchronized and excluded, auto-extending your package validity date by +1 day so you never lose meal days.'
+                : '🇲🇾 仅限周一至周五工作日配送。系统已全自动同步马来西亚巴生谷官方公共假期（吉隆坡与雪兰莪法定公假停送，并自动顺延 +1 天工作日，绝不扣减餐期）。'}
+            </p>
+
+            {/* Toggle Interactive Validity Date Checker */}
+            <div className="mt-3.5 pt-3 border-t border-emerald-500/30 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowValidityCalculator(!showValidityCalculator)}
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer"
+              >
+                <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  {showValidityCalculator
+                    ? (isEn ? 'Hide Validity Date Reference Tool' : '收起有效期参考测算工具')
+                    : (isEn ? 'Open Package Validity Date Reference Tool' : '展开客户专属：配套有效期至参考测算')}
+                </span>
+              </button>
+            </div>
+
+            {/* Interactive Package Validity & Holiday Date Checker Tool */}
+            {showValidityCalculator && (() => {
+              const currentSelectedPlan = packages.find((p) => p.id === calcSelectedPlanId) || packages[0];
+              const validityDetails = getDetailedPackageValidity(
+                calcStartDate,
+                currentSelectedPlan,
+                siteSettings?.disabledDeliveryDates || []
+              );
+
+              return (
+                <div className="mt-4 p-4 rounded-2xl bg-stone-900/90 border border-emerald-500/40 text-left shadow-lg">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-stone-800">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <CalendarDays className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-heading font-extrabold text-white text-sm">
+                          {isEn ? 'Customer Reference: Package Validity Date Checker' : '客户参考：配套有效截止日期即时查询'}
+                        </h4>
+                        <p className="text-[11px] text-stone-400">
+                          {isEn
+                            ? 'Check the exact validity cutoff date for any meal plan based on your chosen start date'
+                            : '选择任意餐标及预计首餐送餐日，系统自动计算排除周末及巴生谷公假后的准确到期日'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Date Presets */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-stone-400 text-[11px] font-semibold">{isEn ? 'Start Date:' : '首餐日期：'}</span>
+                      <input
+                        type="date"
+                        value={calcStartDate}
+                        onChange={(e) => setCalcStartDate(e.target.value)}
+                        className="px-2.5 py-1 rounded-lg bg-stone-800 border border-stone-700 text-white font-mono text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Plan Selector Buttons */}
+                  <div className="mt-3.5">
+                    <div className="text-[11px] font-bold text-stone-300 mb-1.5">
+                      {isEn ? '1. Select Package Plan:' : '1. 选择订购配套：'}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {packages
+                        .filter((p) => p.persons === 1 || !p.persons)
+                        .slice(0, 3)
+                        .map((p) => {
+                          const isSelected = p.id === calcSelectedPlanId;
+                          const vDays = p.validityDays || getPlanValidityDays(p);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setCalcSelectedPlanId(p.id)}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-500/20 border-emerald-400 text-white shadow-xs ring-1 ring-emerald-400/50'
+                                  : 'bg-stone-850/80 border-stone-800 text-stone-300 hover:bg-stone-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between font-bold text-xs">
+                                <span>{isEn ? p.title : p.titleZh}</span>
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono ${isSelected ? 'bg-emerald-400 text-stone-950 font-black' : 'bg-stone-750 text-stone-300'}`}>
+                                  {vDays} {isEn ? 'Days' : '天'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-emerald-400 font-semibold mt-1">
+                                {p.mealsTotal} {isEn ? 'Meals' : '餐'} · RM {p.pricePerMeal.toFixed(2)}/餐
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Real-time Calculation Result Display */}
+                  <div className="mt-4 p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-500/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-extrabold block">
+                        {isEn ? 'OFFICIAL VALIDITY CUTOFF DATE' : '官方有效截止日期 (CUSTOMER REFERENCE)'}
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="font-mono text-2xl sm:text-3xl font-black text-white tracking-tight">
+                          {validityDetails.expiryDate}
+                        </span>
+                        <span className="text-xs text-emerald-300 font-bold">
+                          ({validityDetails.validityDays} {isEn ? 'Mon–Fri Workdays' : '天工作日'})
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-300 mt-1">
+                        {isEn
+                          ? `Starting from ${validityDetails.startDate} · Available Monday to Friday only`
+                          : `自 ${validityDetails.startDate} 首餐起算 · 仅限周一至五工作日送达`}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <div className="bg-stone-900/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-stone-200">
+                        <span className="text-[10px] text-stone-400 block font-bold">{isEn ? 'Weekends Protected' : '周末免扣'}</span>
+                        <span className="font-mono font-bold text-emerald-400">{validityDetails.weekendDaysExcluded} {isEn ? 'Weekend Days' : '个周末日'}</span>
+                      </div>
+                      <div className="bg-stone-900/90 px-3 py-1.5 rounded-lg border border-stone-700/80 text-stone-200">
+                        <span className="text-[10px] text-stone-400 block font-bold">{isEn ? 'Klang Valley Holidays' : '巴生谷公假'}</span>
+                        <span className="font-mono font-bold text-amber-300">
+                          {validityDetails.extendedHolidaysCount > 0
+                            ? `+${validityDetails.extendedHolidaysCount} ${isEn ? 'Days Extended' : '天公假顺延'}`
+                            : (isEn ? 'Synchronized' : '已自动同步')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Holidays Encountered List */}
+                  {validityDetails.holidaysEncountered.length > 0 && (
+                    <div className="mt-3 p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <span>🇲🇾</span>
+                        <span>
+                          {isEn
+                            ? `Public Holiday(s) synchronized during this period (validity extended by +${validityDetails.extendedHolidaysCount} workdays):`
+                            : `此周期内已自动同步的巴生谷官方公假（有效期顺延 +${validityDetails.extendedHolidaysCount} 个工作日）：`}
+                        </span>
+                      </span>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {validityDetails.holidaysEncountered.map((h, idx) => (
+                          <span
+                            key={`${h.date}-${idx}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-900/80 border border-amber-500/50 text-white text-[11px] font-medium"
+                          >
+                            <span className="font-mono text-amber-200 font-bold">{h.date}</span>
+                            <span>•</span>
+                            <span>{isEn ? h.nameEn : h.nameZh}</span>
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded ml-1 font-bold">+1天</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-2.5 text-[11px] text-stone-400 flex items-start gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      {isEn
+                        ? 'Customer Protection Guarantee: Your package validity clock officially begins only on your 1st ordered meal date, never upon purchase date. Enjoy your healthy meals with complete flexibility!'
+                        : '客户权益保障：您的配套有效期倒计时仅在您“首餐实际送达日”开始计算，购买当天不扣期。出差休假可弹性顺延，公假零损耗！'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
 
           {/* Filter Pills */}
           <div className="flex flex-wrap items-center justify-center gap-2.5 mt-6">
@@ -261,10 +493,48 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                           ? `RM ${plan.pricePerMeal.toFixed(2)} / meal`
                           : `每餐约 RM ${plan.pricePerMeal.toFixed(2)}`}
                       </span>
-                      <span className="text-stone-400 font-normal">
-                        {isEn ? `${plan.validityDays} Days Validity` : `${plan.validityDays}天有效期`}
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
+                        {isEn ? `📅 ${plan.validityDays} Days Validity (Mon–Fri)` : `📅 ${plan.validityDays}天工作日有效期`}
                       </span>
                     </div>
+
+                    {/* Customer Reference: Estimated Validity Date Box */}
+                    {(() => {
+                      const todayStr = getTodayStr();
+                      const valDetails = getDetailedPackageValidity(todayStr, plan, siteSettings?.disabledDeliveryDates || []);
+                      return (
+                        <div className="mt-3 p-2.5 rounded-xl bg-stone-900/90 border border-emerald-500/40 text-[11px]">
+                          <div className="flex items-center justify-between font-bold text-emerald-300">
+                            <span className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>{isEn ? 'Estimated Validity Date:' : '预估有效截止日期：'}</span>
+                            </span>
+                            <span className="font-mono bg-emerald-500/20 px-2 py-0.5 rounded text-white font-extrabold border border-emerald-500/40">
+                              {valDetails.expiryDate}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 space-y-0.5 text-[10px] text-stone-300 leading-snug">
+                            <div>
+                              {isEn
+                                ? `• ${valDetails.validityDays} Mon–Fri weekdays (${valDetails.validityDays === 30 ? '20 Meals' : valDetails.validityDays === 15 ? '10 Meals' : '5 Meals'} standard)`
+                                : `• ${valDetails.validityDays}个工作日（${valDetails.validityDays === 30 ? '20餐' : valDetails.validityDays === 15 ? '10餐' : '5餐'}官方有效期）`}
+                            </div>
+                            <div className="text-emerald-300/90">
+                              {isEn
+                                ? '• Malaysia Klang Valley public holidays auto-extend +1 day'
+                                : '• 自动同步巴生谷公假，遇公假顺延 +1 天工作日'}
+                            </div>
+                            {valDetails.extendedHolidaysCount > 0 && (
+                              <div className="text-amber-300 font-semibold pt-0.5">
+                                {isEn
+                                  ? `🇲🇾 +${valDetails.extendedHolidaysCount} Klang Valley holiday extension applied (${valDetails.holidaysEncountered[0]?.nameEn})`
+                                  : `🇲🇾 期间包含 ${valDetails.extendedHolidaysCount} 天巴生谷公假顺延（${valDetails.holidaysEncountered[0]?.nameZh}）`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Portion Upsize Option (From Attached Flyer) */}
@@ -321,8 +591,8 @@ export const MealPlansSection: React.FC<MealPlansSectionProps> = ({
                       </span>
                       <span>
                         {isEn
-                          ? `Enjoy ${plan.mealsTotal} meals within ${plan.validityDays} days (Mon–Fri, excluding Public Holidays & Weekends)`
-                          : `${plan.validityDays} 天内享用 ${plan.mealsTotal} 餐，星期一至五（公假周末除外）`}
+                          ? `Enjoy ${plan.mealsTotal} meals within ${plan.validityDays} days, Mon–Fri only (Klang Valley public holidays automatically extend validity +1 day)`
+                          : `${plan.validityDays} 天内弹性享用 ${plan.mealsTotal} 餐，仅限周一至五（巴生谷公假停送并自动顺延 +1 天工作日）`}
                       </span>
                     </div>
 

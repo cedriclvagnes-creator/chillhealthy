@@ -78,6 +78,9 @@ export const INITIAL_MEMBERS: MemberAccount[] = [
       remainingMeals: 17, // 15 + 2 bonus meals
       purchasedDate: '2026-09-01',
       expiryDate: '2026-10-15',
+      validityDays: 30,
+      isActivated: true,
+      firstRedeemedDate: '2026-09-01',
     },
     creditsHistory: [
       {

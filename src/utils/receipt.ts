@@ -102,6 +102,8 @@ export function buildReceiptWhatsAppMessage(receipt: OfficialReceipt): string {
     `%0A📦 *PACKAGE ORDER DETAILS:*%0A` +
     `• *Subscribed Plan:* ${receipt.planName} ${receipt.planNameZh ? `(${receipt.planNameZh})` : ''}%0A` +
     `• *Total Meals Included:* ${receipt.totalMeals} Meals${receipt.bonusMeals && receipt.bonusMeals > 0 ? ` (+${receipt.bonusMeals} Bonus Free Meals)` : ''}%0A` +
+    `• *Package Validity Standard:* ${receipt.totalMeals === 5 ? '8 Days (5 Meals)' : receipt.totalMeals === 10 ? '15 Days (10 Meals)' : '30 Days (20 Meals)'} (Mon–Fri only)%0A` +
+    `• *Klang Valley Holiday Rule:* Official public holidays automatically extend validity (+1 day)%0A` +
     `• *Delivery:* Included (Free Mon–Fri Klang Valley lunch delivery)%0A%0A` +
     `💰 *PAYMENT BREAKDOWN:*%0A` +
     `• *Subtotal:* RM ${receipt.totalAmount.toFixed(2)}%0A` +

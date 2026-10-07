@@ -224,6 +224,9 @@ export interface MemberAccount {
     isActivated?: boolean; // false until the member places their first meal order
     autoRevivedMeals?: number; // Number of meals auto-revived from previous expired plan
     isBurned?: boolean; // true if expired without full redemption
+    specialCaseExtension?: boolean; // Admin special case: allows booking beyond normal validity or special date override
+    specialCaseAdjustedExpiryDate?: string; // Admin manually adjusted/extended expiry date for special cases
+    specialCaseNotes?: string; // Reason for admin special adjustment (e.g. medical leave, travel, company event)
   } | null;
   lastExpiredPackage?: {
     planId: string;

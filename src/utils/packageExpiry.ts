@@ -1,4 +1,5 @@
 import { MemberAccount, MealPlan } from '../types';
+import { getAllMalaysiaBankHolidays, MalaysiaBankHoliday } from './malaysiaHolidays';
 
 /**
  * Returns today's date formatted as 'YYYY-MM-DD' in local time.
@@ -12,43 +13,103 @@ export function getTodayStr(): string {
 }
 
 /**
- * Maps a plan ID or days count to standard validity workdays (Monday–Friday).
- * Starter: 14 weekdays (Mon-Fri)
- * 10-Day Kickstart: 20 weekdays (Mon-Fri)
- * 20-Day Transformation: 30 weekdays (Mon-Fri)
- * Others / Bulk Plans: 30 weekdays (Mon-Fri)
+ * Cache of all official Malaysia Klang Valley weekday bank public holidays.
+ * Covers Kuala Lumpur and Selangor gazetted holidays including Section 3 replacement days.
  */
-export function getPlanValidityDays(planOrId?: MealPlan | string | number): number {
-  if (typeof planOrId === 'number') return planOrId;
-  if (!planOrId) return 30;
+let cachedMalaysiaWeekdayHolidays: Map<string, MalaysiaBankHoliday> | null = null;
 
-  if (typeof planOrId === 'object' && planOrId.validityDays) {
-    return planOrId.validityDays;
+export function getMalaysiaKlangValleyWeekdayHolidaysMap(): Map<string, MalaysiaBankHoliday> {
+  if (!cachedMalaysiaWeekdayHolidays) {
+    const map = new Map<string, MalaysiaBankHoliday>();
+    const all = getAllMalaysiaBankHolidays();
+    for (const h of all) {
+      if (h.isWeekday) {
+        map.set(h.date, h);
+      }
+    }
+    cachedMalaysiaWeekdayHolidays = map;
   }
-
-  const id = typeof planOrId === 'string' ? planOrId.toLowerCase() : planOrId.id.toLowerCase();
-  if (id.includes('5-day') || id.includes('starter') || id.includes('p1')) return 14;
-  if (id.includes('10-day') || id.includes('kickstart') || id.includes('p2')) return 20;
-  return 30; // Default 30 Mon-Fri weekdays
+  return cachedMalaysiaWeekdayHolidays;
 }
 
 /**
- * Calculates package expiry date based on Monday to Friday.
- * If admin suspends any weekday (public holiday or kitchen off-day), it extends by an extra day.
+ * Maps a plan ID or days count to standard validity workdays (Monday–Friday).
+ * Official Rules:
+ * - 20 Meals / 20-Day: 30 Mon-Fri workdays validity
+ * - 10 Meals / 10-Day: 15 Mon-Fri workdays validity
+ * - 5 Meals / 5-Day: 8 Mon-Fri workdays validity
+ * - Team / Multi-person plans (based on 20 delivery days): 30 Mon-Fri workdays validity
+ */
+export function getPlanValidityDays(planOrId?: MealPlan | string | number): number {
+  if (typeof planOrId === 'number') {
+    if (planOrId === 5) return 8;
+    if (planOrId === 10) return 15;
+    if (planOrId === 20 || planOrId === 40 || planOrId === 60 || planOrId === 80 || planOrId === 120) return 30;
+    return planOrId > 0 ? planOrId : 30;
+  }
+  if (!planOrId) return 30;
+
+  if (typeof planOrId === 'object') {
+    if (planOrId.mealsTotal === 5 || planOrId.days === 5) return 8;
+    if (planOrId.mealsTotal === 10 || planOrId.days === 10) return 15;
+    if (planOrId.mealsTotal === 20 || planOrId.days === 20 || (planOrId.persons && planOrId.persons >= 2)) return 30;
+    if (planOrId.validityDays) {
+      return planOrId.validityDays;
+    }
+  }
+
+  const str = String(planOrId).toLowerCase();
+  // 5 Meals / 5 Days
+  if (
+    str.includes('5-day') ||
+    str.includes('5-meal') ||
+    str.includes('5 meal') ||
+    str.includes('5天') ||
+    str.includes('5餐') ||
+    str.includes('starter') ||
+    str.includes('p1') ||
+    /\b5\s*(meal|day|餐|天)/i.test(str)
+  ) {
+    return 8;
+  }
+  // 10 Meals / 10 Days
+  if (
+    str.includes('10-day') ||
+    str.includes('10-meal') ||
+    str.includes('10 meal') ||
+    str.includes('10天') ||
+    str.includes('10餐') ||
+    str.includes('kickstart') ||
+    str.includes('p2') ||
+    /\b10\s*(meal|day|餐|天)/i.test(str)
+  ) {
+    return 15;
+  }
+  // 20 Meals / 20 Days & All Other Plans default to 30 Days
+  return 30;
+}
+
+/**
+ * Calculates package expiry date based strictly on Monday to Friday.
+ * Automatically synchronizes Malaysia Klang Valley public holidays:
+ * Any gazetted public holiday (or custom kitchen suspended date) that falls on a Monday–Friday
+ * automatically extends the package validity by +1 extra workday so customers never lose meal days.
  *
  * @param startDateStr 'YYYY-MM-DD' - First day of meal ordering
- * @param validityDays number - e.g. 14, 20, 30 Mon-Fri weekdays
- * @param suspendedDates string[] - list of suspended dates ('YYYY-MM-DD')
+ * @param validityDays number - 30 days for 20 meals, 15 days for 10 meals, 8 days for 5 meals
+ * @param customSuspendedDates string[] - optional additional suspended dates ('YYYY-MM-DD')
  * @returns string 'YYYY-MM-DD' - the final valid weekday (inclusive)
  */
 export function calculateMonFriExpiryDate(
   startDateStr: string,
   validityDays: number,
-  suspendedDates: string[] = []
+  customSuspendedDates: string[] = []
 ): string {
   if (!startDateStr || validityDays <= 0) return '';
 
-  const suspendedSet = new Set(suspendedDates);
+  const holidaysMap = getMalaysiaKlangValleyWeekdayHolidaysMap();
+  const suspendedSet = new Set(customSuspendedDates);
+
   const parts = startDateStr.split('-');
   const year = parseInt(parts[0], 10);
   const month = parseInt(parts[1], 10) - 1;
@@ -58,7 +119,7 @@ export function calculateMonFriExpiryDate(
 
   let workdaysCounted = 0;
   let safetyLimit = 0;
-  const maxIterations = validityDays * 4 + suspendedDates.length + 120;
+  const maxIterations = validityDays * 5 + holidaysMap.size + customSuspendedDates.length + 180;
 
   while (safetyLimit < maxIterations) {
     safetyLimit++;
@@ -69,9 +130,11 @@ export function calculateMonFriExpiryDate(
     const curDateStr = `${yyyy}-${mm}-${dd}`;
 
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isSuspended = suspendedSet.has(curDateStr);
+    const isHoliday = holidaysMap.has(curDateStr);
+    const isCustomSuspended = suspendedSet.has(curDateStr);
 
-    if (!isWeekend && !isSuspended) {
+    // Deliveries are Monday to Friday only, excluding weekends & public holidays/suspended days
+    if (!isWeekend && !isHoliday && !isCustomSuspended) {
       workdaysCounted++;
       if (workdaysCounted >= validityDays) {
         return curDateStr;
@@ -86,6 +149,105 @@ export function calculateMonFriExpiryDate(
   const mm = String(cur.getMonth() + 1).padStart(2, '0');
   const dd = String(cur.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Detailed package validity calculation result for customer reference.
+ */
+export interface PackageValidityCalculationResult {
+  validityDays: number;
+  startDate: string;
+  expiryDate: string;
+  totalCalendarDays: number;
+  weekdaysCount: number;
+  weekendDaysExcluded: number;
+  holidaysEncountered: MalaysiaBankHoliday[];
+  extendedHolidaysCount: number;
+  descriptionEn: string;
+  descriptionZh: string;
+}
+
+/**
+ * Provides comprehensive validity date calculation and public holiday breakdown
+ * for customer reference.
+ */
+export function getDetailedPackageValidity(
+  startDateStr: string,
+  planOrValidityDays: MealPlan | string | number,
+  customSuspendedDates: string[] = []
+): PackageValidityCalculationResult {
+  const baseStart = startDateStr || getTodayStr();
+  const validityDays = getPlanValidityDays(planOrValidityDays);
+  const holidaysMap = getMalaysiaKlangValleyWeekdayHolidaysMap();
+  const suspendedSet = new Set(customSuspendedDates);
+
+  const parts = baseStart.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+
+  const cur = new Date(year, month, day, 12, 0, 0);
+
+  let workdaysCounted = 0;
+  let weekendDaysExcluded = 0;
+  const holidaysEncountered: MalaysiaBankHoliday[] = [];
+  let totalCalendarDays = 0;
+  let safetyLimit = 0;
+  let expiryDate = baseStart;
+
+  while (safetyLimit < 500) {
+    safetyLimit++;
+    totalCalendarDays++;
+    const dayOfWeek = cur.getDay();
+    const yyyy = cur.getFullYear();
+    const mm = String(cur.getMonth() + 1).padStart(2, '0');
+    const dd = String(cur.getDate()).padStart(2, '0');
+    const curDateStr = `${yyyy}-${mm}-${dd}`;
+
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const hol = holidaysMap.get(curDateStr);
+    const isCustomSuspended = suspendedSet.has(curDateStr);
+
+    if (isWeekend) {
+      weekendDaysExcluded++;
+    } else if (hol) {
+      holidaysEncountered.push(hol);
+    } else if (isCustomSuspended) {
+      holidaysEncountered.push({
+        date: curDateStr,
+        nameEn: 'Kitchen Suspended Day',
+        nameZh: '厨房停送休息日',
+        dayOfWeek,
+        dayOfWeekName: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek],
+        isWeekday: true,
+      });
+    } else {
+      workdaysCounted++;
+      if (workdaysCounted >= validityDays) {
+        expiryDate = curDateStr;
+        break;
+      }
+    }
+
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const extCount = holidaysEncountered.length;
+  const descriptionEn = `${validityDays} Mon–Fri weekdays (${extCount > 0 ? `+${extCount} public holiday extension${extCount > 1 ? 's' : ''}` : 'Mon–Fri only'}) · Valid until ${expiryDate}`;
+  const descriptionZh = `${validityDays}个工作日有效期（${extCount > 0 ? `遇巴生谷公假顺延+${extCount}天` : '仅限周一至五'}）· 有效期至 ${expiryDate}`;
+
+  return {
+    validityDays,
+    startDate: baseStart,
+    expiryDate,
+    totalCalendarDays,
+    weekdaysCount: workdaysCounted,
+    weekendDaysExcluded,
+    holidaysEncountered,
+    extendedHolidaysCount: extCount,
+    descriptionEn,
+    descriptionZh,
+  };
 }
 
 /**
@@ -134,20 +296,28 @@ export function getEffectivePackageExpiry(
   }
 
   // Calculate dynamic expiry with holiday extension
-  const effectiveExpiryDate = calculateMonFriExpiryDate(
+  const standardExpiryDate = calculateMonFriExpiryDate(
     pkg.firstRedeemedDate,
     validityDays,
     suspendedDates
   );
 
+  // If admin has set a special case adjusted expiry date or manually set a future expiry date:
+  const effectiveExpiryDate =
+    pkg.specialCaseAdjustedExpiryDate ||
+    (pkg.expiryDate && pkg.expiryDate > standardExpiryDate ? pkg.expiryDate : standardExpiryDate);
+
   const todayStr = getTodayStr();
-  const isExpired = todayStr > effectiveExpiryDate;
+  const isExpired = !pkg.specialCaseExtension && todayStr > effectiveExpiryDate;
   const remainingWorkdays = countRemainingWorkdays(todayStr, effectiveExpiryDate, suspendedDates);
 
   let statusLabelEn = '';
   let statusLabelZh = '';
 
-  if (isExpired) {
+  if (pkg.specialCaseExtension) {
+    statusLabelEn = `Special Case Active (Extended until ${effectiveExpiryDate})`;
+    statusLabelZh = `特批顺延生效中（有效期至 ${effectiveExpiryDate}）`;
+  } else if (isExpired) {
     statusLabelEn = `Expired on ${effectiveExpiryDate}`;
     statusLabelZh = `已于 ${effectiveExpiryDate} 到期`;
   } else if (remainingWorkdays === 0) {
@@ -180,6 +350,7 @@ export function countRemainingWorkdays(
 ): number {
   if (!fromDateStr || !toDateStr || fromDateStr > toDateStr) return 0;
 
+  const holidaysMap = getMalaysiaKlangValleyWeekdayHolidaysMap();
   const suspendedSet = new Set(suspendedDates);
   const parts = fromDateStr.split('-');
   const cur = new Date(
@@ -205,9 +376,10 @@ export function countRemainingWorkdays(
 
     const dayOfWeek = cur.getDay();
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isHoliday = holidaysMap.has(curStr);
     const isSuspended = suspendedSet.has(curStr);
 
-    if (!isWeekend && !isSuspended) {
+    if (!isWeekend && !isHoliday && !isSuspended) {
       count++;
     }
 
