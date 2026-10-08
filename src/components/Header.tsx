@@ -82,52 +82,61 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       {/* Top Notification Announcement Bar */}
-      <div id="top-announcement-bar" className="bg-stone-900 text-stone-200 text-xs py-2 px-4 sm:px-6 lg:px-8 border-b border-stone-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium shrink-0">
+      <div id="top-announcement-bar" className="bg-stone-900 text-stone-200 text-xs py-1.5 px-3 sm:px-4 lg:px-6 border-b border-stone-800 w-full overflow-hidden box-border">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-1.5 md:gap-3 w-full min-w-0">
+          {/* Left: Fresh Prep Badge & Viewable Announcement Text (Viewable on all screens, never overflowing) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 w-full md:w-auto flex-1 overflow-hidden justify-center md:justify-start">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-semibold text-[11px] shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              {language === 'en' ? 'Daily Fresh Prep' : '每日新鲜现做'}
+              <span>{language === 'en' ? 'Daily Fresh Prep' : '每日新鲜现做'}</span>
             </span>
-            <span className="hidden sm:inline text-stone-500">|</span>
-            <span className="hidden sm:inline text-stone-300 truncate max-w-xs md:max-w-md lg:max-w-xl text-[11px]">
+            <span className="text-stone-600 shrink-0">|</span>
+            <span
+              className="text-stone-300 truncate min-w-0 text-[11px]"
+              title={language === 'en' ? siteSettings.announcementEn : siteSettings.announcementZh}
+            >
               {language === 'en' ? siteSettings.announcementEn : siteSettings.announcementZh}
             </span>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4 text-xs font-medium shrink-0">
+          {/* Right Actions: Instagram, WhatsApp, and Language Switch (Always viewable within page size) */}
+          <div className="flex items-center justify-center md:justify-end gap-2 sm:gap-3 text-xs font-medium shrink-0 flex-wrap sm:flex-nowrap">
             <a
               id="instagram-top-link"
-              href="https://www.instagram.com/chillhealthybox/"
+              href={siteSettings.instagramUrl || "https://www.instagram.com/chillhealthybox/"}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden md:flex items-center gap-1.5 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer whitespace-nowrap text-[11px]"
               title="Instagram @chillhealthybox"
             >
-              <Instagram className="w-3.5 h-3.5" />
+              <Instagram className="w-3.5 h-3.5 shrink-0" />
               <span>@chillhealthybox</span>
             </a>
+
+            <span className="text-stone-700 hidden sm:inline">·</span>
 
             <a
               id="whatsapp-top-link"
               href={`${waBaseUrl}?text=Hello%20CHILL%20Healthy%20team,%20I%20would%20like%20to%20inquire%20about%20meal%20orders!`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer whitespace-nowrap text-[11px]"
+              title={`WhatsApp: ${siteSettings.whatsappDisplay}`}
             >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">WhatsApp: </span><span>{siteSettings.whatsappDisplay}</span>
+              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden xs:inline text-stone-400 text-[10px]">WhatsApp:</span>
+              <span className="font-semibold">{siteSettings.whatsappDisplay || '+60126189919'}</span>
             </a>
 
             {/* Language switch button */}
             <button
               id="lang-toggle-btn"
               onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors cursor-pointer whitespace-nowrap font-medium"
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 transition-colors cursor-pointer whitespace-nowrap font-medium text-[11px] shrink-0 border border-stone-700/60 active:scale-95"
               title="Switch Language / 切换语言"
             >
-              <Globe className="w-3.5 h-3.5 text-stone-400" />
-              <span className="text-[11px]">{language === 'en' ? '切换华语' : 'Switch to EN'}</span>
+              <Globe className="w-3 h-3 text-stone-400 shrink-0" />
+              <span>{language === 'en' ? '切换华语' : 'Switch to EN'}</span>
             </button>
           </div>
         </div>

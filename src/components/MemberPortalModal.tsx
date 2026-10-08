@@ -51,7 +51,6 @@ import {
   buildReferralShareUrl,
   buildReferralWhatsAppMessage,
   MIN_REFERRAL_PLAN_PRICE,
-  getMemberRenewalPerk,
 } from '../utils/referral';
 import {
   isValidMalaysianHandphone,
@@ -1995,81 +1994,31 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         </div>
                       </div>
 
-                      {/* WhatsApp Plan Renewal Reminder Button */}
-                      {(() => {
-                        const renewalPerk = getMemberRenewalPerk(currentMember, members);
-                        const { freeMeals, bonusTextEn, bonusTextZh, badgeEn, badgeZh, isUnlocked, requirementEn, requirementZh } = renewalPerk;
-
-                        const whatsappMessage = encodeURIComponent(
-                          `Hi CHILL Healthy (chill-healthy.com)! 👋\n\n` +
-                          `I would like to renew my meal plan with the Renewal Special Bonus:\n` +
-                          `👤 Member: ${currentMember.name} (${currentMember.memberNumber || currentMember.phone})\n` +
-                          `📦 Current Plan: ${currentMember.activePackage.planName}\n` +
-                          `🍱 Balance Remaining: ${currentMember.activePackage.remainingMeals}/${currentMember.activePackage.totalMeals} meals\n` +
-                          `🎁 Renewal Incentive: ${bonusTextEn} (${bonusTextZh})\n` +
-                          (isUnlocked
-                            ? `🎉 Referral Status: Qualified Referral Verified (≥20 Meals Plan Referred) - Claiming +2 FREE Meals with Delivery!\n\n`
-                            : `💡 Standard Plan Renewal (+1 Free Meal with Delivery).\n\n`) +
-                          `Please help me confirm my plan renewal and claim my ${freeMeals} free meal(s) with delivery. Thank you!`
-                        );
-
-                        return (
-                          <div className="flex flex-col gap-1">
-                            <a
-                              id="btn-whatsapp-renewal-reminder"
-                              href={`https://wa.me/${whatsappLinkNumber}?text=${whatsappMessage}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`group relative flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-white shadow-md transition-all cursor-pointer border active:scale-95 ${
-                                isUnlocked
-                                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 hover:from-emerald-500 hover:to-amber-500 border-amber-300/50 shadow-amber-600/20'
-                                  : 'bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 border-emerald-400/40'
-                              }`}
-                              title={language === 'en' ? `Renew via WhatsApp & get ${bonusTextEn} (${requirementEn})` : `通过 WhatsApp 续订配套，即可获赠 ${bonusTextZh} (${requirementZh})`}
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <Gift className={`w-4 h-4 ${isUnlocked ? 'text-amber-300 animate-bounce' : 'text-emerald-200'}`} />
-                              </div>
-                              <div className="text-left min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100 flex items-center gap-1">
-                                    <MessageCircle className="w-3 h-3 text-emerald-300 fill-emerald-300/30" />
-                                    {language === 'en' ? 'Renew via WhatsApp' : 'WhatsApp 专属续订'}
-                                  </span>
-                                  <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs ${
-                                    isUnlocked ? 'bg-amber-400 text-stone-900 ring-1 ring-amber-300' : 'bg-emerald-400 text-stone-900'
-                                  }`}>
-                                    {language === 'en' ? badgeEn : badgeZh}
-                                  </span>
-                                </div>
-                                <p className="text-xs font-extrabold text-white leading-tight truncate">
-                                  {language === 'en' ? bonusTextEn : bonusTextZh}
-                                </p>
-                              </div>
-                            </a>
-                            <p className="text-[9.5px] text-stone-300/90 leading-tight px-1 flex items-center gap-1">
-                              <span>{language === 'en' ? requirementEn : requirementZh}</span>
-                            </p>
-                          </div>
-                        );
-                      })()}
-
                       {/* Redeem Daily Meal Button */}
                       <button
                         onClick={() => setPortalTab('redeem')}
-                        className="px-3.5 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 text-white text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-stone-600"
+                        className="px-3.5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-emerald-600"
                       >
-                        <Utensils className="w-3.5 h-3.5 text-emerald-400" />
+                        <Utensils className="w-3.5 h-3.5 text-emerald-200" />
                         <span>{language === 'en' ? 'Redeem Meal' : '每日选餐'}</span>
                       </button>
 
-                      {/* Refer Friends Quick Button */}
+                      {/* Refer Friends Quick Button (Only referral program gives free meals) */}
                       <button
                         onClick={() => setPortalTab('referral')}
                         className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600/30 to-amber-500/20 hover:from-amber-600/40 hover:to-amber-500/30 text-amber-300 text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-amber-400/40"
                       >
                         <Gift className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{language === 'en' ? 'Refer Friends (+1 Free Meal)' : '邀请好友 (送1餐)'}</span>
+                        <span>{language === 'en' ? 'Refer Friends (+1 Free Meal)' : '邀请好友 (获赠免费餐)'}</span>
+                      </button>
+
+                      {/* Packages & Renew Button */}
+                      <button
+                        onClick={() => setPortalTab('renew')}
+                        className="px-3.5 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs font-bold shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 border border-stone-600"
+                      >
+                        <PackageCheck className="w-3.5 h-3.5 text-stone-300" />
+                        <span>{language === 'en' ? 'Renew Package' : '续订配套'}</span>
                       </button>
                     </div>
                   ) : (

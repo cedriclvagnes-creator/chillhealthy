@@ -258,6 +258,14 @@ export default function App() {
   // Persistence Effects
   useEffect(() => {
     try {
+      localStorage.setItem('chillhealthy_language', language);
+    } catch {
+      // ignore
+    }
+  }, [language]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem('chillhealthy_settings', JSON.stringify(siteSettings));
     } catch {
       // ignore

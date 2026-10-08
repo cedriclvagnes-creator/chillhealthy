@@ -132,12 +132,9 @@ export function buildReferralWhatsAppMessage(
 }
 
 /**
- * Checks if a customer has successfully referred someone who signed up for
- * a package of at least 20 meals and above.
- * Rule:
- * - "+2 FREE / 2 Meals Free with Delivery" is ONLY available if customer successfully
- *   referred a customer that signed up for a package with at least 20 meals and above.
- * - Otherwise: each new plan / renewal gets 1 free meal only ("+1 FREE / 1 Meal Free with Delivery").
+ * Referral reward validation & tracking:
+ * Free meals are ONLY awarded via the Referral Program (when a friend signs up
+ * for a new package of RM398+). Renewal without a qualifying referral does not grant free meals.
  */
 export function hasQualifiedReferralForBonus(
   member: MemberAccount,
@@ -145,8 +142,6 @@ export function hasQualifiedReferralForBonus(
 ): boolean {
   if (!member) return false;
 
-  // If referral bonus credits earned indicates at least one qualifying referral
-  // or checking through allMembers database
   const myCode = (member.referralCode || getMemberReferralCode(member)).toUpperCase();
   const myPhone = (member.phone || member.memberNumber || '').replace(/\D/g, '');
 
@@ -160,7 +155,6 @@ export function hasQualifiedReferralForBonus(
       return matchCode || matchPhone;
     });
 
-    // Check if any of these referred members signed up for at least 20 meals
     const hasQualifying = referredAccounts.some((m) => {
       const totalMeals = m.activePackage?.totalMeals || 0;
       return totalMeals >= 20;
@@ -168,51 +162,10 @@ export function hasQualifiedReferralForBonus(
     if (hasQualifying) return true;
   }
 
-  // Fallback: if member has recorded referralBonusMealsEarned > 0 and plan was at least 20 meals
   if ((member.referralBonusMealsEarned || 0) >= 1 && (member.referralsCount || 0) >= 1) {
     return true;
   }
 
   return false;
-}
-
-export function getMemberRenewalPerk(
-  member: MemberAccount,
-  allMembers?: MemberAccount[]
-): {
-  freeMeals: number;
-  bonusTextEn: string;
-  bonusTextZh: string;
-  badgeEn: string;
-  badgeZh: string;
-  isUnlocked: boolean;
-  requirementEn: string;
-  requirementZh: string;
-} {
-  const isUnlocked = hasQualifiedReferralForBonus(member, allMembers);
-
-  if (isUnlocked) {
-    return {
-      freeMeals: 2,
-      bonusTextEn: '2 Meals Free with Delivery',
-      bonusTextZh: '送 2 餐 + 免运费',
-      badgeEn: '+2 FREE',
-      badgeZh: '送2餐',
-      isUnlocked: true,
-      requirementEn: 'Referral Bonus Unlocked (Referred friend signed up ≥20 meals plan)',
-      requirementZh: '已解锁推荐特权（成功邀请好友订购20餐及以上配套）',
-    };
-  }
-
-  return {
-    freeMeals: 1,
-    bonusTextEn: '1 Meal Free with Delivery',
-    bonusTextZh: '送 1 餐 + 免运费',
-    badgeEn: '+1 FREE',
-    badgeZh: '送1餐',
-    isUnlocked: false,
-    requirementEn: 'Each plan free 1 meal. Refer a friend who signs up for 20+ meals to unlock +2 FREE!',
-    requirementZh: '每套赠送1餐。成功推荐好友订购20餐及以上配套，立享+2餐免费送！',
-  };
 }
 
