@@ -81,6 +81,7 @@ import {
 } from '../utils/whatsapp';
 import { DuitNowPaymentCard } from './DuitNowPaymentCard';
 import { OfficialReceiptModal } from './OfficialReceiptModal';
+import { ThermalStickerPrintModal } from './ThermalStickerPrintModal';
 import { createDefaultOfficialReceipt, generateReceiptNumber } from '../utils/receipt';
 import {
   getPlanValidityDays,
@@ -195,6 +196,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [copiedReplyText, setCopiedReplyText] = useState<boolean>(false);
   const [editingOrder, setEditingOrder] = useState<MealRedemption | null>(null);
   const [customTurnOffDate, setCustomTurnOffDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Thermal Sticker Print Modal State (A6 / 6-inch sticker PDF sorted by customer name)
+  const [isThermalStickerModalOpen, setIsThermalStickerModalOpen] = useState(false);
+  const [thermalStickerDateFilter, setThermalStickerDateFilter] = useState<string>('all');
+  const [thermalStickerSelectedIds, setThermalStickerSelectedIds] = useState<string[]>([]);
 
   // Redemptions Sub-view: Active orders vs Deleted order refund records audit
   const [redemptionSubView, setRedemptionSubView] = useState<'active' | 'refunds'>('active');
@@ -3692,6 +3698,20 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           <FileSpreadsheet className="w-4 h-4 text-stone-950 shrink-0" />
                           <span>{language === 'en' ? 'Export 5PM Report (.xlsx)' : '导出每日5点报表 (.xlsx)'}</span>
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setThermalStickerDateFilter(dailyReportDate);
+                            setThermalStickerSelectedIds([]);
+                            setIsThermalStickerModalOpen(true);
+                          }}
+                          className="px-3.5 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+                          title="Print A6 thermal stickers for this 5PM cutoff date sorted by customer name"
+                        >
+                          <Printer className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>{language === 'en' ? 'Print 5PM Stickers (A6)' : '打印5点贴纸 (A6)'}</span>
+                        </button>
                       </div>
                     </div>
 
@@ -4078,6 +4098,25 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           <Download className="w-3.5 h-3.5" />
                           <span>CSV</span>
                         </button>
+
+                        {/* Thermal Sticker A6 PDF / 6-inch Print Report Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setThermalStickerDateFilter(kitchenDateFilter !== 'all' ? kitchenDateFilter : 'all');
+                            setThermalStickerSelectedIds(selectedRedemptionIds);
+                            setIsThermalStickerModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer border border-emerald-500/50 active:scale-95"
+                          title="Generate A6 / 6-inch thermal stickers sorted by customer name for kitchen bento labeling"
+                        >
+                          <Printer className="w-4 h-4 text-emerald-200" />
+                          <span>
+                            {language === 'en'
+                              ? 'Thermal Sticker A6 PDF (6" Roll)'
+                              : '🖨️ 热敏贴纸 A6 PDF (6寸卷纸)'}
+                          </span>
+                        </button>
                       </div>
                     </div>
 
@@ -4259,6 +4298,30 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             {language === 'en'
                               ? `Notify Customers (${selectedRedemptionIds.length})`
                               : `通知客户 (${selectedRedemptionIds.length})`}
+                          </span>
+                        </button>
+
+                        {/* Batch Thermal Sticker Printing */}
+                        <button
+                          type="button"
+                          disabled={selectedRedemptionIds.length === 0}
+                          onClick={() => {
+                            setThermalStickerDateFilter('all');
+                            setThermalStickerSelectedIds(selectedRedemptionIds);
+                            setIsThermalStickerModalOpen(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all ${
+                            selectedRedemptionIds.length > 0
+                              ? 'bg-stone-900 hover:bg-stone-800 text-emerald-300 border border-emerald-500/40 cursor-pointer active:scale-95'
+                              : 'bg-stone-200 text-stone-400 cursor-not-allowed border border-transparent'
+                          }`}
+                          title="Print A6 thermal stickers for selected orders sorted by customer name"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>
+                            {language === 'en'
+                              ? `Print Stickers (${selectedRedemptionIds.length})`
+                              : `打印贴纸 (${selectedRedemptionIds.length})`}
                           </span>
                         </button>
                       </div>
@@ -4460,6 +4523,23 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 >
                                   <Edit2 className="w-3.5 h-3.5 text-emerald-700" />
                                   <span>{language === 'en' ? 'Edit Order' : '修改订单/餐品'}</span>
+                                </button>
+
+                                {/* Single A6 Thermal Sticker Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setThermalStickerDateFilter('all');
+                                    setThermalStickerSelectedIds([red.id]);
+                                    setIsThermalStickerModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-2 rounded-xl bg-stone-100 hover:bg-emerald-50 hover:border-emerald-300 text-stone-700 hover:text-emerald-800 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer border border-stone-200"
+                                  title="Print single A6 thermal sticker for this bento box"
+                                >
+                                  <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                                  <span className="hidden sm:inline text-[11px]">
+                                    {language === 'en' ? 'Sticker' : '贴纸'}
+                                  </span>
                                 </button>
 
                                 {/* Status dropdown */}
@@ -7457,6 +7537,20 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
             onSaveReceipt={handleSaveReceiptFromModal}
           />
         )}
+
+        {/* MODAL: A6 / 6-INCH THERMAL STICKER KITCHEN REPORT & PRINTING */}
+        <ThermalStickerPrintModal
+          isOpen={isThermalStickerModalOpen}
+          onClose={() => {
+            setIsThermalStickerModalOpen(false);
+            setThermalStickerSelectedIds([]);
+          }}
+          redemptions={redemptions}
+          siteSettings={siteSettings}
+          language={language}
+          initialDateFilter={thermalStickerDateFilter}
+          initialSelectedIds={thermalStickerSelectedIds}
+        />
       </div>
   );
 };

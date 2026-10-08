@@ -25,7 +25,7 @@
   background: #a8a29e;
 }
 
-/* Print styling for Official Receipt */
+/* Print styling for Official Receipt & A6 / 6-Inch Thermal Stickers */
 @media print {
   body {
     background: #ffffff !important;
@@ -35,7 +35,9 @@
     visibility: hidden;
   }
   .printable-receipt-container,
-  .printable-receipt-container * {
+  .printable-receipt-container *,
+  .printable-thermal-sticker-container,
+  .printable-thermal-sticker-container * {
     visibility: visible;
   }
   .printable-receipt-container {
@@ -49,6 +51,30 @@
     background: #ffffff !important;
     box-shadow: none !important;
     border: none !important;
+  }
+  .printable-thermal-sticker-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .thermal-sticker-sheet {
+    page-break-after: always !important;
+    break-after: page !important;
+    width: 100mm !important;
+    max-width: 100mm !important;
+    min-height: 144mm !important;
+    max-height: 150mm !important;
+    margin: 0 auto 0 auto !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
   .no-print {
     display: none !important;
