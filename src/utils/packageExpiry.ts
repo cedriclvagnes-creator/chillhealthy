@@ -534,3 +534,71 @@ export function evaluateMemberPackageExpiration(
 
   return { updatedMember: member, didBurn: false, burnedMealsCount: 0 };
 }
+
+/**
+ * Resolves the base daily meal quota for a package (e.g. 1 meal/day for RM398, 2 meals/day for RM788, etc.).
+ *
+ * Rules:
+ * - 20-Day Lifestyle Transformation (RM398): 1 meal / day
+ * - 10-Day Kickstart (RM218): 1 meal / day
+ * - 5-Day Workday (RM128): 1 meal / day
+ * - 2-Person Duo Meal Plan (RM788): 2 meals / day
+ * - 3-Person Team (RM1182): 3 meals / day
+ * - 4-Person Family/Office (RM1576): 4 meals / day
+ * - 6-Person Corporate (RM2364): 6 meals / day
+ */
+export function getPackageDailyQuota(
+  planOrId?: MealPlan | string,
+  planName?: string,
+  packages?: MealPlan[]
+): number {
+  if (planOrId && typeof planOrId === 'object') {
+    if (planOrId.mealsPerDay && planOrId.mealsPerDay > 0) return planOrId.mealsPerDay;
+    if (planOrId.persons && planOrId.persons > 0) return planOrId.persons;
+    if (planOrId.totalPrice === 788) return 2;
+    if (planOrId.totalPrice === 1182) return 3;
+    if (planOrId.totalPrice === 1576) return 4;
+    if (planOrId.totalPrice === 2364) return 6;
+    if (planOrId.totalPrice === 398 || planOrId.totalPrice === 218 || planOrId.totalPrice === 128) return 1;
+  }
+
+  const idStr = typeof planOrId === 'string' ? planOrId : '';
+  if (idStr && packages && packages.length > 0) {
+    const found = packages.find((p) => p.id === idStr);
+    if (found) {
+      if (found.mealsPerDay && found.mealsPerDay > 0) return found.mealsPerDay;
+      if (found.persons && found.persons > 0) return found.persons;
+      if (found.totalPrice === 788) return 2;
+      if (found.totalPrice === 1182) return 3;
+      if (found.totalPrice === 1576) return 4;
+      if (found.totalPrice === 2364) return 6;
+      if (found.totalPrice === 398 || found.totalPrice === 218 || found.totalPrice === 128) return 1;
+    }
+  }
+
+  const combined = (idStr + ' ' + (planName || '')).toLowerCase();
+  if (combined.includes('6-person') || combined.includes('6人') || combined.includes('六人') || combined.includes('2364')) return 6;
+  if (combined.includes('4-person') || combined.includes('4人') || combined.includes('四人') || combined.includes('1576')) return 4;
+  if (combined.includes('3-person') || combined.includes('3人') || combined.includes('三人') || combined.includes('1182')) return 3;
+  if (combined.includes('2-person') || combined.includes('2人') || combined.includes('双人') || combined.includes('788') || combined.includes('duo')) return 2;
+  if (combined.includes('398') || combined.includes('20-day') || combined.includes('10-day') || combined.includes('5-day') || combined.includes('单人')) return 1;
+
+  return 1;
+}
+
+/**
+ * Returns the maximum number of meals a member is allowed to redeem on any single delivery date.
+ * Rule:
+ * All plan package members are allowed to redeem up to double the package meal quota per day.
+ * - RM398 (1 meal/day quota) -> Max 2 meals per day (e.g. 1 Lunch + 1 Dinner, or 2 Lunch, or 2 Dinner)
+ * - RM788 (2 meals/day quota) -> Max 4 meals per day (e.g. 2 Lunch + 2 Dinner, 4 Lunch, 1 Lunch + 3 Dinner, etc.)
+ */
+export function getMaxRedeemableMealsPerDay(
+  planOrId?: MealPlan | string,
+  planName?: string,
+  packages?: MealPlan[]
+): number {
+  const base = getPackageDailyQuota(planOrId, planName, packages);
+  return base * 2;
+}
+

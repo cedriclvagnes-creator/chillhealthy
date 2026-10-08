@@ -46,6 +46,8 @@ import {
   activatePackageOnFirstOrder,
   evaluateMemberPackageExpiration,
   getTodayStr,
+  getPackageDailyQuota,
+  getMaxRedeemableMealsPerDay,
 } from './utils/packageExpiry';
 import { synchronizeMalaysiaWeekdayBankHolidays } from './utils/malaysiaHolidays';
 import { normalizeMalaysianPhone } from './utils/malaysiaPhone';
@@ -570,6 +572,25 @@ export default function App() {
       return false;
     }
 
+    // Restriction: Member is only allowed to redeem up to double the package meal quota per day
+    const maxDailyAllowed = getMaxRedeemableMealsPerDay(
+      currentMember.activePackage.planId,
+      currentMember.activePackage.planName,
+      packages
+    );
+    const existingDateMeals = redemptions
+      .filter(
+        (r) =>
+          r.memberId === currentMember.id &&
+          r.deliveryDate === redemptionData.deliveryDate &&
+          r.status !== 'Cancelled'
+      )
+      .reduce((sum, r) => sum + (r.quantity || 1), 0);
+
+    if (existingDateMeals + qty > maxDailyAllowed) {
+      return false;
+    }
+
     const suspendedDates = siteSettings.disabledDeliveryDates || [];
 
     // Check if package is expired / burned
@@ -632,6 +653,26 @@ export default function App() {
     if (!currentMember || !currentMember.activePackage) return false;
     const totalDeduct = redemptionsList.reduce((sum, r) => sum + (r.quantity || 1), 0);
     if (currentMember.activePackage.remainingMeals < totalDeduct) return false;
+
+    // Enforce max daily quota for each date in batch
+    const maxDailyAllowed = getMaxRedeemableMealsPerDay(
+      currentMember.activePackage.planId,
+      currentMember.activePackage.planName,
+      packages
+    );
+    for (const item of redemptionsList) {
+      const existingDateMeals = redemptions
+        .filter(
+          (r) =>
+            r.memberId === currentMember.id &&
+            r.deliveryDate === item.deliveryDate &&
+            r.status !== 'Cancelled'
+        )
+        .reduce((sum, r) => sum + (r.quantity || 1), 0);
+      if (existingDateMeals + (item.quantity || 1) > maxDailyAllowed) {
+        return false;
+      }
+    }
 
     const suspendedDates = siteSettings.disabledDeliveryDates || [];
 

@@ -68,6 +68,8 @@ import {
   getPlanValidityDays,
   getDetailedPackageValidity,
   getTodayStr,
+  getPackageDailyQuota,
+  getMaxRedeemableMealsPerDay,
 } from '../utils/packageExpiry';
 
 interface MemberPortalModalProps {
@@ -301,6 +303,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     existingMealName: string;
     existingMealNameZh?: string;
     existingQty: number;
+    newSlot?: string;
+    newQty?: number;
+    maxDailyQuota?: number;
     onProceed: () => void;
   } | null>(null);
 
@@ -342,6 +347,68 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     // Filter to only workdays strictly on or before effective expiry date
     return upcomingWorkdays.filter((wDate) => wDate <= effectiveExpiryDate);
   }, [upcomingWorkdays, activePkg, isSpecialCase, effectiveExpiryDate, isPendingFirstMeal, isExpired]);
+
+  // =========================================================================
+  // DAILY QUOTA ENFORCEMENT RULES (DOUBLE OF PACKAGE MEAL QUOTA)
+  // - RM398 (1 meal/day): customer can order max 2 meals per day (1 lunch + 1 dinner, or 2 lunch, or 2 dinner)
+  // - RM788 (2 meals/day): customer can order max 4 meals per day (e.g. 2 lunch + 2 dinner, 4 lunch, etc.)
+  // =========================================================================
+  const baseDailyQuota = useMemo(() => {
+    if (!activePkg) return 1;
+    return getPackageDailyQuota(activePkg.planId, activePkg.planName, packages);
+  }, [activePkg, packages]);
+
+  const maxDailyQuota = useMemo(() => {
+    if (!activePkg) return 2;
+    return getMaxRedeemableMealsPerDay(activePkg.planId, activePkg.planName, packages);
+  }, [activePkg, packages]);
+
+  // Existing bookings on selected date for this member
+  const existingBookingsOnSelectedDate = useMemo(() => {
+    if (!currentMember || !selectedDate) return [];
+    return allRedemptions.filter(
+      (r) => r.memberId === currentMember.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled'
+    );
+  }, [currentMember, selectedDate, allRedemptions]);
+
+  const alreadyBookedQtyOnSelectedDate = useMemo(() => {
+    return existingBookingsOnSelectedDate.reduce((sum, r) => sum + (r.quantity || 1), 0);
+  }, [existingBookingsOnSelectedDate]);
+
+  const bookedLunchQty = useMemo(() => {
+    return existingBookingsOnSelectedDate
+      .filter(
+        (r) =>
+          !r.deliverySlot ||
+          r.deliverySlot.toLowerCase().includes('lunch') ||
+          r.deliverySlot.includes('10:00')
+      )
+      .reduce((sum, r) => sum + (r.quantity || 1), 0);
+  }, [existingBookingsOnSelectedDate]);
+
+  const bookedDinnerQty = useMemo(() => {
+    return existingBookingsOnSelectedDate
+      .filter(
+        (r) =>
+          r.deliverySlot?.toLowerCase().includes('dinner') ||
+          r.deliverySlot?.includes('3:00') ||
+          r.deliverySlot?.includes('15:00')
+      )
+      .reduce((sum, r) => sum + (r.quantity || 1), 0);
+  }, [existingBookingsOnSelectedDate]);
+
+  const remainingAllowedQtyOnSelectedDate = useMemo(() => {
+    return Math.max(0, maxDailyQuota - alreadyBookedQtyOnSelectedDate);
+  }, [maxDailyQuota, alreadyBookedQtyOnSelectedDate]);
+
+  const isDailyQuotaReached = alreadyBookedQtyOnSelectedDate >= maxDailyQuota;
+
+  // Auto-clamp mealQuantity if it exceeds remaining allowed quota for the day
+  useEffect(() => {
+    if (remainingAllowedQtyOnSelectedDate > 0 && mealQuantity > remainingAllowedQtyOnSelectedDate) {
+      setMealQuantity(remainingAllowedQtyOnSelectedDate);
+    }
+  }, [selectedDate, remainingAllowedQtyOnSelectedDate, mealQuantity]);
 
   // Initialize batch planner with defaults
   useEffect(() => {
@@ -711,6 +778,22 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
+    // Restriction: Member is only allowed to redeem up to double the package meal quota per day
+    // E.g. RM398 (1 meal/day) -> max 2 meals per day (1 lunch + 1 dinner, or 2 lunch, or 2 dinner)
+    // E.g. RM788 (2 meals/day) -> max 4 meals per day
+    const alreadyBookedCountOnDate = allRedemptions
+      .filter((r) => r.memberId === currentMember.id && r.deliveryDate === selectedDate && r.status !== 'Cancelled')
+      .reduce((sum, r) => sum + (r.quantity || 1), 0);
+
+    if (alreadyBookedCountOnDate + mealQuantity > maxDailyQuota) {
+      alert(
+        language === 'en'
+          ? `⚠️ Daily Quota Exceeded: Your plan allows a maximum of ${maxDailyQuota} meals per day (double of normal daily quota). You already have ${alreadyBookedCountOnDate} meal(s) booked for ${selectedDate}. You can order at most ${Math.max(0, maxDailyQuota - alreadyBookedCountOnDate)} more meal(s) on this date.`
+          : `⚠️ 超出每日最高限额：您的套餐每日最高限订 ${maxDailyQuota} 份餐品（双倍配额灵活安排午晚餐）。您在 ${selectedDate} 已安排了 ${alreadyBookedCountOnDate} 份，当日最多仅可再加订 ${Math.max(0, maxDailyQuota - alreadyBookedCountOnDate)} 份。`
+      );
+      return;
+    }
+
     const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
 
     const doSubmitRedemption = () => {
@@ -797,7 +880,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         date: selectedDate,
         existingMealName: existingBooking.mealName,
         existingMealNameZh: existingBooking.mealNameZh,
-        existingQty: existingBooking.quantity || 1,
+        existingQty: alreadyBookedCountOnDate,
+        newSlot: selectedSlot,
+        newQty: mealQuantity,
+        maxDailyQuota: maxDailyQuota,
         onProceed: () => {
           setDoubleBookingWarning(null);
           doSubmitRedemption();
@@ -829,6 +915,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
         language === 'en'
           ? `You need ${daysCount} meal credits for this week, but currently have ${currentMember.activePackage.remainingMeals}.`
           : `本次整周排餐需要 ${daysCount} 餐，但您目前剩余 ${currentMember.activePackage.remainingMeals} 餐。`
+      );
+      return;
+    }
+
+    // Check if any date already has max daily quota booked
+    const overbookedDay = targetDays.find((dStr) => {
+      const alreadyBooked = allRedemptions
+        .filter((r) => r.memberId === currentMember.id && r.deliveryDate === dStr && r.status !== 'Cancelled')
+        .reduce((sum, r) => sum + (r.quantity || 1), 0);
+      return alreadyBooked + 1 > maxDailyQuota;
+    });
+
+    if (overbookedDay) {
+      alert(
+        language === 'en'
+          ? `⚠️ Daily Quota Limit: ${overbookedDay} already has the maximum of ${maxDailyQuota} meals booked. Please adjust or choose specific dates in Single Meal tab.`
+          : `⚠️ 每日配额限制：${overbookedDay} 已达到每日最高限额 ${maxDailyQuota} 份。请在单日兑换中灵活调整。`
       );
       return;
     }
@@ -2535,6 +2638,66 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           </div>
                         )}
 
+                        {/* Daily Quota & Flexible Lunch/Dinner Info Card */}
+                        <div
+                          className={`p-3.5 rounded-2xl border transition-all ${
+                            isDailyQuotaReached
+                              ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                              : alreadyBookedQtyOnSelectedDate > 0
+                              ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                              : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`p-1.5 rounded-xl ${
+                                  isDailyQuotaReached ? 'bg-rose-200 text-rose-800' : 'bg-emerald-200/80 text-emerald-800'
+                                }`}
+                              >
+                                {isDailyQuotaReached ? <Lock className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                <h4 className="font-heading font-extrabold text-xs">
+                                  {language === 'en' ? 'Daily Meal Redemption Quota' : '每日餐券兑换配额与限额'}
+                                </h4>
+                                <p className="text-[10px] text-stone-500">
+                                  {language === 'en'
+                                    ? `Plan Quota: ${baseDailyQuota} meal/day · Max Limit: ${maxDailyQuota} meals/day (Double Quota)`
+                                    : `常规套餐配额: ${baseDailyQuota} 餐/日 · 每日上限: ${maxDailyQuota} 餐/日（双倍限额）`}
+                                </p>
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[11px] font-black px-2.5 py-1 rounded-full border ${
+                                isDailyQuotaReached
+                                  ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                                  : alreadyBookedQtyOnSelectedDate > 0
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              }`}
+                            >
+                              {alreadyBookedQtyOnSelectedDate} / {maxDailyQuota} {language === 'en' ? 'Booked' : '已订'}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] leading-relaxed">
+                            {isDailyQuotaReached ? (
+                              language === 'en'
+                                ? `🔒 Daily limit reached! You have booked all ${maxDailyQuota} allowable meals for ${selectedDate} (${bookedLunchQty > 0 ? `${bookedLunchQty} Lunch` : ''}${bookedLunchQty > 0 && bookedDinnerQty > 0 ? ' + ' : ''}${bookedDinnerQty > 0 ? `${bookedDinnerQty} Dinner` : ''}). Additional orders for this date are locked to protect your package balance.`
+                                : `🔒 当日配额已满！您在 ${selectedDate} 已安排了满额 ${maxDailyQuota} 份餐品（${bookedLunchQty > 0 ? `${bookedLunchQty}份午餐` : ''}${bookedLunchQty > 0 && bookedDinnerQty > 0 ? ' + ' : ''}${bookedDinnerQty > 0 ? `${bookedDinnerQty}份晚餐` : ''}）。为避免超额扣减，当日订餐已锁定。`
+                            ) : alreadyBookedQtyOnSelectedDate > 0 ? (
+                              language === 'en'
+                                ? `✨ You currently have ${alreadyBookedQtyOnSelectedDate} meal(s) booked for ${selectedDate} (${bookedLunchQty > 0 ? `${bookedLunchQty} Lunch` : ''}${bookedLunchQty > 0 && bookedDinnerQty > 0 ? ' + ' : ''}${bookedDinnerQty > 0 ? `${bookedDinnerQty} Dinner` : ''}). You can still redeem up to ${remainingAllowedQtyOnSelectedDate} more meal(s) today (flexible combinations allowed: 1 Lunch + 1 Dinner, 2 Lunch, or 2 Dinner).`
+                                : `✨ 您在 ${selectedDate} 已预订 ${alreadyBookedQtyOnSelectedDate} 份（${bookedLunchQty > 0 ? `${bookedLunchQty}份午餐` : ''}${bookedLunchQty > 0 && bookedDinnerQty > 0 ? ' + ' : ''}${bookedDinnerQty > 0 ? `${bookedDinnerQty}份晚餐` : ''}）。今日仍可加订最多 ${remainingAllowedQtyOnSelectedDate} 份（支持灵活组合：1份午餐+1份晚餐，或2午餐/2晚餐）。`
+                            ) : (
+                              language === 'en'
+                                ? `💡 Flexible Scheduling: You can redeem up to ${maxDailyQuota} meals on ${selectedDate} (double your package quota). Feel free to arrange 1 Lunch + 1 Dinner or multiple meals in the same delivery slot.`
+                                : `💡 灵活排餐规则：${selectedDate} 当日最高可兑换 ${maxDailyQuota} 份餐品（套餐双倍限额）。您可自由组合：1份午餐+1份晚餐，或同一时段选择 ${maxDailyQuota} 份。`
+                            )}
+                          </p>
+                        </div>
+
                         <div>
                           <label className="text-xs font-bold text-stone-700 block mb-1 flex items-center gap-1.5">
                             <Clock className="w-3.5 h-3.5 text-emerald-700" />
@@ -2573,28 +2736,44 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               {language === 'en' ? 'Portion Quantity:' : '当日送餐份数:'}
                             </span>
                             <span className="text-[10px] text-stone-500">
-                              {language === 'en' ? 'Deducted from package balance' : '从套餐剩余餐券中扣除'}
+                              {isDailyQuotaReached
+                                ? language === 'en'
+                                  ? `🔒 Daily limit reached (${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota} meals). Selection locked.`
+                                  : `🔒 已达当日上限（${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota}份）。份数已锁定。`
+                                : language === 'en'
+                                ? `Can add up to ${remainingAllowedQtyOnSelectedDate} more meal(s) today (Max ${maxDailyQuota}/day)`
+                                : `今日还可订 ${remainingAllowedQtyOnSelectedDate} 份（每日最高限额 ${maxDailyQuota} 份）`}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
+                              disabled={isDailyQuotaReached || mealQuantity <= 1}
                               onClick={() => setMealQuantity((q) => Math.max(1, q - 1))}
-                              className="w-8 h-8 rounded-xl bg-white border border-stone-200 text-stone-800 font-bold hover:bg-stone-100 flex items-center justify-center cursor-pointer shadow-2xs"
+                              className="w-8 h-8 rounded-xl bg-white border border-stone-200 text-stone-800 font-bold hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer shadow-2xs"
                             >
                               -
                             </button>
                             <span className="w-8 text-center text-xs font-black text-stone-900">
-                              {mealQuantity}
+                              {isDailyQuotaReached ? 0 : mealQuantity}
                             </span>
                             <button
                               type="button"
+                              disabled={
+                                isDailyQuotaReached ||
+                                mealQuantity >= remainingAllowedQtyOnSelectedDate ||
+                                mealQuantity >= (currentMember.activePackage?.remainingMeals || 0)
+                              }
                               onClick={() =>
                                 setMealQuantity((q) =>
-                                  Math.min(currentMember.activePackage?.remainingMeals || 6, q + 1)
+                                  Math.min(
+                                    remainingAllowedQtyOnSelectedDate,
+                                    currentMember.activePackage?.remainingMeals || 6,
+                                    q + 1
+                                  )
                                 )
                               }
-                              className="w-8 h-8 rounded-xl bg-white border border-stone-200 text-stone-800 font-bold hover:bg-stone-100 flex items-center justify-center cursor-pointer shadow-2xs"
+                              className="w-8 h-8 rounded-xl bg-white border border-stone-200 text-stone-800 font-bold hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer shadow-2xs"
                             >
                               +
                             </button>
@@ -2739,6 +2918,19 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             </button>
                           </div>
                         </div>
+                      ) : isDailyQuotaReached ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full py-3.5 rounded-xl bg-stone-200 text-stone-500 border border-stone-300 font-bold text-xs sm:text-sm cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          <Lock className="w-4 h-4 text-stone-400" />
+                          <span>
+                            {language === 'en'
+                              ? `🔒 Daily Limit Reached (${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota} Meals) for ${selectedDate}`
+                              : `🔒 当日配额已满已锁定（${selectedDate} 已安排 ${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota} 份）`}
+                          </span>
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -2753,8 +2945,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               );
                               if (existingBooking) {
                                 return language === 'en'
-                                  ? `Add Additional Bento for ${selectedDate} (${mealQuantity} box)`
-                                  : `加订额外餐品 (送达: ${selectedDate} · ${mealQuantity}份)`;
+                                  ? `Add Additional Bento for ${selectedDate} (${mealQuantity} box · Total ${alreadyBookedQtyOnSelectedDate + mealQuantity}/${maxDailyQuota})`
+                                  : `加订额外餐品 (送达: ${selectedDate} · ${mealQuantity}份 · 当日累计 ${alreadyBookedQtyOnSelectedDate + mealQuantity}/${maxDailyQuota}份)`;
                               }
                               return language === 'en'
                                 ? `Confirm & Book ${mealQuantity} Bento for ${selectedDate}`
@@ -2892,20 +3084,40 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 <div className="lg:hidden fixed bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur-md border-t border-stone-200 shadow-2xl z-40 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <span className="text-[10px] text-stone-400 uppercase font-bold block">
-                      {selectedDate} · {mealQuantity} Meal
+                      {selectedDate} · {isDailyQuotaReached ? 0 : mealQuantity} Meal
                     </span>
                     <p className="font-heading font-extrabold text-xs text-stone-900 truncate">
-                      {selectedMealObj ? (language === 'en' ? selectedMealObj.name : selectedMealObj.nameZh) : 'Select Dish'}
+                      {isDailyQuotaReached
+                        ? language === 'en'
+                          ? `Daily Limit Reached (${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota})`
+                          : `已达当日上限 (${alreadyBookedQtyOnSelectedDate}/${maxDailyQuota}份)`
+                        : selectedMealObj
+                        ? language === 'en'
+                          ? selectedMealObj.name
+                          : selectedMealObj.nameZh
+                        : 'Select Dish'}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleRedemptionSubmit}
-                    disabled={!currentMember.activePackage || currentMember.activePackage.remainingMeals <= 0}
+                    disabled={
+                      !currentMember.activePackage ||
+                      currentMember.activePackage.remainingMeals <= 0 ||
+                      isDailyQuotaReached
+                    }
                     className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white font-bold text-xs shadow-md shrink-0 flex items-center gap-1.5"
                   >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>{language === 'en' ? 'Confirm Redeem' : '立即确认兑换'}</span>
+                    {isDailyQuotaReached ? <Lock className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    <span>
+                      {isDailyQuotaReached
+                        ? language === 'en'
+                          ? 'Locked'
+                          : '已锁定'
+                        : language === 'en'
+                        ? 'Confirm Redeem'
+                        : '立即确认兑换'}
+                    </span>
                   </button>
                 </div>
               </>
@@ -4062,10 +4274,12 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 </div>
                 <div>
                   <h3 className="font-heading font-black text-base text-white">
-                    {language === 'en' ? 'Double Booking Notice' : '重复订餐风险提示'}
+                    {language === 'en' ? 'Flexible Daily Booking Notice' : '灵活加订 / 重复订餐确认'}
                   </h3>
                   <p className="text-xs text-amber-100">
-                    {language === 'en' ? 'You already have a scheduled lunch for this date' : '您在该送餐日期已有一笔预定记录'}
+                    {language === 'en'
+                      ? `Max ${doubleBookingWarning.maxDailyQuota || 2} meals allowed per day (Double Quota)`
+                      : `每日最高限额 ${doubleBookingWarning.maxDailyQuota || 2} 份餐品（双倍限额）`}
                   </p>
                 </div>
               </div>
@@ -4082,20 +4296,30 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               <p className="leading-relaxed">
                 {language === 'en' ? (
                   <>
-                    You already have <strong>{doubleBookingWarning.existingQty}x {doubleBookingWarning.existingMealName}</strong> scheduled for delivery on <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong>.
+                    You already have <strong>{doubleBookingWarning.existingQty}x meal(s)</strong> scheduled for delivery on <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong> ({doubleBookingWarning.existingMealName}).
                   </>
                 ) : (
                   <>
-                    您在 <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong> 已经成功预定了 <strong>{doubleBookingWarning.existingMealNameZh || doubleBookingWarning.existingMealName}</strong>（{doubleBookingWarning.existingQty}份）。
+                    您在 <strong>{formatDisplayDate(doubleBookingWarning.date)}</strong> 已经安排了 <strong>{doubleBookingWarning.existingQty} 份餐品</strong>（{doubleBookingWarning.existingMealNameZh || doubleBookingWarning.existingMealName}）。
                   </>
                 )}
               </p>
 
-              <p className="text-stone-500 bg-amber-50 p-3 rounded-xl border border-amber-200">
-                {language === 'en'
-                  ? 'To avoid accidental double booking, please confirm if you intentionally want to add an additional meal box to this delivery date.'
-                  : '为避免重复扣除您的套餐餐券，请确认您是否确实需要为该日期加订多一份午餐？'}
-              </p>
+              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-950 space-y-1.5 leading-relaxed">
+                <span className="font-bold text-xs block text-amber-900">
+                  🍱 {language === 'en' ? 'Flexible Daily Meal Quota:' : '灵活排餐双倍限额规则：'}
+                </span>
+                <p>
+                  {language === 'en'
+                    ? `Your plan allows up to ${doubleBookingWarning.maxDailyQuota || 2} meals per day. Adding ${doubleBookingWarning.newQty || 1} meal (${doubleBookingWarning.newSlot || 'selected slot'}) will bring your total to ${(doubleBookingWarning.existingQty || 1) + (doubleBookingWarning.newQty || 1)} / ${doubleBookingWarning.maxDailyQuota || 2} meals for this date.`
+                    : `您的配套每日最高允许兑换 ${doubleBookingWarning.maxDailyQuota || 2} 份餐品。加订 ${doubleBookingWarning.newQty || 1} 份（${doubleBookingWarning.newSlot || '所选时段'}）后，当日累计为 ${(doubleBookingWarning.existingQty || 1) + (doubleBookingWarning.newQty || 1)} / ${doubleBookingWarning.maxDailyQuota || 2} 份。`}
+                </p>
+                <p className="text-[11px] text-amber-800">
+                  {language === 'en'
+                    ? 'Flexible combinations allowed: you can arrange 1 Lunch + 1 Dinner or multiple meals in the same delivery window.'
+                    : '支持灵活排餐组合：可安排 1份午餐 + 1份晚餐，亦可同一时段配送多份。'}
+                </p>
+              </div>
             </div>
 
             <div className="p-4 bg-stone-50 border-t border-stone-100 shrink-0 flex items-center justify-end gap-2">
@@ -4112,7 +4336,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 onClick={doubleBookingWarning.onProceed}
                 className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition-colors shadow-xs cursor-pointer"
               >
-                {language === 'en' ? 'Yes, Book Additional Meal' : '是的，确认加订餐品'}
+                {language === 'en'
+                  ? `Yes, Add Meal (${doubleBookingWarning.newQty || 1} Box)`
+                  : `确认加订 (${doubleBookingWarning.newQty || 1} 份)`}
               </button>
             </div>
           </div>
