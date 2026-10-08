@@ -161,6 +161,8 @@ export interface SiteSettings {
   paymentBankName?: string;
   paymentAccountNo?: string;
   paymentDuitNowId?: string;
+  paymentQrMargin?: number; // QR padding margin in px (0 to 30px) to shrink/expand
+  paymentQrScale?: number;  // QR scale percentage (70 to 110%) to fit scanners
   paymentInstructionsEn?: string;
   paymentInstructionsZh?: string;
   // Highest-viewed Instagram Video hosted at top of homepage
@@ -205,6 +207,7 @@ export interface MemberAccount {
   area2?: string;
   postalCode2?: string;
   activeAddressSlot?: 1 | 2;
+  addressesLocked?: boolean; // Locked once both address 1 and address 2 are filled up
   dietaryPreferences?: string;
   referralCode?: string; // Unique referral code, e.g. CHILL-AGNES9919
   referredBy?: string; // Code of the member who referred this account
@@ -222,6 +225,10 @@ export interface MemberAccount {
     validityDays?: number; // Total weekdays validity (e.g. 14, 20, 30 Mon-Fri weekdays)
     firstRedeemedDate?: string; // The first date a meal was redeemed/ordered (activates the countdown clock)
     isActivated?: boolean; // false until the member places their first meal order
+    adminConfirmed?: boolean; // Admin confirmation required at back end before member can redeem meals
+    adminConfirmedAt?: string;
+    signupOrderNo?: string; // Order No e.g. CH-261007-6834
+    deliverySlot?: string;
     autoRevivedMeals?: number; // Number of meals auto-revived from previous expired plan
     isBurned?: boolean; // true if expired without full redemption
     specialCaseExtension?: boolean; // Admin special case: allows booking beyond normal validity or special date override
@@ -314,6 +321,8 @@ export interface MealRedemption {
   recipeStandard?: 'Standard Chef Recipe' | 'Customized Ala Carte';
   autoReplySent?: boolean;
   autoReplySentAt?: string;
+  adminConfirmed?: boolean;
+  adminConfirmedAt?: string;
 }
 
 export interface MealDeletionRefundRecord {

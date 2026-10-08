@@ -717,6 +717,8 @@ export default function App() {
       area2?: string;
       postalCode2?: string;
       referralCode?: string;
+      orderNumber?: string;
+      deliverySlot?: string;
     }
   ) => {
     const pkg =
@@ -818,6 +820,9 @@ export default function App() {
           validityDays: planValidity,
           isActivated: false, // Expiry count starts taking effect on first day of meal ordering
           firstRedeemedDate: undefined,
+          adminConfirmed: false, // Requires confirmation in Customer Package Orders & Info by admin
+          signupOrderNo: customer.orderNumber,
+          deliverySlot: customer.deliverySlot,
           autoRevivedMeals: autoRevivedCount > 0 ? autoRevivedCount : undefined,
           isBurned: false,
           price: planPrice,
@@ -863,6 +868,9 @@ export default function App() {
           validityDays: planValidity,
           isActivated: false, // Starts on first day of meal ordering
           firstRedeemedDate: undefined,
+          adminConfirmed: false, // Requires confirmation in Customer Package Orders & Info by admin
+          signupOrderNo: customer.orderNumber,
+          deliverySlot: customer.deliverySlot,
           isBurned: false,
           price: planPrice,
         },
@@ -1552,6 +1560,7 @@ export default function App() {
           menuItems={menuItems}
           packages={packages}
           allRedemptions={redemptions}
+          members={members}
           siteSettings={siteSettings}
           onOpenMenu={() => {
             setIsMemberPortalOpen(false);

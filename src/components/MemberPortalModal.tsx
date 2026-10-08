@@ -51,6 +51,7 @@ import {
   buildReferralShareUrl,
   buildReferralWhatsAppMessage,
   MIN_REFERRAL_PLAN_PRICE,
+  getMemberRenewalPerk,
 } from '../utils/referral';
 import {
   isValidMalaysianHandphone,
@@ -89,6 +90,7 @@ interface MemberPortalModalProps {
   menuItems: MealItem[];
   packages: MealPlan[];
   allRedemptions: MealRedemption[];
+  members?: MemberAccount[];
   siteSettings: SiteSettings;
   onSelectPackageToBuy: (pkg: MealPlan) => void;
   onOpenMenu?: () => void;
@@ -139,6 +141,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   menuItems,
   packages,
   allRedemptions,
+  members = [],
   siteSettings,
   onSelectPackageToBuy,
   onOpenMenu,
@@ -559,9 +562,18 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }, 2500);
   };
 
-  // Save updated Address 2
+  // Save updated Address 2 (one-time post-registration fill, then locked permanently)
   const handleSaveAddress2 = () => {
     if (!currentMember) return;
+    if (!editAddr2.trim() || editAddr2.trim().length < 4) {
+      alert(language === 'en' ? 'Please enter a valid street/building address (minimum 4 characters).' : '请输入有效的街道/楼宇送餐地址（至少4个字符）。');
+      return;
+    }
+    if (!editPostal2 || editPostal2.trim().length !== 5) {
+      alert(language === 'en' ? 'Please enter a valid 5-digit Malaysian postal code.' : '请输入有效的5位马来西亚邮区编号。');
+      return;
+    }
+
     if (onUpdateMemberAddresses) {
       onUpdateMemberAddresses(
         {
@@ -570,18 +582,23 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           postalCode: currentMember.postalCode,
         },
         {
-          address2: editAddr2,
+          address2: editAddr2.trim(),
           area2: editArea2,
-          postalCode2: editPostal2,
+          postalCode2: editPostal2.trim(),
         }
       );
     } else {
-      currentMember.address2 = editAddr2;
+      currentMember.address2 = editAddr2.trim();
       currentMember.area2 = editArea2;
-      currentMember.postalCode2 = editPostal2;
+      currentMember.postalCode2 = editPostal2.trim();
     }
     setIsEditingAddress2(false);
     setSelectedAddressSlot(2);
+    alert(
+      language === 'en'
+        ? '✓ Address 2 registered successfully! Both delivery addresses are now permanently locked.'
+        : '✓ 第二送餐地址已成功保存！两个送餐地址现已永久锁定。'
+    );
   };
 
   const handleDateChange = (dateVal: string) => {
@@ -1882,6 +1899,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         : '暂无生效配套'}
                     </p>
                     {currentMember.activePackage && (() => {
+                      const isPendingAdminConfirmation = currentMember.activePackage.adminConfirmed === false;
                       const expInfo = getEffectivePackageExpiry(currentMember.activePackage, siteSettings.disabledDeliveryDates || []);
                       const vDays = expInfo.validityDays || getPlanValidityDays(currentMember.activePackage.planId);
                       const isPendingActivation = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
@@ -1890,7 +1908,25 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
                       return (
                         <div className="mt-1 space-y-1">
-                          {isPendingActivation ? (
+                          {isPendingAdminConfirmation ? (
+                            <>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] bg-amber-400 text-stone-950 font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                  <span>⏳ {language === 'en' ? 'WA Auto-Reply Pending · Admin Review' : '待店主确认开通 (WA回执待处理)'}</span>
+                                </span>
+                                {currentMember.activePackage.signupOrderNo && (
+                                  <span className="text-[10px] font-mono font-bold text-amber-300">
+                                    #{currentMember.activePackage.signupOrderNo}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-amber-300/90 block">
+                                {language === 'en'
+                                  ? '• Subscribed plan is awaiting admin confirmation in Back Office. Meal redemption unlocks upon confirmation.'
+                                  : '• 所购配套正等待后台管理员审核确认。管理员在后台确认开通后，将即刻开启每日选餐权限！'}
+                              </span>
+                            </>
+                          ) : isPendingActivation ? (
                             <>
                               <span className="text-[11px] text-sky-400 font-extrabold flex items-center gap-1">
                                 <span>⏳ {language === 'en' ? 'Status: Pending First Meal Order' : '状态：等待首餐预订激活'}</span>
@@ -1959,41 +1995,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                         </div>
                       </div>
 
-                      {/* WhatsApp Plan Renewal Reminder Button (Right Beside Balance Meal Available) */}
+                      {/* WhatsApp Plan Renewal Reminder Button */}
                       {(() => {
-                        const planName = (currentMember.activePackage.planName || '').toLowerCase();
-                        const planId = (currentMember.activePackage.planId || '').toLowerCase();
-                        const totalMeals = currentMember.activePackage.totalMeals || 20;
-
-                        // Calculate free meals: 1 meal free for single, 2 for duo, etc.
-                        let freeMeals = 1;
-                        let tierLabelEn = 'Single Plan (1 Meal Free + Free Delivery)';
-                        let tierLabelZh = '单人配套（送1餐+免运费）';
-
-                        if (planId.includes('6-person') || planName.includes('6-person') || totalMeals >= 120) {
-                          freeMeals = 6;
-                          tierLabelEn = '6-Person Plan (6 Meals Free + Free Delivery)';
-                          tierLabelZh = '六人配套（送6餐+免运费）';
-                        } else if (planId.includes('5-person') || planName.includes('5-person') || totalMeals >= 100) {
-                          freeMeals = 5;
-                          tierLabelEn = '5-Person Plan (5 Meals Free + Free Delivery)';
-                          tierLabelZh = '五人配套（送5餐+免运费）';
-                        } else if (planId.includes('4-person') || planName.includes('4-person') || totalMeals >= 80) {
-                          freeMeals = 4;
-                          tierLabelEn = '4-Person Plan (4 Meals Free + Free Delivery)';
-                          tierLabelZh = '四人配套（送4餐+免运费）';
-                        } else if (planId.includes('3-person') || planName.includes('3-person') || totalMeals >= 60) {
-                          freeMeals = 3;
-                          tierLabelEn = '3-Person Plan (3 Meals Free + Free Delivery)';
-                          tierLabelZh = '三人配套（送3餐+免运费）';
-                        } else if (planId.includes('2-person') || planName.includes('duo') || planName.includes('2-person') || totalMeals >= 40) {
-                          freeMeals = 2;
-                          tierLabelEn = 'Duo Plan (2 Meals Free + Free Delivery)';
-                          tierLabelZh = '双人配套（送2餐+免运费）';
-                        }
-
-                        const bonusTextEn = `${freeMeals} Meal${freeMeals > 1 ? 's' : ''} Free with Delivery`;
-                        const bonusTextZh = `送 ${freeMeals} 餐 + 免运费`;
+                        const renewalPerk = getMemberRenewalPerk(currentMember, members);
+                        const { freeMeals, bonusTextEn, bonusTextZh, badgeEn, badgeZh, isUnlocked, requirementEn, requirementZh } = renewalPerk;
 
                         const whatsappMessage = encodeURIComponent(
                           `Hi CHILL Healthy (chill-healthy.com)! 👋\n\n` +
@@ -2001,43 +2006,51 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           `👤 Member: ${currentMember.name} (${currentMember.memberNumber || currentMember.phone})\n` +
                           `📦 Current Plan: ${currentMember.activePackage.planName}\n` +
                           `🍱 Balance Remaining: ${currentMember.activePackage.remainingMeals}/${currentMember.activePackage.totalMeals} meals\n` +
-                          `🎁 Renewal Incentive: ${bonusTextEn} (${tierLabelZh})\n\n` +
+                          `🎁 Renewal Incentive: ${bonusTextEn} (${bonusTextZh})\n` +
+                          (isUnlocked
+                            ? `🎉 Referral Status: Qualified Referral Verified (≥20 Meals Plan Referred) - Claiming +2 FREE Meals with Delivery!\n\n`
+                            : `💡 Standard Plan Renewal (+1 Free Meal with Delivery).\n\n`) +
                           `Please help me confirm my plan renewal and claim my ${freeMeals} free meal(s) with delivery. Thank you!`
                         );
 
                         return (
-                          <a
-                            id="btn-whatsapp-renewal-reminder"
-                            href={`https://wa.me/${whatsappLinkNumber}?text=${whatsappMessage}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group relative flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md hover:shadow-emerald-600/30 transition-all cursor-pointer border border-emerald-400/40 active:scale-95"
-                            title={
-                              language === 'en'
-                                ? `Renew via WhatsApp & get ${bonusTextEn}`
-                                : `通过 WhatsApp 续订配套，即可获赠 ${bonusTextZh}`
-                            }
-                          >
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                              <Gift className="w-4 h-4 text-amber-300 animate-bounce" />
-                            </div>
-                            <div className="text-left">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100 flex items-center gap-1">
-                                  <MessageCircle className="w-3 h-3 text-emerald-300 fill-emerald-300/30" />
-                                  {language === 'en' ? 'Renew via WhatsApp' : 'WhatsApp 专属续订'}
-                                </span>
-                                <span className="text-[9px] font-black bg-amber-400 text-stone-900 px-1.5 py-0.2 rounded-full shadow-2xs">
-                                  {language === 'en' ? `+${freeMeals} FREE` : `送${freeMeals}餐`}
-                                </span>
+                          <div className="flex flex-col gap-1">
+                            <a
+                              id="btn-whatsapp-renewal-reminder"
+                              href={`https://wa.me/${whatsappLinkNumber}?text=${whatsappMessage}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`group relative flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-white shadow-md transition-all cursor-pointer border active:scale-95 ${
+                                isUnlocked
+                                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 hover:from-emerald-500 hover:to-amber-500 border-amber-300/50 shadow-amber-600/20'
+                                  : 'bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 border-emerald-400/40'
+                              }`}
+                              title={language === 'en' ? `Renew via WhatsApp & get ${bonusTextEn} (${requirementEn})` : `通过 WhatsApp 续订配套，即可获赠 ${bonusTextZh} (${requirementZh})`}
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <Gift className={`w-4 h-4 ${isUnlocked ? 'text-amber-300 animate-bounce' : 'text-emerald-200'}`} />
                               </div>
-                              <p className="text-xs font-extrabold text-white leading-tight">
-                                {language === 'en'
-                                  ? `${bonusTextEn}`
-                                  : `${bonusTextZh}`}
-                              </p>
-                            </div>
-                          </a>
+                              <div className="text-left min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-100 flex items-center gap-1">
+                                    <MessageCircle className="w-3 h-3 text-emerald-300 fill-emerald-300/30" />
+                                    {language === 'en' ? 'Renew via WhatsApp' : 'WhatsApp 专属续订'}
+                                  </span>
+                                  <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs ${
+                                    isUnlocked ? 'bg-amber-400 text-stone-900 ring-1 ring-amber-300' : 'bg-emerald-400 text-stone-900'
+                                  }`}>
+                                    {language === 'en' ? badgeEn : badgeZh}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-extrabold text-white leading-tight truncate">
+                                  {language === 'en' ? bonusTextEn : bonusTextZh}
+                                </p>
+                              </div>
+                            </a>
+                            <p className="text-[9.5px] text-stone-300/90 leading-tight px-1 flex items-center gap-1">
+                              <span>{language === 'en' ? requirementEn : requirementZh}</span>
+                            </p>
+                          </div>
                         );
                       })()}
 
@@ -2181,7 +2194,68 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Gate: If Package Subscription is Pending Confirmation by Admin at Back End Office */}
+                {currentMember?.activePackage && currentMember.activePackage.adminConfirmed === false ? (
+                  <div className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-400 shadow-xl text-center space-y-4 animate-in fade-in">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
+                      <Clock className="w-8 h-8 animate-pulse" />
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
+                        {language === 'en' ? 'WA Auto-Reply Pending · Admin Confirmation' : '待店主确认开通 · WhatsApp/后台确认中'}
+                      </span>
+                      <h3 className="font-heading font-black text-xl sm:text-2xl text-stone-900 mt-2">
+                        {language === 'en' ? 'Meal Package Awaiting Admin Confirmation' : '餐食配套正在等待后台管理员确认开通'}
+                      </h3>
+                    </div>
+
+                    <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 text-left text-xs space-y-2">
+                      <div className="flex justify-between items-center text-stone-600">
+                        <span>{language === 'en' ? 'Order Number:' : '配套订单编号：'}</span>
+                        <span className="font-mono font-black text-stone-900 bg-stone-200/70 px-2 py-0.5 rounded">
+                          #{currentMember.activePackage.signupOrderNo || 'CH-261007-6834'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-stone-600">
+                        <span>{language === 'en' ? 'Subscribed Package:' : '已订购配套：'}</span>
+                        <span className="font-bold text-emerald-800">{currentMember.activePackage.planName}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-stone-600">
+                        <span>{language === 'en' ? 'Customer Details:' : '会员信息：'}</span>
+                        <span className="font-medium text-stone-800">{currentMember.name} · {currentMember.phone}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-stone-600">
+                        <span>{language === 'en' ? 'Delivery Address 1:' : '送餐地址一：'}</span>
+                        <span className="font-medium text-stone-800 truncate max-w-[280px]">
+                          {currentMember.address}, {currentMember.area} ({currentMember.postalCode})
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-stone-600 leading-relaxed max-w-lg mx-auto">
+                      {language === 'en'
+                        ? 'Thank you for subscribing to CHILL Healthy! For kitchen capacity and payment verification, your package order is currently pending confirmation by our kitchen admin in the back office. Daily meal redemption will unlock immediately upon admin confirmation.'
+                        : '感谢您订购【潮轻食】健康餐配套！为保障厨房排产与付款核对，您的配套申请正在等待管理员在后台确认开通。管理员在后台确认后，即可立即在此开始每日选餐与配送！'}
+                    </p>
+
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <a
+                        href={`https://wa.me/60126189919?text=${encodeURIComponent(
+                          `Hi CHILL Healthy! 👋 I have placed a package subscription order #${currentMember.activePackage.signupOrderNo || 'CH-261007-6834'} for ${currentMember.name} (${currentMember.phone}) - ${currentMember.activePackage.planName}. Please help confirm my package at the backend page so I can redeem meals. Thank you!`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{language === 'en' ? 'WhatsApp Admin for Fast Activation (+60126189919)' : '联系店主 WhatsApp 极速确认开通 (+60126189919)'}</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   {/* LEFT COLUMN: Delivery Settings & Order Form (4-5 cols on desktop) */}
                   <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:sticky lg:top-4">
                     <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200 shadow-sm space-y-4">
@@ -2259,12 +2333,43 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Inline Address 2 Editor */}
-                        {isEditingAddress2 && (
-                          <div className="p-3 bg-stone-50 rounded-2xl border border-emerald-300 space-y-2.5 animate-in fade-in">
-                            <span className="text-xs font-bold text-emerald-900 block">
-                              {language === 'en' ? 'Set Address 2 (Home / Secondary):' : '设定地址二 (住家/备用地址):'}
+                        {/* If both addresses are filled, display permanent locked banner */}
+                        {Boolean(currentMember.address && currentMember.address2 && currentMember.address2.trim()) && (
+                          <div className="p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-stone-700 text-[11px] flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <Lock className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                              <span>{language === 'en' ? 'Addresses Locked (2/2 Filled)' : '送餐地址已锁定 (2/2 已填满)'}</span>
                             </span>
+                            <a
+                              href={`https://wa.me/60126189919?text=${encodeURIComponent(`Hi CHILL Healthy, I would like to request an update to one of my registered delivery addresses for member account ${currentMember.name} (${currentMember.phone}).`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-700 font-bold hover:underline shrink-0"
+                            >
+                              {language === 'en' ? 'Admin Help on WA' : '联系店主协助'}
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Inline Address 2 Editor (only available if Address 2 is not filled yet) */}
+                        {!currentMember.address2 && isEditingAddress2 && (
+                          <div className="p-3.5 bg-stone-50 rounded-2xl border-2 border-emerald-400 space-y-2.5 animate-in fade-in">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-emerald-950 block">
+                                {language === 'en' ? 'Fill Up Address 2 (Google Maps Valid):' : '填写地址二 (需为谷歌地图有效地址):'}
+                              </span>
+                              {editAddr2.trim().length >= 4 && (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${editAddr2}, ${editArea2} ${editPostal2}`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-emerald-700 font-bold hover:underline flex items-center gap-0.5"
+                                >
+                                  <MapPin className="w-3 h-3 text-emerald-600" />
+                                  <span>{language === 'en' ? 'Verify on Maps ↗' : '谷歌地图核对 ↗'}</span>
+                                </a>
+                              )}
+                            </div>
                             <input
                               type="text"
                               value={editAddr2}
@@ -2276,7 +2381,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               <select
                                 value={editArea2}
                                 onChange={(e) => setEditArea2(e.target.value)}
-                                className="w-full text-xs px-2.5 py-2 rounded-xl border border-stone-200 bg-white"
+                                className="w-full text-xs px-2.5 py-2 rounded-xl border border-stone-200 bg-white font-medium"
                               >
                                 <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi</option>
                                 <option value="Shah Alam / Kota Kemuning">Shah Alam</option>
@@ -2291,24 +2396,29 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                 maxLength={5}
                                 value={editPostal2}
                                 onChange={(e) => setEditPostal2(e.target.value.replace(/\D/g, ''))}
-                                placeholder="Postal Code"
-                                className="w-full text-xs px-2.5 py-2 rounded-xl border border-stone-200 bg-white"
+                                placeholder="Postal Code (5 digits)"
+                                className="w-full text-xs px-2.5 py-2 rounded-xl border border-stone-200 bg-white font-mono"
                               />
                             </div>
+                            <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 leading-snug">
+                              {language === 'en'
+                                ? '⚠️ Notice: Once 2 addresses are filled up, you are not allowed to edit the addresses anymore. All addresses must be valid in Google Maps.'
+                                : '⚠️ 提示：一旦填满2个地址，系统将永久锁定地址，顾客不可再自行修改。所有地址必须为 Google 地图有效地址。'}
+                            </p>
                             <div className="flex gap-2 justify-end pt-1">
                               <button
                                 type="button"
                                 onClick={() => setIsEditingAddress2(false)}
-                                className="px-3 py-1.5 text-xs text-stone-600 hover:text-stone-900"
+                                className="px-3 py-1.5 text-xs text-stone-600 hover:text-stone-900 cursor-pointer"
                               >
                                 {language === 'en' ? 'Cancel' : '取消'}
                               </button>
                               <button
                                 type="button"
                                 onClick={handleSaveAddress2}
-                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl"
+                                className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl cursor-pointer shadow-xs"
                               >
-                                {language === 'en' ? 'Save Address 2' : '保存地址二'}
+                                {language === 'en' ? 'Save & Lock Address 2' : '保存并锁定地址二'}
                               </button>
                             </div>
                           </div>
@@ -2849,13 +2959,27 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     <span>{language === 'en' ? 'Confirm Redeem' : '立即确认兑换'}</span>
                   </button>
                 </div>
-              </div>
+              </>
             )}
+          </div>
+        )}
 
             {/* Tab 2: ADVANCE MULTI-DAY MEAL PLANNER (整周一次性排餐) */}
             {portalTab === 'planner' && (
               <div className="space-y-4">
-                {isExpired && !isSpecialCase ? (
+                {currentMember?.activePackage && currentMember.activePackage.adminConfirmed === false ? (
+                  <div className="p-6 bg-white rounded-3xl border-2 border-amber-400 text-center space-y-3 max-w-lg mx-auto">
+                    <Clock className="w-8 h-8 text-amber-600 mx-auto animate-pulse" />
+                    <h4 className="font-heading font-black text-stone-900 text-base">
+                      {language === 'en' ? 'Package Subscription Pending Admin Confirmation' : '配套订购正等待后台管理员确认开通'}
+                    </h4>
+                    <p className="text-xs text-stone-600 leading-relaxed">
+                      {language === 'en'
+                        ? 'Advance multi-day planner will unlock immediately once your package subscription is confirmed by admin in the back office.'
+                        : '待管理员在后台确认开通您的配套后，将即刻开启整周提前排餐功能！'}
+                    </p>
+                  </div>
+                ) : isExpired && !isSpecialCase ? (
                   <div className="p-5 rounded-3xl bg-red-50 border border-red-300 text-red-950 space-y-3">
                     <div className="flex items-center gap-2 font-black text-sm text-red-800">
                       <Lock className="w-4 h-4 text-red-600 shrink-0" />

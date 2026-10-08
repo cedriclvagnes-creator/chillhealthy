@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Camera, RefreshCw, CheckCircle2, MessageCircle, ExternalLink, QrCode } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, MessageCircle, ExternalLink, QrCode, AlertTriangle, Building, Copy, Check } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 
 interface DuitNowPaymentCardProps {
@@ -11,64 +11,24 @@ interface DuitNowPaymentCardProps {
   onUpdateQrImage?: (imageUrl: string | null) => void;
 }
 
-const STORAGE_KEY = 'chillhealthy_duitnow_qr_custom';
-
 export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   language,
   amount,
   orderId,
   whatsappNumber = '0126189919',
   siteSettings,
-  onUpdateQrImage,
 }) => {
-  const [customQrImage, setCustomQrImage] = useState<string | null>(() => {
-    return siteSettings?.paymentQrUrl || null;
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (siteSettings?.paymentQrUrl) {
-      setCustomQrImage(siteSettings.paymentQrUrl);
-      return;
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setCustomQrImage(saved);
-    } catch {
-      // ignore
-    }
-  }, [siteSettings?.paymentQrUrl]);
-
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setCustomQrImage(result);
-      try {
-        localStorage.setItem(STORAGE_KEY, result);
-      } catch {
-        // storage fallback
-      }
-      onUpdateQrImage?.(result);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleReset = () => {
-    setCustomQrImage(null);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-    onUpdateQrImage?.(null);
-  };
+  const [copiedBank, setCopiedBank] = useState(false);
 
   const merchantName = siteSettings?.paymentMerchantName || 'Chill Healthy Trading';
-  const duitNowId = siteSettings?.paymentDuitNowId || siteSettings?.whatsappNumber || '0126189919';
-  const effectiveQr = customQrImage || siteSettings?.paymentQrUrl;
+  // Note: 0126189919 does NOT have DuitNow phone transfer function. Never use it as a fallback DuitNow ID!
+  const customDuitNowId = siteSettings?.paymentDuitNowId && siteSettings.paymentDuitNowId !== '0126189919'
+    ? siteSettings.paymentDuitNowId
+    : '';
+
+  const effectiveQr = siteSettings?.paymentQrUrl || (typeof window !== 'undefined' ? localStorage.getItem('chillhealthy_duitnow_qr_custom') : null);
+  const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 8;
+  const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 95;
 
   const cleanPhone = whatsappNumber.replace(/\D/g, '') || '0126189919';
   const whatsappTarget = cleanPhone.startsWith('60') ? cleanPhone : `60${cleanPhone.replace(/^0/, '')}`;
@@ -78,47 +38,30 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
       (orderId ? `Order ID: ${orderId}%0A` : '') +
       (amount ? `Amount Paid: RM ${amount.toFixed(2)}%0A` : '') +
       `I have completed payment via DuitNow QR to *${merchantName}*.%0A` +
-      `Attached is my payment transfer receipt. Please confirm my order! ❤️`
+      `Attached is my payment transfer receipt screenshot. Please confirm my order! ❤️`
   );
+
+  const bankName = siteSettings?.paymentBankName || 'Maybank';
+  const bankAccountNo = siteSettings?.paymentAccountNo || '512802521998';
+
+  const handleCopyBank = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(bankAccountNo.replace(/\D/g, ''));
+      setCopiedBank(true);
+      setTimeout(() => setCopiedBank(false), 2000);
+    }
+  };
 
   return (
     <div className="bg-white rounded-3xl border-2 border-pink-500/80 shadow-xl overflow-hidden max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
-      {/* Upload/replace option */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleUpload}
-        className="hidden"
-      />
-
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-full border border-pink-200 inline-flex items-center gap-1">
           <QrCode className="w-3.5 h-3.5" />
           <span>DuitNow QR Instant Pay</span>
         </span>
-
-        <div className="flex items-center gap-1 text-[11px]">
-          {customQrImage && (
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
-              title="Reset QR"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-pink-600 hover:text-pink-700 font-semibold p-1 inline-flex items-center gap-1 cursor-pointer"
-            title="Upload Custom QR Photo"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span className="text-[10px]">{language === 'en' ? 'Upload QR' : '替换QR图'}</span>
-          </button>
-        </div>
+        <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
+          Official Merchant QR
+        </span>
       </div>
 
       {/* The DuitNow QR Voucher Card */}
@@ -136,20 +79,31 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
           </div>
         </div>
 
-        {/* QR Code Graphic Container */}
-        <div className="w-52 h-52 sm:w-60 sm:h-60 p-2 bg-white rounded-xl flex items-center justify-center border border-stone-100 shadow-2xs relative">
+        {/* QR Code Graphic Container with margin & scale adjustment */}
+        <div
+          className="w-52 h-52 sm:w-60 sm:h-60 bg-white rounded-xl flex items-center justify-center border border-stone-200 shadow-2xs relative overflow-hidden"
+          style={{ padding: `${qrMargin}px` }}
+        >
           {effectiveQr ? (
             <img
               src={effectiveQr}
               alt={`DuitNow QR ${merchantName}`}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain transition-transform"
+              style={{
+                transform: `scale(${qrScale / 100})`,
+                transformOrigin: 'center',
+              }}
             />
           ) : (
             /* High-fidelity SVG recreation of the official Chill Healthy Trading DuitNow QR */
             <svg
               viewBox="0 0 240 240"
-              className="w-full h-full text-[#e5006b]"
+              className="w-full h-full text-[#e5006b] transition-transform"
               fill="currentColor"
+              style={{
+                transform: `scale(${qrScale / 100})`,
+                transformOrigin: 'center',
+              }}
             >
               {/* Outer boundary & finder patterns */}
               {/* Top-Left Finder */}
@@ -268,9 +222,9 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
         <h4 className="font-heading font-extrabold text-stone-900 text-base sm:text-lg mt-2 tracking-tight">
           {merchantName}
         </h4>
-        {duitNowId && (
-          <span className="text-[11px] font-mono font-semibold text-stone-500">
-            DuitNow ID: {duitNowId}
+        {customDuitNowId && (
+          <span className="text-[11px] font-mono font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded mt-0.5">
+            DuitNow ID: {customDuitNowId}
           </span>
         )}
 
@@ -283,7 +237,7 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
 
         {/* Footer info & MAE logo */}
         <div className="mt-2 text-[10px] text-stone-500 font-medium">
-          <p>Accepted by participating Banks and e-Wallets</p>
+          <p>Accepted by participating Banks & e-Wallets (MAE, CIMB, TNG, Public Bank)</p>
           <p className="text-[9px] text-stone-400 mt-0.5">Merchant Partner</p>
           <div className="flex items-center justify-center gap-1 mt-1">
             <span className="inline-block font-black text-[#f7b500] text-sm bg-black px-1.5 py-0.5 rounded-sm tracking-wider">
@@ -294,20 +248,56 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
         </div>
       </div>
 
-      {/* Crucial instruction: After payment must whatsapp to us */}
-      <div className="mt-3.5 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-stone-800 text-center space-y-2">
-        <div className="flex items-center justify-center gap-1.5 text-amber-900 font-extrabold text-xs">
+      {/* CRITICAL DUITNOW NOTICE: 0126189919 has NO DuitNow function */}
+      <div className="mt-3 p-3 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-stone-900 space-y-1.5 text-left">
+        <div className="flex items-center gap-1.5 text-amber-900 font-black text-xs">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            {language === 'en'
+              ? 'Notice: 0126189919 does NOT support DuitNow phone transfer'
+              : '重要提示：0126189919 无 DuitNow 手机号转账功能'}
+          </span>
+        </div>
+        <p className="text-[11px] text-stone-700 leading-snug">
+          {language === 'en'
+            ? 'Please directly SCAN the DuitNow QR above using your banking app (MAE, CIMB, TNG, etc.) or transfer to our bank account. Do NOT attempt to transfer via DuitNow using phone number 0126189919.'
+            : '请务必直接使用银行 App (MAE/CIMB/TNG等) 扫描上方 DuitNow QR 收款码付款，或直接转账至下方银行账号。请勿输入手机号码 0126189919 进行 DuitNow 转账。'}
+        </p>
+
+        {/* Optional Bank Account Details Card */}
+        <div className="mt-2 p-2 rounded-xl bg-white border border-amber-200 flex items-center justify-between text-xs">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 text-[11px] font-bold text-stone-800">
+              <Building className="w-3.5 h-3.5 text-stone-500" />
+              <span>{bankName}: <span className="font-mono">{bankAccountNo}</span></span>
+            </div>
+            <p className="text-[10px] text-stone-500 truncate">{merchantName}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyBank}
+            className="px-2 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-[10px] font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+          >
+            {copiedBank ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+            <span>{copiedBank ? (language === 'en' ? 'Copied' : '已复制') : (language === 'en' ? 'Copy' : '复制')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Crucial instruction: After payment must whatsapp receipt */}
+      <div className="mt-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-stone-800 text-center space-y-2">
+        <div className="flex items-center justify-center gap-1.5 text-emerald-900 font-extrabold text-xs">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>
             {language === 'en'
-              ? 'Step 2: Send Payment Slip via WhatsApp'
-              : '第2步：付款后务必通过 WhatsApp 发送凭证'}
+              ? 'Send Payment Slip via WhatsApp'
+              : '付款后请通过 WhatsApp 发送凭证'}
           </span>
         </div>
         <p className="text-[11px] text-stone-600 leading-tight">
           {language === 'en'
-            ? 'Scan the DuitNow QR above with your bank app (MAE, CIMB, Public Bank, TNG eWallet, etc). After transferring, please WhatsApp your receipt to us.'
-            : '请使用任意银行 App 或 TNG 扫码支付给 Chill Healthy Trading，付款成功后请截图并 WhatsApp 发送给我们以确认订单。'}
+            ? 'After completing your transfer, please WhatsApp your payment screenshot to CHILL Healthy to verify your order!'
+            : '转账成功后，请将付款凭证截图发至 WhatsApp，我们将第一时间为您确认并安排配送！'}
         </p>
 
         <a

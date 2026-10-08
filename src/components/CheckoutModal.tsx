@@ -34,6 +34,7 @@ import {
   normalizeMalaysianPhone,
   getMalaysianPhoneError,
   formatMalaysianPhone,
+  toWhatsAppNumber,
 } from '../utils/malaysiaPhone';
 import {
   generateUniqueOrderNumber,
@@ -69,6 +70,8 @@ interface CheckoutModalProps {
       area2?: string;
       postalCode2?: string;
       referralCode?: string;
+      orderNumber?: string;
+      deliverySlot?: string;
     }
   ) => void;
   onOpenMemberPortal?: () => void;
@@ -315,6 +318,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       createdAt: new Date().toISOString(),
       recipeStandard: hasPlan ? 'Standard Chef Recipe' : 'Customized Ala Carte',
       autoReplySent: false,
+      adminConfirmed: !hasPlan, // Meal redemptions/alacarte active; package subscriptions require backend admin confirmation
     };
 
     if (onOrderPlaced) {
@@ -329,12 +333,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         address,
         area,
         postalCode,
-        address2: hasAddress2 ? address2 : undefined,
-        area2: hasAddress2 ? area2 : undefined,
-        postalCode2: hasAddress2 ? postalCode2 : undefined,
+        address2: undefined, // Only 1 address during registration; 2nd added after in Member Portal
+        area2: undefined,
+        postalCode2: undefined,
         referralCode: appliedReferralMember
           ? getMemberReferralCode(appliedReferralMember)
           : (referralCodeInput.trim().toUpperCase() || undefined),
+        orderNumber: generatedId,
+        deliverySlot: deliverySlot,
       });
       setRegisteredMemberPhone(cleanPhone);
     } else if (registerAsMember && !currentMember && onRegisterCustomer) {
@@ -913,19 +919,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-stone-700 block">
-                    {language === 'en' ? 'Malaysian Handphone / WhatsApp *' : '马来西亚手机号码 / WhatsApp *'}
+                    {language === 'en' ? 'Malaysian WhatsApp Mobile Number *' : '马来西亚 WhatsApp 手机号码 *'}
                   </label>
                   {phone && (
                     <span className="text-[10px] font-bold">
                       {isValidMalaysianHandphone(phone) ? (
-                        <span className="text-emerald-700 flex items-center gap-0.5">
+                        <span className="text-emerald-700 flex items-center gap-0.5 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           <CheckCircle className="w-3 h-3 text-emerald-600" />
-                          <span>🇲🇾 {language === 'en' ? 'Valid Mobile' : '有效手机号'}</span>
+                          <span>WhatsApp {toWhatsAppNumber(phone)} ✓</span>
                         </span>
                       ) : (
-                        <span className="text-amber-700 flex items-center gap-0.5">
+                        <span className="text-amber-700 flex items-center gap-0.5 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                           <AlertCircle className="w-3 h-3 text-amber-600" />
-                          <span>🇲🇾 01x-xxxxxxx</span>
+                          <span>{language === 'en' ? 'Need valid WhatsApp mobile' : '需有效 WhatsApp 手机号'}</span>
                         </span>
                       )}
                     </span>
@@ -939,13 +945,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     setPhone(e.target.value);
                     setPhoneError('');
                   }}
-                  placeholder="e.g. 012-618 9919"
+                  placeholder="e.g. 012-569 8587"
                   className={`w-full text-xs px-3 py-2.5 rounded-xl border ${
                     phone && !isValidMalaysianHandphone(phone)
                       ? 'border-amber-400 bg-amber-50/40 text-stone-900'
                       : 'border-stone-200 text-stone-900'
                   } focus:outline-none focus:ring-2 focus:ring-emerald-600 font-semibold`}
                 />
+                <p className="text-[10px] text-stone-500 mt-1">
+                  {language === 'en'
+                    ? 'Admin will send meal order confirmations and delivery notifications directly to this WhatsApp number without hassle.'
+                    : '后厨与管理员将直接通过此 WhatsApp 号码发送订餐确认及送餐通知，方便无阻。'}
+                </p>
                 {phoneError && (
                   <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1 font-medium">
                     <AlertCircle className="w-3 h-3 shrink-0" />
@@ -1045,9 +1056,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[11px] font-medium text-stone-600 block mb-1">
-                  {language === 'en' ? 'Detailed Street / Building / Floor / Unit *' : '详细地址 (公司大厦/楼层/门牌号) *'}
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-medium text-stone-600 block">
+                    {language === 'en' ? 'Detailed Street / Building / Floor / Unit *' : '详细地址 (公司大厦/楼层/门牌号) *'}
+                  </label>
+                  {address.trim().length >= 4 && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${address}, ${area} ${postalCode}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold inline-flex items-center gap-0.5 hover:underline"
+                      title="Verify on Google Maps"
+                    >
+                      <MapPin className="w-3 h-3 text-emerald-600" />
+                      <span>{language === 'en' ? 'Verify on Google Maps ↗' : '谷歌地图核对 ↗'}</span>
+                    </a>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
@@ -1058,63 +1083,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 />
               </div>
 
-              {/* Optional Address 2 (1 account 2 addresses) */}
-              <div className="pt-2 border-t border-stone-200/80">
-                {!hasAddress2 ? (
-                  <button
-                    type="button"
-                    onClick={() => setHasAddress2(true)}
-                    className="text-xs text-emerald-800 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Home className="w-3.5 h-3.5" />
-                    <span>{language === 'en' ? '+ Add Address 2 (Home / Secondary)' : '+ 添加第二地址 (住家/备用送餐点)'}</span>
-                  </button>
-                ) : (
-                  <div className="space-y-2 mt-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
-                        <Home className="w-3.5 h-3.5 text-emerald-700" />
-                        <span>{language === 'en' ? 'Address 2 (Home / Secondary)' : '送餐地址二 (住家/备用送餐点)'}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setHasAddress2(false)}
-                        className="text-[11px] text-stone-400 hover:text-red-600"
-                      >
-                        {language === 'en' ? 'Remove' : '移除'}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <input
-                          type="text"
-                          value={area2}
-                          onChange={(e) => setArea2(e.target.value)}
-                          placeholder="Area (e.g. Klang Botanic)"
-                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                        />
-                      </div>
-                      <div>
-                        <input
-                          type="text"
-                          maxLength={5}
-                          value={postalCode2}
-                          onChange={(e) => setPostalCode2(e.target.value.replace(/\D/g, ''))}
-                          placeholder="Postal Code"
-                          className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                        />
-                      </div>
-                    </div>
-                    <input
-                      type="text"
-                      value={address2}
-                      onChange={(e) => setAddress2(e.target.value)}
-                      placeholder="Home address: Unit, Condo, Street..."
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
-                    />
-                  </div>
-                )}
+              {/* Address Policy Notice (1 at registration, 2nd in portal, locked after 2) */}
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-300 text-[11px] text-stone-700 space-y-1">
+                <div className="flex items-center gap-1 text-amber-900 font-bold">
+                  <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>
+                    {language === 'en'
+                      ? 'Address Policy: 1 address during registration'
+                      : '送餐地址规则：注册时填写一个地址'}
+                  </span>
+                </div>
+                <p className="leading-snug">
+                  {language === 'en'
+                    ? 'Please key in a valid Google Maps address. You will be able to fill up your 2nd delivery address (e.g. Home or Secondary office) in your Member Portal after registration. Once both 2 addresses are filled, addresses will be permanently locked for delivery security.'
+                    : '所填地址必须为 Google 地图可定位的有效送餐地址。注册后可在会员中心填写第二个送餐地址（住家或备选公司）。一旦填满两个地址，系统将永久锁定地址以确保配送安全，不可再自行修改。'}
+                </p>
               </div>
             </div>
 

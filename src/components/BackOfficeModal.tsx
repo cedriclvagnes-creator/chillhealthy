@@ -52,6 +52,7 @@ import {
   Square,
   Send,
   Layers,
+  QrCode,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -1419,7 +1420,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               >
                 <Clock className="w-3.5 h-3.5" />
                 <span>
-                  {language === 'en' ? 'Kitchen Orders & 5PM Report' : '后厨订单与5点报表'} ({redemptions.length})
+                  {language === 'en' ? 'Kitchen Orders & 5PM Report' : '后厨订单与5点报表'} ({redemptions.filter((r) => r.orderType !== 'Package Subscription').length})
                 </span>
               </button>
 
@@ -1812,8 +1813,122 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           />
                         </div>
 
+                        {/* QR Margins & Shrink Adjustment (Admin Customization) */}
+                        <div className="p-3.5 bg-pink-50/70 rounded-2xl border border-pink-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
+                              <QrCode className="w-4 h-4 text-pink-700" />
+                              <span>{language === 'en' ? 'QR Code Margin & Shrink Fit' : '二维码边距缩放与页边距调节 (Shrink to Margin)'}</span>
+                            </label>
+                            <span className="text-[11px] font-bold text-pink-800 bg-white px-2 py-0.5 rounded-full border border-pink-200">
+                              Padding: {formSettings.paymentQrMargin ?? 8}px · Scale: {formSettings.paymentQrScale ?? 95}%
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Margin Padding Slider */}
+                            <div>
+                              <div className="flex justify-between text-[11px] font-medium text-stone-700 mb-1">
+                                <span>{language === 'en' ? 'Outer Margin Padding' : '外边距白边 (Margin)'}</span>
+                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrMargin ?? 8} px</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={32}
+                                step={2}
+                                value={formSettings.paymentQrMargin ?? 8}
+                                onChange={(e) => {
+                                  const updated = { ...formSettings, paymentQrMargin: Number(e.target.value) };
+                                  setFormSettings(updated);
+                                  onUpdateSiteSettings(updated);
+                                }}
+                                className="w-full accent-pink-600 cursor-pointer"
+                              />
+                              <div className="flex gap-1.5 mt-1">
+                                {[0, 4, 8, 16].map((pVal) => (
+                                  <button
+                                    key={pVal}
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = { ...formSettings, paymentQrMargin: pVal };
+                                      setFormSettings(updated);
+                                      onUpdateSiteSettings(updated);
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-md border font-semibold ${
+                                      (formSettings.paymentQrMargin ?? 8) === pVal
+                                        ? 'bg-pink-600 text-white border-pink-600'
+                                        : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                                    }`}
+                                  >
+                                    {pVal === 0 ? 'Tight (0px)' : `${pVal}px`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Scale Shrink Slider */}
+                            <div>
+                              <div className="flex justify-between text-[11px] font-medium text-stone-700 mb-1">
+                                <span>{language === 'en' ? 'Shrink / Zoom QR Size' : '缩放大小 (Shrink Scale)'}</span>
+                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrScale ?? 95} %</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={50}
+                                max={115}
+                                step={5}
+                                value={formSettings.paymentQrScale ?? 95}
+                                onChange={(e) => {
+                                  const updated = { ...formSettings, paymentQrScale: Number(e.target.value) };
+                                  setFormSettings(updated);
+                                  onUpdateSiteSettings(updated);
+                                }}
+                                className="w-full accent-pink-600 cursor-pointer"
+                              />
+                              <div className="flex gap-1.5 mt-1">
+                                {[80, 90, 95, 100].map((sVal) => (
+                                  <button
+                                    key={sVal}
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = { ...formSettings, paymentQrScale: sVal };
+                                      setFormSettings(updated);
+                                      onUpdateSiteSettings(updated);
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-md border font-semibold ${
+                                      (formSettings.paymentQrScale ?? 95) === sVal
+                                        ? 'bg-pink-600 text-white border-pink-600'
+                                        : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                                    }`}
+                                  >
+                                    {sVal}%
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Critical Notice: 0126189919 has NO DuitNow function */}
+                        <div className="p-3 bg-amber-500/10 border-2 border-amber-400 rounded-2xl text-stone-800 space-y-1">
+                          <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>
+                              {language === 'en'
+                                ? 'Notice: 0126189919 does NOT have DuitNow Function'
+                                : '重要提示：0126189919 无 DuitNow 手机号转账功能'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-stone-600 leading-snug">
+                            {language === 'en'
+                              ? 'Customer mobile payments via DuitNow phone number transfer to 0126189919 will fail. The checkout modal instructs customers to scan the official DuitNow QR above or transfer directly to the bank account.'
+                              : '0126189919 仅为客服 WhatsApp，未开通 DuitNow 手机号转账。系统已在前台特别提醒顾客直接扫描上方 DuitNow QR 收款码或转入银行账号。'}
+                          </p>
+                        </div>
+
                         {/* Merchant Name & Bank Details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="text-xs font-bold text-stone-700 block mb-1">
                               {language === 'en' ? 'Merchant Name' : '收款商户抬头名称'}
@@ -1833,15 +1948,32 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
                           <div>
                             <label className="text-xs font-bold text-stone-700 block mb-1">
-                              {language === 'en' ? 'DuitNow ID / Phone' : 'DuitNow ID / 收款手机号'}
+                              {language === 'en' ? 'Bank Name' : '银行名称'}
                             </label>
                             <input
                               type="text"
-                              value={formSettings.paymentDuitNowId || '0126189919'}
+                              value={formSettings.paymentBankName || 'Maybank'}
                               onChange={(e) =>
                                 setFormSettings({
                                   ...formSettings,
-                                  paymentDuitNowId: e.target.value,
+                                  paymentBankName: e.target.value,
+                                })
+                              }
+                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs font-bold text-stone-700 block mb-1">
+                              {language === 'en' ? 'Bank Account No' : '银行账号'}
+                            </label>
+                            <input
+                              type="text"
+                              value={formSettings.paymentAccountNo || '512802521998'}
+                              onChange={(e) =>
+                                setFormSettings({
+                                  ...formSettings,
+                                  paymentAccountNo: e.target.value,
                                 })
                               }
                               className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 font-mono"
@@ -3306,6 +3438,9 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   ========================================================= */}
               {activeTab === 'redemptions' && (() => {
                 const filteredRedemptions = redemptions.filter((red) => {
+                  // Package Subscription does NOT show in redeem meal, but shows in Customer Package Orders & Info
+                  if (red.orderType === 'Package Subscription') return false;
+
                   const matchSearch =
                     !kitchenSearch ||
                     (red.orderNumber && red.orderNumber.toLowerCase().includes(kitchenSearch.toLowerCase())) ||
@@ -5456,6 +5591,264 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                       </div>
                     </div>
 
+                    {/* =========================================================
+                        PACKAGE SUBSCRIPTIONS & SIGN-UP ORDERS (AWAITING ADMIN CONFIRMATION)
+                        ========================================================= */}
+                    {(() => {
+                      const packageSubOrders = redemptions.filter((r) => r.orderType === 'Package Subscription');
+                      const unconfirmedMembersList = members.filter((m) => m.activePackage && m.activePackage.adminConfirmed === false);
+
+                      const combinedPending = [
+                        ...packageSubOrders,
+                        ...unconfirmedMembersList
+                          .filter((m) => !packageSubOrders.some((p) => p.memberPhone.replace(/\D/g, '') === m.phone.replace(/\D/g, '')))
+                          .map((m) => ({
+                            id: `sub-${m.phone}`,
+                            orderNumber: m.activePackage?.signupOrderNo || 'CH-261007-6834',
+                            orderType: 'Package Subscription' as const,
+                            memberId: m.id,
+                            memberName: m.name,
+                            memberPhone: m.phone,
+                            deliveryDate: m.activePackage?.purchasedDate || getTodayStr(),
+                            deliverySlot: m.activePackage?.deliverySlot || 'Lunch (10:00 AM – 2:00 PM)',
+                            deliveryAddress: m.address,
+                            area: m.area,
+                            postalCode: m.postalCode,
+                            mealId: m.activePackage?.planId || 'duo-2-person',
+                            mealName: m.activePackage?.planName || '2-Person Duo Meal Plan',
+                            mealNameZh: m.activePackage?.planNameZh || '双人餐食配套',
+                            mealImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+                            quantity: 1,
+                            status: 'Pending' as const,
+                            createdAt: getTodayStr(),
+                            autoReplySent: false,
+                            adminConfirmed: false,
+                          })),
+                      ];
+
+                      if (combinedPending.length === 0) return null;
+
+                      return (
+                        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-emerald-500/10 p-5 rounded-3xl border-2 border-amber-400 shadow-md space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-300/70 pb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-black shadow-xs shrink-0">
+                                <Package className="w-5 h-5 text-stone-950" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-heading font-black text-stone-950 text-base">
+                                    {language === 'en'
+                                      ? 'Package Subscriptions & Sign-Up Orders Awaiting Admin Confirmation'
+                                      : '会员订购配套 / 套餐订阅开通申请 (待后台管理员确认)'}
+                                  </h4>
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-stone-950 animate-pulse border border-amber-500">
+                                    {combinedPending.filter((p) => !p.adminConfirmed).length} {language === 'en' ? 'Pending' : '待确认'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-stone-600 mt-0.5">
+                                  {language === 'en'
+                                    ? 'Package subscriptions do not appear in Redeem Meal. Confirm here to allow customer to redeem meals.'
+                                    : '会员订购配套不显示在每日选餐，而显示在此供管理员确认开通。确认后顾客即可在会员端进行每日选餐。'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {combinedPending.map((pkgOrder) => {
+                              const orderNo = pkgOrder.orderNumber || 'CH-261007-6834';
+                              const matchedMember = members.find(
+                                (m) => m.phone.replace(/\D/g, '') === pkgOrder.memberPhone.replace(/\D/g, '') || m.id === pkgOrder.memberId
+                              );
+                              const isConfirmed = pkgOrder.adminConfirmed || (matchedMember?.activePackage?.adminConfirmed === true);
+
+                              const handleConfirmPackage = () => {
+                                if (matchedMember && onUpdateMemberAccount) {
+                                  const updated = {
+                                    ...matchedMember,
+                                    activePackage: matchedMember.activePackage ? {
+                                      ...matchedMember.activePackage,
+                                      adminConfirmed: true,
+                                      adminConfirmedAt: new Date().toISOString(),
+                                    } : null,
+                                  };
+                                  onUpdateMemberAccount(updated);
+                                }
+                                if (onUpdateRedemptionOrder) {
+                                  onUpdateRedemptionOrder({
+                                    ...pkgOrder,
+                                    adminConfirmed: true,
+                                    status: 'Delivered',
+                                  });
+                                }
+                                triggerToast(
+                                  language === 'en'
+                                    ? `✓ Confirmed Order #${orderNo}! ${pkgOrder.memberName} is now allowed to redeem meals.`
+                                    : `✓ 已确认开通订单 #${orderNo}！已允许客户 ${pkgOrder.memberName} 兑换餐食。`
+                                );
+                              };
+
+                              const customerWaText = encodeURIComponent(
+                                `Hi ${pkgOrder.memberName}! 👋\n\n` +
+                                `Great news from *CHILL Healthy 潮轻食*! 🍱\n` +
+                                `Your package subscription order *#${orderNo}* (${pkgOrder.mealNameZh || pkgOrder.mealName}) has been officially *CONFIRMED & ACTIVATED* by admin! 🎉\n\n` +
+                                `You can now log into your Member Portal at *chill-healthy.com* (Login ID: ${pkgOrder.memberPhone}) to redeem your daily meals and select delivery dates.\n\n` +
+                                `Delivery Slot: ${pkgOrder.deliverySlot}\n` +
+                                `Address: ${pkgOrder.deliveryAddress}, ${pkgOrder.area} (${pkgOrder.postalCode})\n\n` +
+                                `Thank you for choosing CHILL Healthy!`
+                              );
+
+                              return (
+                                <div
+                                  key={pkgOrder.id || orderNo}
+                                  className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between space-y-3.5 shadow-sm ${
+                                    isConfirmed
+                                      ? 'bg-emerald-50/70 border-emerald-300'
+                                      : 'bg-white border-amber-300 ring-2 ring-amber-400/20'
+                                  }`}
+                                >
+                                  <div className="space-y-2.5">
+                                    {/* Header: Plan Name, Order No & Badges */}
+                                    <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-2.5">
+                                      <div>
+                                        <h5 className="font-heading font-black text-sm sm:text-base text-stone-900 leading-tight">
+                                          {pkgOrder.mealName || '2-Person Duo Meal Plan'}
+                                        </h5>
+                                        {pkgOrder.mealNameZh && (
+                                          <p className="text-xs font-bold text-emerald-800">
+                                            ({pkgOrder.mealNameZh})
+                                          </p>
+                                        )}
+                                        <div className="flex items-center gap-1.5 mt-1">
+                                          <span className="text-[10px] font-bold text-stone-500 uppercase">
+                                            Order No:
+                                          </span>
+                                          <span className="font-mono font-black text-xs text-stone-900 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+                                            #{orderNo}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(orderNo);
+                                              triggerToast(`✓ Copied #${orderNo}`);
+                                            }}
+                                            className="p-1 text-stone-400 hover:text-stone-700 rounded cursor-pointer"
+                                            title="Copy Order Number"
+                                          >
+                                            <Copy className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="text-right flex flex-col items-end gap-1">
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
+                                          Package Subscription
+                                        </span>
+                                        {isConfirmed ? (
+                                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                            <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                            <span>Admin Confirmed ✓</span>
+                                          </span>
+                                        ) : pkgOrder.autoReplySent ? (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 flex items-center gap-1">
+                                            <CheckCircle className="w-3 h-3 text-sky-600" />
+                                            <span>WA Auto-Reply Sent</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                            <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                                            <span>WA Auto-Reply Pending</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Customer & Delivery Address Details */}
+                                    <div className="text-xs space-y-1 bg-stone-50/80 p-3 rounded-2xl border border-stone-200">
+                                      <p className="font-bold text-stone-900 flex items-center gap-1.5">
+                                        <span className="text-stone-500 font-normal">Customer:</span>
+                                        <span className="text-base text-stone-900 font-extrabold">{pkgOrder.memberName}</span>
+                                        <span className="text-stone-400">·</span>
+                                        <a
+                                          href={`https://wa.me/60${pkgOrder.memberPhone.replace(/\D/g, '').replace(/^(60|0)/, '')}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-emerald-700 hover:text-emerald-800 font-bold inline-flex items-center gap-1 hover:underline"
+                                        >
+                                          <span>{pkgOrder.memberPhone}</span>
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      </p>
+
+                                      <p className="text-stone-600 flex items-center gap-1.5 pt-0.5">
+                                        <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                                        <span className="truncate">
+                                          {pkgOrder.deliveryAddress}, {pkgOrder.area} ({pkgOrder.postalCode})
+                                        </span>
+                                      </p>
+
+                                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                                        <span className="text-[11px] font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                                          📅 20-Day Plan
+                                        </span>
+                                        <span className="text-[11px] font-bold bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-200">
+                                          ⏰ {pkgOrder.deliverySlot || 'Lunch (10:00 AM – 2:00 PM)'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Action Controls: Confirmation Button */}
+                                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-100">
+                                    {!isConfirmed ? (
+                                      <button
+                                        type="button"
+                                        onClick={handleConfirmPackage}
+                                        className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                                      >
+                                        <CheckCircle className="w-4 h-4" />
+                                        <span>
+                                          {language === 'en'
+                                            ? 'Confirm & Allow Customer to Redeem Meal'
+                                            : '确认开通配套 (允许顾客选餐)'}
+                                        </span>
+                                      </button>
+                                    ) : (
+                                      <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-100 text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 border border-emerald-300">
+                                        <CheckCircle className="w-4 h-4 text-emerald-700" />
+                                        <span>
+                                          {language === 'en'
+                                            ? 'Package Confirmed · Meal Redemption Active'
+                                            : '配套已确认开通 · 顾客可随时选餐'}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    <a
+                                      href={`https://wa.me/60${pkgOrder.memberPhone.replace(/\D/g, '').replace(/^(60|0)/, '')}?text=${customerWaText}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => {
+                                        if (onUpdateRedemptionOrder) {
+                                          onUpdateRedemptionOrder({ ...pkgOrder, autoReplySent: true });
+                                        }
+                                      }}
+                                      className="py-2.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                      title="Send WhatsApp confirmation to customer"
+                                    >
+                                      <MessageCircle className="w-4 h-4" />
+                                      <span>WhatsApp</span>
+                                    </a>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Filter & Search Toolbar */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white p-3 rounded-2xl border border-stone-200">
                       {/* Search */}
@@ -5627,6 +6020,43 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                             🎉 Includes {mem.activePackage.autoRevivedMeals} auto-revived meals from expired plan
                                           </div>
                                         ) : null}
+
+                                        {mem.activePackage.adminConfirmed === false && (
+                                          <div className="mt-2 p-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-950 text-[11px] space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-bold flex items-center gap-1 text-amber-900">
+                                                <Clock className="w-3.5 h-3.5 text-amber-700 animate-spin" />
+                                                <span>Pending Admin Confirmation</span>
+                                              </span>
+                                              {mem.activePackage.signupOrderNo && (
+                                                <span className="font-mono font-bold text-[10px] bg-white px-1.5 py-0.2 rounded">
+                                                  #{mem.activePackage.signupOrderNo}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (onUpdateMemberAccount) {
+                                                  const updated = {
+                                                    ...mem,
+                                                    activePackage: {
+                                                      ...mem.activePackage!,
+                                                      adminConfirmed: true,
+                                                      adminConfirmedAt: new Date().toISOString(),
+                                                    },
+                                                  };
+                                                  onUpdateMemberAccount(updated);
+                                                }
+                                                triggerToast(`✓ Confirmed & Activated package for ${mem.name}!`);
+                                              }}
+                                              className="w-full py-1.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-[10px] rounded-lg shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                                            >
+                                              <CheckCircle className="w-3 h-3" />
+                                              <span>{language === 'en' ? 'Confirm & Allow Meal Redemption' : '确认开通配套 (开通选餐权限)'}</span>
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                     {mem.lastExpiredPackage && !mem.lastExpiredPackage.isRevived && mem.lastExpiredPackage.unredeemedMeals > 0 && (
