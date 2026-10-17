@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageCircle, Phone, MapPin, Clock, Heart, ShieldCheck, Instagram, Facebook, User, Settings, Shield, Lock } from 'lucide-react';
+import { MessageCircle, MapPin, Clock, Instagram, Facebook, User, Lock } from 'lucide-react';
 import { Language, SiteSettings, MemberAccount } from '../types';
 import { ChillLogo } from './ChillLogo';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
@@ -140,7 +140,7 @@ export const Footer: React.FC<FooterProps> = ({
                   </span>
                 </button>
               </li>
-              <li className="pt-2 border-t border-stone-800 flex flex-col gap-2">
+              <li className="pt-2 border-t border-stone-800">
                 <button
                   onClick={onOpenMemberPortal}
                   className="hover:text-white transition-colors text-left text-emerald-400 font-bold flex items-center gap-1.5 cursor-pointer"
@@ -148,21 +148,6 @@ export const Footer: React.FC<FooterProps> = ({
                   <User className="w-3.5 h-3.5" />
                   <span>{language === 'en' ? 'Member Portal · Redeem Meals' : '会员中心 · 兑换每日餐盒'}</span>
                 </button>
-
-                {onOpenBackOffice && (
-                  <a
-                    href="#admin"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.location.hash = '#admin';
-                      onOpenBackOffice();
-                    }}
-                    className="hover:text-amber-400 text-stone-400 transition-colors text-left text-xs flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{language === 'en' ? 'Owner Admin (#admin)' : '店主后台 (#admin)'}</span>
-                  </a>
-                )}
               </li>
             </ul>
           </div>
