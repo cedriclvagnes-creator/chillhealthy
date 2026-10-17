@@ -379,7 +379,7 @@ export function buildKitchenWhatsAppManifest(
   lines.push(`🖨️ Thermal Sticker A6 (6-inch) labels printed and dispatched to central kitchen.`);
   lines.push(`Official Central Kitchen Hub: Klang & Selangor`);
 
-  return encodeURIComponent(lines.join('\n'));
+  return lines.join('\n');
 }
 
 function dateFormattedSimple(dStr: string): string {

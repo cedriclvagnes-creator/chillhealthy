@@ -86,34 +86,34 @@ export function buildReceiptWhatsAppMessage(receipt: OfficialReceipt): string {
       : COMPANY_REG_NO;
 
   return (
-    `*═══════════════════════════*%0A` +
-    `🥗 *CHILL HEALTHY — OFFICIAL RECEIPT* 🥗%0A` +
-    `*${companyTitle} (${regNo})*%0A` +
-    `_Co. Reg. No: ${regNo}_%0A` +
-    `*═══════════════════════════*%0A%0A` +
-    `*Receipt No:* ${receipt.receiptNumber}%0A` +
-    `*Date & Time:* ${receipt.issuedAt}%0A` +
-    `*Status:* 🟢 *PAYMENT CONFIRMED & RECEIVED (PAID)*%0A%0A` +
-    `👤 *CUSTOMER DETAILS:*%0A` +
-    `• *Name:* ${receipt.memberName}%0A` +
-    `• *Account / Phone:* ${receipt.memberPhone}%0A` +
-    `• *Delivery Address:* ${receipt.memberAddress}, ${receipt.memberArea} ${receipt.memberPostalCode}%0A` +
-    (receipt.memberAddress2 ? `• *Secondary Address:* ${receipt.memberAddress2}, ${receipt.memberArea2 || ''} ${receipt.memberPostalCode2 || ''}%0A` : '') +
-    `%0A📦 *PACKAGE ORDER DETAILS:*%0A` +
-    `• *Subscribed Plan:* ${receipt.planName} ${receipt.planNameZh ? `(${receipt.planNameZh})` : ''}%0A` +
-    `• *Total Meals Included:* ${receipt.totalMeals} Meals${receipt.bonusMeals && receipt.bonusMeals > 0 ? ` (+${receipt.bonusMeals} Bonus Free Meals)` : ''}%0A` +
-    `• *Package Validity Standard:* ${receipt.totalMeals === 5 ? '8 Days (5 Meals)' : receipt.totalMeals === 10 ? '15 Days (10 Meals)' : '30 Days (20 Meals)'} (Mon–Fri only)%0A` +
-    `• *Klang Valley Holiday Rule:* Official public holidays automatically extend validity (+1 day)%0A` +
-    `• *Delivery:* Included (Free Mon–Fri Klang Valley lunch delivery)%0A%0A` +
-    `💰 *PAYMENT BREAKDOWN:*%0A` +
-    `• *Subtotal:* RM ${receipt.totalAmount.toFixed(2)}%0A` +
-    `• *Delivery & Packaging:* RM 0.00 (COMPLIMENTARY)%0A` +
-    `• *Grand Total Paid:* *RM ${receipt.totalAmount.toFixed(2)}*%0A` +
-    `• *Payment Method:* ${receipt.paymentMethod}%0A` +
-    `• *Bank Ref / Txn ID:* ${receipt.paymentReference || 'VERIFIED'}%0A` +
-    `• *Confirmed By:* ${receipt.confirmedBy}%0A%0A` +
-    `*═══════════════════════════*%0A` +
-    `Thank you for subscribing to CHILL Healthy! Your meals are ready to be redeemed daily through our Member Portal.%0A` +
+    `*═══════════════════════════*\n` +
+    `🥗 *CHILL HEALTHY — OFFICIAL RECEIPT* 🥗\n` +
+    `*${companyTitle} (${regNo})*\n` +
+    `_Co. Reg. No: ${regNo}_\n` +
+    `*═══════════════════════════*\n\n` +
+    `*Receipt No:* ${receipt.receiptNumber}\n` +
+    `*Date & Time:* ${receipt.issuedAt}\n` +
+    `*Status:* 🟢 *PAYMENT CONFIRMED & RECEIVED (PAID)*\n\n` +
+    `👤 *CUSTOMER DETAILS:*\n` +
+    `• *Name:* ${receipt.memberName}\n` +
+    `• *Account / Phone:* ${receipt.memberPhone}\n` +
+    `• *Delivery Address:* ${receipt.memberAddress}, ${receipt.memberArea} ${receipt.memberPostalCode}\n` +
+    (receipt.memberAddress2 ? `• *Secondary Address:* ${receipt.memberAddress2}, ${receipt.memberArea2 || ''} ${receipt.memberPostalCode2 || ''}\n` : '') +
+    `\n📦 *PACKAGE ORDER DETAILS:*\n` +
+    `• *Subscribed Plan:* ${receipt.planName} ${receipt.planNameZh ? `(${receipt.planNameZh})` : ''}\n` +
+    `• *Total Meals Included:* ${receipt.totalMeals} Meals${receipt.bonusMeals && receipt.bonusMeals > 0 ? ` (+${receipt.bonusMeals} Bonus Free Meals)` : ''}\n` +
+    `• *Package Validity Standard:* ${receipt.totalMeals === 5 ? '8 Days (5 Meals)' : receipt.totalMeals === 10 ? '15 Days (10 Meals)' : '30 Days (20 Meals)'} (Mon–Fri only)\n` +
+    `• *Klang Valley Holiday Rule:* Official public holidays automatically extend validity (+1 day)\n` +
+    `• *Delivery:* Included (Free Mon–Fri Klang Valley lunch delivery)\n\n` +
+    `💰 *PAYMENT BREAKDOWN:*\n` +
+    `• *Subtotal:* RM ${receipt.totalAmount.toFixed(2)}\n` +
+    `• *Delivery & Packaging:* RM 0.00 (COMPLIMENTARY)\n` +
+    `• *Grand Total Paid:* *RM ${receipt.totalAmount.toFixed(2)}*\n` +
+    `• *Payment Method:* ${receipt.paymentMethod}\n` +
+    `• *Bank Ref / Txn ID:* ${receipt.paymentReference || 'VERIFIED'}\n` +
+    `• *Confirmed By:* ${receipt.confirmedBy}\n\n` +
+    `*═══════════════════════════*\n` +
+    `Thank you for subscribing to CHILL Healthy! Your meals are ready to be redeemed daily through our Member Portal.\n` +
     `Kitchen Hotline: ${receipt.kitchenContact || OFFICIAL_WA_DISPLAY}`
   );
 }

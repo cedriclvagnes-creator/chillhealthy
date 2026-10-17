@@ -40,6 +40,7 @@ import {
   generateUniqueOrderNumber,
   buildOrderConfirmationAutoReply,
   buildCustomerWhatsAppAutoReplyUrl,
+  buildWhatsAppUrl,
 } from '../utils/whatsapp';
 import {
   calculateMonFriExpiryDate,
@@ -364,67 +365,67 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     if (hasPlan && planItem) {
       const msg =
-        `*📣 Confirm Order | 订单确认* %0A` +
-        `感谢您下单我们的【潮轻食健康配套】❤️%0A` +
-        `Thank you for choosing our Chill Healthy Meal Plan!%0A%0A` +
-        `*Order ID:* ${generatedId}%0A` +
-        `*Registered Name (注册姓名):* ${name}%0A` +
-        `*Phone (联系电话):* ${phone}%0A` +
-        `*Package (所选配套):* ${planItem.title}%0A` +
-        `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
-        `*Total Amount (总额):* RM ${grandTotal.toFixed(2)}%0A` +
-        `*Delivery Address 1 (地址一):* ${address}, ${area} ${postalCode}%0A` +
-        (hasAddress2 && address2 ? `*Delivery Address 2 (地址二):* ${address2}, ${area2} ${postalCode2}%0A` : '') +
+        `*📣 Confirm Order | 订单确认*\n` +
+        `感谢您下单我们的【潮轻食健康配套】❤️\n` +
+        `Thank you for choosing our Chill Healthy Meal Plan!\n\n` +
+        `*Order ID:* ${generatedId}\n` +
+        `*Registered Name (注册姓名):* ${name}\n` +
+        `*Phone (联系电话):* ${phone}\n` +
+        `*Package (所选配套):* ${planItem.title}\n` +
+        `*Delivery Slot (送餐时段):* ${deliverySlot}\n` +
+        `*Total Amount (总额):* RM ${grandTotal.toFixed(2)}\n` +
+        `*Delivery Address 1 (地址一):* ${address}, ${area} ${postalCode}\n` +
+        (hasAddress2 && address2 ? `*Delivery Address 2 (地址二):* ${address2}, ${area2} ${postalCode2}\n` : '') +
         (appliedReferralMember
-          ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (Referrer: ${appliedReferralMember.name})%0A` +
+          ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (Referrer: ${appliedReferralMember.name})\n` +
             (isReferralEligible
-              ? `*Referral Reward (推荐免单奖励):* ${appliedReferralMember.name} receives +1 Free Meal Credit upon confirmation of this RM${planPrice.toFixed(0)} new account meal plan!%0A`
+              ? `*Referral Reward (推荐免单奖励):* ${appliedReferralMember.name} receives +1 Free Meal Credit upon confirmation of this RM${planPrice.toFixed(0)} new account meal plan!\n`
               : !isNewAccount
-              ? `*Referral Note (推荐提示):* Existing account. Referral free meal bonus applies to new account registrations only.%0A`
-              : `*Referral Note (推荐提示):* Current plan is RM${planPrice.toFixed(0)}. Referral free meal bonus applies to new account plans RM398 and above (e.g. 20-Day Plan).%0A`)
+              ? `*Referral Note (推荐提示):* Existing account. Referral free meal bonus applies to new account registrations only.\n`
+              : `*Referral Note (推荐提示):* Current plan is RM${planPrice.toFixed(0)}. Referral free meal bonus applies to new account plans RM398 and above (e.g. 20-Day Plan).\n`)
           : referralCodeInput.trim()
-          ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
+          ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}\n`
           : '') +
-        (notes ? `*Dietary Notes (忌口备注):* ${notes}%0A` : '') +
+        (notes ? `*Dietary Notes (忌口备注):* ${notes}\n` : '') +
         (paymentMethod === 'duitnow'
-          ? `*Payment Method:* DuitNow QR (Chill Healthy Trading)%0A已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗%0A`
-          : `*Payment Method:* WhatsApp Direct Pay%0A已提交配套订单，请提供转账方式/DuitNow QR，协助开通订餐！🥗%0A`) +
+          ? `*Payment Method:* DuitNow QR (Chill Healthy Trading)\n已完成付款，附上付款水单！请为我确认配套，开启每日订餐权限！🥗\n`
+          : `*Payment Method:* WhatsApp Direct Pay\n已提交配套订单，请提供转账方式/DuitNow QR，协助开通订餐！🥗\n`) +
         `Website: www.chill-healthy.com`;
 
       if (paymentMethod === 'whatsapp') {
-        window.open(`https://wa.me/${whatsappLinkNumber}?text=${msg}`, '_blank');
+        window.open(buildWhatsAppUrl(whatsappLinkNumber, msg), '_blank');
       }
     } else {
       const itemsText = cart
         .map((item) => `- ${item.title} x${item.quantity} (RM ${(item.price * item.quantity).toFixed(2)})`)
-        .join('%0A');
+        .join('\n');
 
       const paymentMethodText =
         paymentMethod === 'duitnow'
-          ? `*Payment:* DuitNow QR (Chill Healthy Trading)%0A已完成付款，附上付款凭证水单，请查收并安排配送！🥗`
-          : `*Payment:* WhatsApp Direct Pay%0A已提交单点餐品订单，请向我发送付款转账方式 / DuitNow QR 收款码，谢谢！🥗`;
+          ? `*Payment:* DuitNow QR (Chill Healthy Trading)\n已完成付款，附上付款凭证水单，请查收并安排配送！🥗`
+          : `*Payment:* WhatsApp Direct Pay\n已提交单点餐品订单，请向我发送付款转账方式 / DuitNow QR 收款码，谢谢！🥗`;
 
       const msg =
-        `*📣 New Ala Carte Order: ${generatedId} | 单点外卖订单*%0A` +
-        `Customer (顾客姓名): ${name}%0A` +
-        `Phone (手机号码): ${phone}%0A` +
+        `*📣 New Ala Carte Order: ${generatedId} | 单点外卖订单*\n` +
+        `Customer (顾客姓名): ${name}\n` +
+        `Phone (手机号码): ${phone}\n` +
         (registerAsMember || currentMember || registeredMemberPhone
-          ? `Member Status: Registered Member (${cleanPhone})%0A`
+          ? `Member Status: Registered Member (${cleanPhone})\n`
           : '') +
-        `Type: Fresh Bento Delivery%0A` +
-        `Date: ${deliveryDate} | Slot: ${deliverySlot}%0A` +
-        `Address 1: ${address}, ${area} ${postalCode}%0A` +
-        (hasAddress2 && address2 ? `Address 2: ${address2}, ${area2} ${postalCode2}%0A` : '') +
-        `Items (单点餐品):%0A${itemsText}%0A` +
-        `Subtotal: RM ${subtotal.toFixed(2)}%0A` +
-        `Delivery Fee: ${deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}%0A` +
-        `*Total Amount: RM ${grandTotal.toFixed(2)}*%0A` +
-        (notes ? `Notes (忌口备注): ${notes}%0A` : '') +
-        `${paymentMethodText}%0A` +
+        `Type: Fresh Bento Delivery\n` +
+        `Date: ${deliveryDate} | Slot: ${deliverySlot}\n` +
+        `Address 1: ${address}, ${area} ${postalCode}\n` +
+        (hasAddress2 && address2 ? `Address 2: ${address2}, ${area2} ${postalCode2}\n` : '') +
+        `Items (单点餐品):\n${itemsText}\n` +
+        `Subtotal: RM ${subtotal.toFixed(2)}\n` +
+        `Delivery Fee: ${deliveryFee === 0 ? 'FREE (≥RM100)' : 'RM 15.00 (<RM100)'}\n` +
+        `*Total Amount: RM ${grandTotal.toFixed(2)}*\n` +
+        (notes ? `Notes (忌口备注): ${notes}\n` : '') +
+        `${paymentMethodText}\n` +
         `Website: www.chill-healthy.com`;
 
       if (paymentMethod === 'whatsapp') {
-        window.open(`https://wa.me/${whatsappLinkNumber}?text=${msg}`, '_blank');
+        window.open(buildWhatsAppUrl(whatsappLinkNumber, msg), '_blank');
       }
     }
 
@@ -442,7 +443,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const itemsListForWA = cart
     .map((item) => `• ${item.title} x${item.quantity} (RM ${(item.price * item.quantity).toFixed(2)})`)
-    .join('%0A');
+    .join('\n');
 
   const customerAutoReplyUrl = buildCustomerWhatsAppAutoReplyUrl(registeredOrEnteredPhone, {
     orderNumber: orderId,
@@ -461,27 +462,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   });
 
   const confirmOrderWhatsAppMessage =
-    `*📣 Confirm Order | 订单付款凭单确认*%0A` +
-    `感谢您下单我们的【潮轻食健康餐】❤️%0A` +
-    `*Order ID:* ${orderId}%0A` +
-    `*Registered Name (注册姓名):* ${name}%0A` +
-    `*Phone (联系电话):* ${phone}%0A` +
+    `*📣 Confirm Order | 订单付款凭单确认*\n` +
+    `感谢您下单我们的【潮轻食健康餐】❤️\n` +
+    `*Order ID:* ${orderId}\n` +
+    `*Registered Name (注册姓名):* ${name}\n` +
+    `*Phone (联系电话):* ${phone}\n` +
     (registerAsMember || currentMember || registeredMemberPhone
-      ? `*Member Account:* Registered Member (${registeredMemberPhone || normalizeMalaysianPhone(phone)})%0A`
+      ? `*Member Account:* Registered Member (${registeredMemberPhone || normalizeMalaysianPhone(phone)})\n`
       : '') +
     (planItem
-      ? `*Package (所选配套):* ${planItem.title}%0A`
-      : `*Items (所选单点餐盒):*%0A${itemsListForWA}%0A`) +
+      ? `*Package (所选配套):* ${planItem.title}\n`
+      : `*Items (所选单点餐盒):*\n${itemsListForWA}\n`) +
     (appliedReferralMember
-      ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (${appliedReferralMember.name})%0A`
+      ? `*Referral Code (推荐人邀请码):* ${getMemberReferralCode(appliedReferralMember)} (${appliedReferralMember.name})\n`
       : referralCodeInput.trim()
-      ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}%0A`
+      ? `*Referral Code (推荐码):* ${referralCodeInput.trim().toUpperCase()}\n`
       : '') +
-    `*Delivery Date (送餐日期):* ${deliveryDate}%0A` +
-    `*Delivery Slot (送餐时段):* ${deliverySlot}%0A` +
-    `*Delivery Address (送达地址):* ${address}, ${area} ${postalCode}%0A` +
-    (hasAddress2 && address2 ? `*Address 2:* ${address2}, ${area2} ${postalCode2}%0A` : '') +
-    `*Total Due (结账总额):* RM ${grandTotal.toFixed(2)}%0A` +
+    `*Delivery Date (送餐日期):* ${deliveryDate}\n` +
+    `*Delivery Slot (送餐时段):* ${deliverySlot}\n` +
+    `*Delivery Address (送达地址):* ${address}, ${area} ${postalCode}\n` +
+    (hasAddress2 && address2 ? `*Address 2:* ${address2}, ${area2} ${postalCode2}\n` : '') +
+    `*Total Due (结账总额):* RM ${grandTotal.toFixed(2)}\n` +
     (paymentMethod === 'duitnow'
       ? `已通过 DuitNow QR 付款给 Chill Healthy Trading，附上付款凭单水单截图，请协助确认！🥗`
       : `已选择 WhatsApp Direct Pay，请协助提供转账方式 / DuitNow QR 收款码完成付款，谢谢！🥗`);
@@ -595,7 +596,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <a
-                        href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                        href={buildWhatsAppUrl(whatsappLinkNumber, confirmOrderWhatsAppMessage)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"
@@ -721,7 +722,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </p>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <a
-                        href={`https://wa.me/${whatsappLinkNumber}?text=${confirmOrderWhatsAppMessage}`}
+                        href={buildWhatsAppUrl(whatsappLinkNumber, confirmOrderWhatsAppMessage)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors"

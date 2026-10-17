@@ -119,7 +119,7 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
   };
 
   const handleCopy = () => {
-    const rawText = buildReceiptWhatsAppMessage(receipt).replace(/%0A/g, '\n').replace(/\*/g, '');
+    const rawText = buildReceiptWhatsAppMessage(receipt).replace(/\*/g, '');
     navigator.clipboard.writeText(rawText);
     setCopiedText(true);
     setTimeout(() => setCopiedText(false), 2500);
@@ -134,7 +134,7 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const whatsappUrl = buildWhatsAppUrl(receipt.memberPhone, decodeURIComponent(buildReceiptWhatsAppMessage(receipt).replace(/%0A/g, '\n')));
+  const whatsappUrl = buildWhatsAppUrl(receipt.memberPhone, buildReceiptWhatsAppMessage(receipt));
 
   return (
     <div className="fixed inset-0 z-70 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white">

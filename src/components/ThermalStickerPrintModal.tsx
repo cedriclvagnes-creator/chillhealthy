@@ -126,11 +126,9 @@ export const ThermalStickerPrintModal: React.FC<ThermalStickerPrintModalProps> =
 
   // Copy kitchen manifest
   const handleCopyManifest = () => {
-    const raw = decodeURIComponent(
-      buildKitchenWhatsAppManifest(
-        filteredAndSortedRedemptions,
-        dateFilter !== 'all' ? dateFilter : undefined
-      )
+    const raw = buildKitchenWhatsAppManifest(
+      filteredAndSortedRedemptions,
+      dateFilter !== 'all' ? dateFilter : undefined
     );
     navigator.clipboard.writeText(raw);
     setCopiedManifest(true);
@@ -141,11 +139,9 @@ export const ThermalStickerPrintModal: React.FC<ThermalStickerPrintModalProps> =
   const kitchenWaNumber = siteSettings.whatsappNumber || '60126189919';
   const whatsappUrl = buildWhatsAppUrl(
     kitchenWaNumber,
-    decodeURIComponent(
-      buildKitchenWhatsAppManifest(
-        filteredAndSortedRedemptions,
-        dateFilter !== 'all' ? dateFilter : undefined
-      )
+    buildKitchenWhatsAppManifest(
+      filteredAndSortedRedemptions,
+      dateFilter !== 'all' ? dateFilter : undefined
     )
   );
 

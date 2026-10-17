@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, MessageCircle, ExternalLink, QrCode, AlertTriangle } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
+import { buildWhatsAppUrl } from '../utils/whatsapp';
 
 interface DuitNowPaymentCardProps {
   language: Language;
@@ -28,16 +29,14 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 8;
   const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 95;
 
-  const cleanPhone = whatsappNumber.replace(/\D/g, '') || '0126189919';
-  const whatsappTarget = cleanPhone.startsWith('60') ? cleanPhone : `60${cleanPhone.replace(/^0/, '')}`;
+  const paymentWhatsappMessage =
+    `*Chill Healthy Trading - DuitNow QR Payment Receipt*\n` +
+    (orderId ? `Order ID: ${orderId}\n` : '') +
+    (amount ? `Amount Paid: RM ${amount.toFixed(2)}\n` : '') +
+    `I have completed payment via DuitNow QR to *${merchantName}*.\n` +
+    `Attached is my payment transfer receipt screenshot. Please confirm my order! ❤️`;
 
-  const paymentWhatsappText = encodeURIComponent(
-    `*Chill Healthy Trading - DuitNow QR Payment Receipt*%0A` +
-      (orderId ? `Order ID: ${orderId}%0A` : '') +
-      (amount ? `Amount Paid: RM ${amount.toFixed(2)}%0A` : '') +
-      `I have completed payment via DuitNow QR to *${merchantName}*.%0A` +
-      `Attached is my payment transfer receipt screenshot. Please confirm my order! ❤️`
-  );
+  const paymentWhatsappUrl = buildWhatsAppUrl(whatsappNumber, paymentWhatsappMessage);
 
   return (
     <div className="bg-white rounded-3xl border-2 border-pink-500/80 shadow-xl overflow-hidden max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
@@ -269,7 +268,7 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
         </p>
 
         <a
-          href={`https://wa.me/${whatsappTarget}?text=${paymentWhatsappText}`}
+          href={paymentWhatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"

@@ -27,7 +27,12 @@ export function buildWhatsAppUrl(phone?: string, message?: string): string {
   const digits = normalizePhoneDigits(phone);
   const baseUrl = `https://wa.me/60${digits}`;
   if (message && message.trim().length > 0) {
-    return `${baseUrl}?text=${encodeURIComponent(message.trim())}`;
+    // Sanitize message: never allow literal '%0A' or '%0a' to be double-encoded into '%250A'
+    let cleanMessage = message.trim();
+    if (cleanMessage.includes('%0A') || cleanMessage.includes('%0a')) {
+      cleanMessage = cleanMessage.replace(/%0A/gi, '\n');
+    }
+    return `${baseUrl}?text=${encodeURIComponent(cleanMessage)}`;
   }
   return baseUrl;
 }
