@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle, Edit3, MessageCircle, Building2 } from 'lucide-react';
+import { MapPin, Truck, Check, Clock, Sparkles, AlertCircle, Edit3, MessageCircle, Building2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { DELIVERY_AREAS } from '../data/menuData';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
@@ -9,6 +9,8 @@ interface DeliverySectionProps {
   isEditMode?: boolean;
   onEditDelivery?: () => void;
   siteSettings?: SiteSettings;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const DeliverySection: React.FC<DeliverySectionProps> = ({
@@ -16,6 +18,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
   isEditMode = false,
   onEditDelivery,
   siteSettings,
+  isExpanded = true,
+  onToggleExpand,
 }) => {
   const [postalCode, setPostalCode] = useState('');
   const [postalResult, setPostalResult] = useState<{
@@ -66,9 +70,70 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
     }
   };
 
+  if (!isExpanded) {
+    return (
+      <section id="delivery" className="py-6 sm:py-8 bg-white border-b border-stone-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-5 sm:p-6 rounded-3xl bg-stone-50 border border-stone-200 shadow-xs hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+                <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{language === 'en' ? 'Delivery Coverage & Time Slots' : '配送区域与时段'}</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-heading font-extrabold text-stone-900 tracking-tight">
+                {language === 'en'
+                  ? 'Klang Valley Fresh Lunch Delivery (Mon–Fri 11:00 AM – 1:30 PM)'
+                  : '巴生谷每日新鲜配送（周一至周五 11:00 AM – 1:30 PM）'}
+              </h3>
+              <p className="text-xs text-stone-600">
+                {language === 'en'
+                  ? 'Klang, Shah Alam, Subang, PJ, KL CBD, Cheras & surrounding areas. Free delivery with packages!'
+                  : '覆盖巴生、莎阿南、梳邦、八打灵、吉隆坡市中心、蕉赖等各大区域。选购健康餐配套享全程免运费！'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-600 pt-1">
+                <span className="bg-white border border-stone-200 px-2.5 py-0.5 rounded-md font-medium">📍 Klang Valley Coverage</span>
+                <span className="bg-white border border-stone-200 px-2.5 py-0.5 rounded-md font-medium">⏰ 11:00 AM – 1:30 PM</span>
+                <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-md font-bold">🎁 FREE Delivery with Plans</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0 cursor-pointer w-full md:w-auto justify-center"
+            >
+              <span>{language === 'en' ? 'Check Delivery Zones & FAQs' : '展开查看完整配送范围与邮编查询'}</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="delivery" className="py-16 sm:py-20 bg-white border-b border-stone-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Top Bar with Section Badge & Collapse Button */}
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+            <Truck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{language === 'en' ? 'Delivery Coverage & Time Slots' : '配送区域与时段'}</span>
+          </div>
+
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span>{language === 'en' ? 'Collapse Delivery' : '收起配送详情'}</span>
+            </button>
+          )}
+        </div>
+
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
           {isEditMode && onEditDelivery && (
@@ -263,6 +328,19 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             <span>{language === 'en' ? 'Contact for Big Group' : '联系洽询团餐'}</span>
           </a>
         </div>
+
+        {onToggleExpand && (
+          <div className="mt-10 text-center">
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-stone-200 text-stone-700 border border-stone-200 font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              <ChevronUp className="w-4 h-4 text-stone-500" />
+              <span>{language === 'en' ? 'Show Less (Collapse Delivery)' : '收起配送详情'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

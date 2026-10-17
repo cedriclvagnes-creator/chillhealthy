@@ -257,6 +257,30 @@ export default function App() {
   const [pendingAlaCarteItem, setPendingAlaCarteItem] = useState<CartItem | null>(null);
   const [justRegisteredMember, setJustRegisteredMember] = useState(false);
 
+  // Collapsible homepage sections (order guide, brand story, instagram & reviews, delivery zones)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    'order-guide': false,
+    'story': false,
+    'instagram': false,
+    'delivery': false,
+  });
+
+  const toggleSection = (id: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const handleExpandAllSections = (expand: boolean) => {
+    setExpandedSections({
+      'order-guide': expand,
+      'story': expand,
+      'instagram': expand,
+      'delivery': expand,
+    });
+  };
+
   // Persistence Effects
   useEffect(() => {
     try {
@@ -1404,12 +1428,17 @@ export default function App() {
 
   const scrollToSection = (id: string) => {
     setActiveSection(id);
-    const element = document.getElementById(id);
-    if (element) {
-      const yOffset = -135;
-      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
+    if (id in expandedSections && !expandedSections[id]) {
+      setExpandedSections((prev) => ({ ...prev, [id]: true }));
     }
+    setTimeout(() => {
+      const element = document.getElementById(id);
+      if (element) {
+        const yOffset = -135;
+        const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 60);
   };
 
   return (
@@ -1462,21 +1491,82 @@ export default function App() {
           siteSettings={siteSettings}
         />
 
+        {/* Explore More Sections Toolbar with Quick Tabs & Expand All */}
+        <div className="bg-stone-100/90 py-4 sm:py-5 border-y border-stone-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <span className="text-xs font-heading font-extrabold text-stone-700 uppercase tracking-wider mr-1">
+                  {language === 'en' ? 'Explore More:' : '专区导览：'}
+                </span>
+                {[
+                  { id: 'order-guide', labelEn: 'Order Guide (3 Steps)', labelZh: '订餐与确认流程', icon: '📣' },
+                  { id: 'story', labelEn: '65°C Sous-Vide Story', labelZh: '慢煮故事与品质', icon: '🌱' },
+                  { id: 'instagram', labelEn: 'Social & Reviews', labelZh: '社群好评打卡', icon: '📸' },
+                  { id: 'delivery', labelEn: 'Delivery Coverage', labelZh: '配送范围与邮编', icon: '🚚' },
+                ].map((tab) => {
+                  const isOpen = expandedSections[tab.id];
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        toggleSection(tab.id);
+                        if (!isOpen) {
+                          setTimeout(() => scrollToSection(tab.id), 80);
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isOpen
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-white text-stone-700 hover:bg-stone-200 border border-stone-200'
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{language === 'en' ? tab.labelEn : tab.labelZh}</span>
+                      <span className="text-[10px] opacity-75">{isOpen ? '▲' : '▾'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const anyOpen = Object.values(expandedSections).some(Boolean);
+                  handleExpandAllSections(!anyOpen);
+                }}
+                className="text-xs font-bold text-emerald-800 hover:text-emerald-950 underline underline-offset-4 transition-colors cursor-pointer"
+              >
+                {Object.values(expandedSections).some(Boolean)
+                  ? (language === 'en' ? 'Collapse All Sections' : '全部收起')
+                  : (language === 'en' ? 'Expand All Sections' : '全部展开查看')}
+              </button>
+            </div>
+          </div>
+        </div>
+
         <OrderGuideSection
           language={language}
           siteSettings={siteSettings}
           onSelectPlansClick={() => scrollToSection('plans')}
           onOpenMemberPortal={() => setIsMemberPortalOpen(true)}
+          isExpanded={expandedSections['order-guide']}
+          onToggleExpand={() => toggleSection('order-guide')}
         />
 
         <BrandStorySection
           language={language}
           siteSettings={siteSettings}
+          isExpanded={expandedSections['story']}
+          onToggleExpand={() => toggleSection('story')}
         />
 
         <InstagramFeedSection
           language={language}
           siteSettings={siteSettings}
+          isExpanded={expandedSections['instagram']}
+          onToggleExpand={() => toggleSection('instagram')}
           onSelectMealByName={(name) => {
             const found = menuItems.find((m) =>
               m.name.toLowerCase().includes(name.toLowerCase()) ||
@@ -1493,6 +1583,8 @@ export default function App() {
         <DeliverySection
           language={language}
           siteSettings={siteSettings}
+          isExpanded={expandedSections['delivery']}
+          onToggleExpand={() => toggleSection('delivery')}
         />
       </main>
 

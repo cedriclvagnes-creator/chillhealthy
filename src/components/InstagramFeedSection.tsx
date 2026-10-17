@@ -12,7 +12,9 @@ import {
   Heart, 
   Camera, 
   Gift, 
-  ArrowUpRight 
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
@@ -21,11 +23,15 @@ interface InstagramFeedSectionProps {
   language: Language;
   siteSettings: SiteSettings;
   onSelectMealByName?: (mealName: string) => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
   language,
   siteSettings,
+  isExpanded = true,
+  onToggleExpand,
 }) => {
   const [copiedLink, setCopiedLink] = useState<'ig' | 'fb' | null>(null);
 
@@ -47,16 +53,78 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
 
   const isEn = language === 'en';
 
+  if (!isExpanded) {
+    return (
+      <section id="instagram" className="py-6 sm:py-8 bg-stone-100/80 border-b border-stone-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border border-stone-200 shadow-xs hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isEn ? 'Official Social Media' : '官方社交媒体'}</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-heading font-extrabold text-stone-900 tracking-tight">
+                {isEn ? 'Follow Us on Facebook & Instagram (@chillhealthybox)' : '关注我们的 Facebook 与 Instagram（@chillhealthybox）'}
+              </h3>
+              <p className="text-xs text-stone-600">
+                {isEn
+                  ? 'Daily kitchen prep, customer reviews, reels, seasonal specials, and member perks.'
+                  : '第一时间获取每日低温慢煮实况、招牌轻食新品、专属会员福利与真实顾客晒单。'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600 pt-1">
+                <span className="inline-flex items-center gap-1 bg-pink-50 text-pink-700 px-2.5 py-0.5 rounded-md font-bold">
+                  <Instagram className="w-3 h-3" />
+                  <span>{instagramHandle}</span>
+                </span>
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md font-bold">
+                  <Facebook className="w-3 h-3" />
+                  <span>chillhealthy88</span>
+                </span>
+                <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md font-medium text-[11px]">
+                  🎁 {isEn ? 'Tag us for follower perk' : '打卡标记送专属好礼'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white font-heading font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0 cursor-pointer w-full md:w-auto justify-center"
+            >
+              <span>{isEn ? 'View Social Reels & Reviews' : '展开查看社群打卡与好评'}</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="instagram" className="py-16 sm:py-20 bg-stone-100/80 border-b border-stone-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold mb-3 border border-emerald-200 shadow-2xs">
+        {/* Top Bar with Section Badge & Collapse Button */}
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
             <span>{isEn ? 'Official Social Media' : '官方社交媒体'}</span>
           </div>
+
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-stone-200 text-stone-700 border border-stone-200 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span>{isEn ? 'Collapse Social' : '收起社群'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Section Header */}
+        <div className="text-center max-w-2xl mx-auto mb-12">
           <h2 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-stone-900 tracking-tight">
             {isEn ? 'Follow Us on Facebook & Instagram' : '关注我们的 Facebook 与 Instagram'}
           </h2>
@@ -296,6 +364,18 @@ export const InstagramFeedSection: React.FC<InstagramFeedSectionProps> = ({
           </a>
         </div>
 
+        {onToggleExpand && (
+          <div className="mt-10 text-center">
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-stone-200 text-stone-700 border border-stone-200 font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              <ChevronUp className="w-4 h-4 text-stone-500" />
+              <span>{isEn ? 'Show Less (Collapse Social)' : '收起社群'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

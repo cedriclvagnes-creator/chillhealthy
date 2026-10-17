@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle, Instagram, Edit3 } from 'lucide-react';
+import { Heart, Sparkles, ShieldCheck, Flame, Leaf, AlertTriangle, CheckCircle, MessageCircle, Instagram, Edit3, ChevronDown, ChevronUp } from 'lucide-react';
 import { Language, SiteSettings, HomepageContent } from '../types';
 import { CraftedWithCarePhoto } from './CraftedWithCarePhoto';
 
@@ -9,6 +9,8 @@ interface BrandStorySectionProps {
   content?: HomepageContent;
   isEditMode?: boolean;
   onEditStory?: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
@@ -17,6 +19,8 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
   content,
   isEditMode = false,
   onEditStory,
+  isExpanded = true,
+  onToggleExpand,
 }) => {
   const storyTag = content
     ? (language === 'en' ? content.storyTagEn : content.storyTagZh)
@@ -36,13 +40,51 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
         ? 'Most people give up on diets not because of lack of willpower, but because traditional diet food is dry, tasteless, and exhausting to maintain. At CHILL Healthy, we combine modern sous-vide culinary science with authentic Asian home-cooking flavors so you can eat clean consistently without feeling deprived.'
         : '绝大多数人减脂失败，不是毅力不足，而是传统减脂餐太难下咽！CHILL Healthy 潮轻食突破传统束缚，将法式低温慢煮工艺与南洋风味巧妙结合，坚持0味精、低盐低油，让每天的健康午餐成为期待已久的生活享受。');
 
+  if (!isExpanded) {
+    return (
+      <section id="story" className="py-6 sm:py-8 bg-stone-50 border-b border-stone-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border border-stone-200 shadow-xs hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#3b6026]/10 text-[#3b6026] text-xs font-bold uppercase tracking-wider">
+                <Leaf className="w-3.5 h-3.5" />
+                <span>{storyTag}</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-heading font-extrabold text-stone-900 tracking-tight">
+                {storyHeadline}
+              </h3>
+              <p className="text-xs text-stone-600 line-clamp-2">
+                {storyDescription}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-500 pt-1">
+                <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md font-bold">✓ 65°C 低温真空慢煮</span>
+                <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md font-bold">✓ 0% 味精与纯正冷榨油</span>
+                <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md font-bold">✓ 优质复合慢碳</span>
+                <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md font-bold">✓ 清晨5点鲜做</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-heading font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0 cursor-pointer w-full md:w-auto justify-center"
+            >
+              <span>{language === 'en' ? 'Read Full Brand Story' : '展开了解品牌故事与慢煮工艺'}</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="story" className={`py-16 sm:py-20 bg-stone-50 border-b relative ${
       isEditMode ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-stone-200'
     }`}>
-      {/* Edit Story Button */}
-      {isEditMode && onEditStory && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6">
+      {/* Top Bar with Section Badge & Collapse Button */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-6 flex items-center justify-between">
+        {isEditMode && onEditStory ? (
           <button
             type="button"
             onClick={onEditStory}
@@ -51,8 +93,24 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
             <Edit3 className="w-4 h-4" />
             <span>{language === 'en' ? 'Edit Brand Story & Kitchen Photo' : '编辑品牌故事与厨房照片'}</span>
           </button>
-        </div>
-      )}
+        ) : (
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#3b6026]/10 text-[#3b6026] text-xs font-bold uppercase tracking-wider">
+            <Leaf className="w-3.5 h-3.5" />
+            <span>{storyTag}</span>
+          </div>
+        )}
+
+        {onToggleExpand && (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-stone-200 text-stone-700 border border-stone-200 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Collapse Story' : '收起故事'}</span>
+          </button>
+        )}
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -192,6 +250,19 @@ export const BrandStorySection: React.FC<BrandStorySectionProps> = ({
             </div>
           </div>
         </div>
+
+        {onToggleExpand && (
+          <div className="mt-10 text-center">
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-stone-200 text-stone-700 border border-stone-200 font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              <ChevronUp className="w-4 h-4 text-stone-500" />
+              <span>{language === 'en' ? 'Show Less (Collapse Story)' : '收起品牌故事'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Plus, Sparkles, Flame, Dumbbell, ShieldCheck, Heart, Info, Edit3, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, Plus, Sparkles, Flame, Dumbbell, ShieldCheck, Heart, Info, Edit3, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { MealItem, Language, Category, CartItem } from '../types';
 import { MEAL_ITEMS } from '../data/menuData';
 
@@ -24,6 +24,8 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isMenuExpanded, setIsMenuExpanded] = useState(false);
+  const INITIAL_COUNT = 6;
 
   const categories: { id: Category; labelEn: string; labelZh: string }[] = [
     { id: 'all', labelEn: 'All Dishes', labelZh: '全部餐点' },
@@ -50,6 +52,12 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
       return matchesCategory && matchesSearch;
     });
   }, [selectedCategory, searchQuery, menuItems]);
+
+  // When filtering or searching, show all matches; when viewing all dishes without search, limit to initial count unless expanded
+  const isFiltering = selectedCategory !== 'all' || Boolean(searchQuery.trim());
+  const shouldLimit = !isFiltering && !isMenuExpanded && filteredMeals.length > INITIAL_COUNT;
+  const displayedMeals = shouldLimit ? filteredMeals.slice(0, INITIAL_COUNT) : filteredMeals;
+  const hasMoreMeals = !isFiltering && filteredMeals.length > INITIAL_COUNT;
 
   return (
     <section id="menu" className="py-16 sm:py-20 bg-stone-50 border-b border-stone-200/70">
@@ -136,7 +144,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {filteredMeals.map((meal) => (
+            {displayedMeals.map((meal) => (
               <div
                 key={meal.id}
                 id={`meal-card-${meal.id}`}
@@ -327,6 +335,41 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* View More / Show Less Menu Dishes Toggle */}
+        {hasMoreMeals && (
+          <div className="mt-10 text-center flex flex-col sm:flex-row items-center justify-center gap-3">
+            {!isMenuExpanded ? (
+              <button
+                type="button"
+                onClick={() => setIsMenuExpanded(true)}
+                className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-bold text-sm shadow-md hover:shadow-lg hover:shadow-emerald-900/10 active:scale-98 transition-all cursor-pointer group"
+              >
+                <span>
+                  {language === 'en'
+                    ? `View All Bento Dishes (+${filteredMeals.length - INITIAL_COUNT} More)`
+                    : `查看更多餐品 (还有 ${filteredMeals.length - INITIAL_COUNT} 道招牌便当)`}
+                </span>
+                <ChevronDown className="w-4 h-4 text-emerald-200 group-hover:translate-y-0.5 transition-transform" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuExpanded(false);
+                  const el = document.getElementById('menu');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              >
+                <span>{language === 'en' ? 'Show Less (Collapse Menu)' : '收起餐品 (显示精选6款)'}</span>
+                <ChevronUp className="w-4 h-4 text-stone-500" />
+              </button>
+            )}
           </div>
         )}
       </div>

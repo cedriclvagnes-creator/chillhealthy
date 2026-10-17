@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, Truck, MessageCircle, Calendar, ShieldCheck, HeartPulse, ExternalLink, Sparkles } from 'lucide-react';
+import { CheckCircle2, Clock, Truck, MessageCircle, Calendar, ShieldCheck, HeartPulse, ExternalLink, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { buildWhatsAppUrl, OFFICIAL_WA_DISPLAY } from '../utils/whatsapp';
 
@@ -8,6 +8,8 @@ interface OrderGuideSectionProps {
   siteSettings: SiteSettings;
   onSelectPlansClick: () => void;
   onOpenMemberPortal: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
 export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
@@ -15,6 +17,8 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
   siteSettings,
   onSelectPlansClick,
   onOpenMemberPortal,
+  isExpanded = true,
+  onToggleExpand,
 }) => {
   const isEn = language === 'en';
   const whatsappDisplay = siteSettings.whatsappDisplay || OFFICIAL_WA_DISPLAY;
@@ -25,15 +29,65 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
 
   const whatsappUrl = buildWhatsAppUrl(siteSettings.whatsappNumber, defaultMsg);
 
+  if (!isExpanded) {
+    return (
+      <section id="order-guide" className="py-6 sm:py-8 bg-gradient-to-b from-stone-50 via-emerald-50/25 to-white border-y border-stone-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border border-emerald-200/80 shadow-xs hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-2 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold tracking-wide">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isEn ? '📣 Confirm Order & How It Works' : '📣 订单确认流程 · 3步指南'}</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-heading font-extrabold text-stone-900 tracking-tight">
+                {isEn ? 'Thank you for choosing Chill Healthy! 3-Step Guide' : '感谢您下单【潮轻食健康配套】· 3步轻松开启规律控卡'}
+              </h3>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+                <span className="bg-stone-100 px-2.5 py-1 rounded-lg font-medium">1. {isEn ? 'Choose Plan' : '选购配套'}</span>
+                <span className="text-stone-300">➔</span>
+                <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg font-medium">2. {isEn ? 'WhatsApp Payment Slip' : '发送付款凭单'}</span>
+                <span className="text-stone-300">➔</span>
+                <span className="bg-sky-50 text-sky-800 px-2.5 py-1 rounded-lg font-medium">3. {isEn ? 'Member Portal Daily Booking' : '会员系统每日订餐'}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-heading font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-95 shrink-0 cursor-pointer w-full md:w-auto justify-center"
+            >
+              <span>{isEn ? 'View Complete Guide (3 Steps)' : '展开查看完整订餐指南'}</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="order-guide" className="py-16 bg-gradient-to-b from-stone-50 via-emerald-50/25 to-white border-y border-stone-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Banner Header */}
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-sm font-semibold tracking-wide mb-4 shadow-xs">
-            <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-            <span>{isEn ? '📣 Confirm Order & How It Works' : '📣 Confirm Order｜订单确认与订餐流程'}</span>
+        {/* Banner Header with Top Collapse Toggle */}
+        <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{isEn ? '📣 Order & Confirmation Guide' : '📣 订单确认与订餐流程'}</span>
           </div>
+
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span>{isEn ? 'Collapse Guide' : '收起指南'}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-stone-900 tracking-tight">
             {isEn ? 'Thank you for choosing Chill Healthy!' : '感谢您下单我们的【潮轻食健康配套】❤️'}
           </h2>
@@ -283,6 +337,19 @@ export const OrderGuideSection: React.FC<OrderGuideSectionProps> = ({
             </div>
           </div>
         </div>
+
+        {onToggleExpand && (
+          <div className="mt-10 text-center">
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 font-bold text-xs shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+            >
+              <ChevronUp className="w-4 h-4 text-stone-500" />
+              <span>{isEn ? 'Show Less (Collapse Guide)' : '收起订餐指南'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
