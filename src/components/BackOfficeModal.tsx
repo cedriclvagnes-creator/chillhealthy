@@ -5675,13 +5675,32 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         PACKAGE SUBSCRIPTIONS & SIGN-UP ORDERS (AWAITING ADMIN CONFIRMATION)
                         ========================================================= */}
                     {(() => {
-                      const packageSubOrders = redemptions.filter((r) => r.orderType === 'Package Subscription');
-                      const unconfirmedMembersList = members.filter((m) => m.activePackage && m.activePackage.adminConfirmed === false);
+                      const pendingPackageOrders = redemptions.filter((r) => {
+                        if (r.orderType !== 'Package Subscription') return false;
+                        if (r.adminConfirmed === true) return false;
+                        const cleanRPhone = (r.memberPhone || '').replace(/\D/g, '');
+                        const matched = members.find(
+                          (m) =>
+                            (cleanRPhone && (m.phone || '').replace(/\D/g, '') === cleanRPhone) ||
+                            m.id === r.memberId
+                        );
+                        if (matched?.activePackage?.adminConfirmed === true) return false;
+                        return true;
+                      });
+
+                      const unconfirmedMembersList = members.filter(
+                        (m) => m.activePackage && m.activePackage.adminConfirmed === false
+                      );
 
                       const combinedPending = [
-                        ...packageSubOrders,
+                        ...pendingPackageOrders,
                         ...unconfirmedMembersList
-                          .filter((m) => !packageSubOrders.some((p) => p.memberPhone.replace(/\D/g, '') === m.phone.replace(/\D/g, '')))
+                          .filter((m) => {
+                            const cleanMPhone = (m.phone || '').replace(/\D/g, '');
+                            return !pendingPackageOrders.some(
+                              (p) => cleanMPhone && (p.memberPhone || '').replace(/\D/g, '') === cleanMPhone
+                            );
+                          })
                           .map((m) => ({
                             id: `sub-${m.phone}`,
                             orderNumber: m.activePackage?.signupOrderNo || 'CH-261007-6834',
@@ -5706,7 +5725,36 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           })),
                       ];
 
-                      if (combinedPending.length === 0) return null;
+                      if (combinedPending.length === 0) {
+                        return (
+                          <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 p-5 rounded-3xl border-2 border-emerald-400 shadow-sm space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs shrink-0">
+                                  <CheckCircle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-heading font-black text-stone-950 text-base">
+                                      {language === 'en'
+                                        ? 'Package Subscriptions & Sign-Up Orders Awaiting Admin Confirmation'
+                                        : '会员订购配套 / 套餐订阅开通申请 (待后台管理员确认)'}
+                                    </h4>
+                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      {language === 'en' ? 'All Confirmed ✓' : '全部已确认开通 ✓'}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-stone-600 mt-0.5">
+                                    {language === 'en'
+                                      ? 'All customer package subscriptions have been confirmed. Confirmed customers are automatically removed from this awaiting list and activated at the customer redeem portal.'
+                                      : '所有顾客套餐订购均已审核确认开通！已确认客户已从此待办列表自动移除，并已在会员兑换前台全权开通选餐。'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-emerald-500/10 p-5 rounded-3xl border-2 border-amber-400 shadow-md space-y-4">
@@ -5723,13 +5771,13 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                       : '会员订购配套 / 套餐订阅开通申请 (待后台管理员确认)'}
                                   </h4>
                                   <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-400 text-stone-950 animate-pulse border border-amber-500">
-                                    {combinedPending.filter((p) => !p.adminConfirmed).length} {language === 'en' ? 'Pending' : '待确认'}
+                                    {combinedPending.length} {language === 'en' ? 'Awaiting Confirmation' : '待确认'}
                                   </span>
                                 </div>
                                 <p className="text-xs text-stone-600 mt-0.5">
                                   {language === 'en'
-                                    ? 'Package subscriptions do not appear in Redeem Meal. Confirm here to allow customer to redeem meals.'
-                                    : '会员订购配套不显示在每日选餐，而显示在此供管理员确认开通。确认后顾客即可在会员端进行每日选餐。'}
+                                    ? 'Confirm customer packages here. Once confirmed, they are immediately removed from this queue and unlocked at the customer redeem portal.'
+                                    : '在此确认开通会员配套。确认后将立即从本待办列表移除，并在前台顾客选餐界面同步生效！'}
                                 </p>
                               </div>
                             </div>
@@ -5738,20 +5786,40 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {combinedPending.map((pkgOrder) => {
                               const orderNo = pkgOrder.orderNumber || 'CH-261007-6834';
+                              const cleanPkgPhone = (pkgOrder.memberPhone || '').replace(/\D/g, '');
                               const matchedMember = members.find(
-                                (m) => m.phone.replace(/\D/g, '') === pkgOrder.memberPhone.replace(/\D/g, '') || m.id === pkgOrder.memberId
+                                (m) => (cleanPkgPhone && (m.phone || '').replace(/\D/g, '') === cleanPkgPhone) || m.id === pkgOrder.memberId
                               );
-                              const isConfirmed = pkgOrder.adminConfirmed || (matchedMember?.activePackage?.adminConfirmed === true);
 
                               const handleConfirmPackage = () => {
-                                if (matchedMember && onUpdateMemberAccount) {
+                                const memberToUpdate = matchedMember || members.find(
+                                  (m) => (cleanPkgPhone && (m.phone || '').replace(/\D/g, '') === cleanPkgPhone) || m.id === pkgOrder.memberId
+                                );
+
+                                if (memberToUpdate && onUpdateMemberAccount) {
                                   const updated = {
-                                    ...matchedMember,
-                                    activePackage: matchedMember.activePackage ? {
-                                      ...matchedMember.activePackage,
+                                    ...memberToUpdate,
+                                    activePackage: memberToUpdate.activePackage ? {
+                                      ...memberToUpdate.activePackage,
                                       adminConfirmed: true,
                                       adminConfirmedAt: new Date().toISOString(),
-                                    } : null,
+                                    } : {
+                                      planId: pkgOrder.mealId || 'duo-2-person',
+                                      planName: pkgOrder.mealName || '2-Person Duo Meal Plan',
+                                      planNameZh: pkgOrder.mealNameZh || '双人餐食配套',
+                                      totalMeals: 20,
+                                      remainingMeals: 20,
+                                      purchasedDate: pkgOrder.deliveryDate || getTodayStr(),
+                                      expiryDate: '',
+                                      validityDays: 30,
+                                      isActivated: false,
+                                      adminConfirmed: true,
+                                      adminConfirmedAt: new Date().toISOString(),
+                                      signupOrderNo: orderNo,
+                                      deliverySlot: pkgOrder.deliverySlot || 'Lunch (10:00 AM – 2:00 PM)',
+                                      isBurned: false,
+                                      price: 398,
+                                    },
                                   };
                                   onUpdateMemberAccount(updated);
                                 }
@@ -5764,8 +5832,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 }
                                 triggerToast(
                                   language === 'en'
-                                    ? `✓ Confirmed Order #${orderNo}! ${pkgOrder.memberName} is now allowed to redeem meals.`
-                                    : `✓ 已确认开通订单 #${orderNo}！已允许客户 ${pkgOrder.memberName} 兑换餐食。`
+                                    ? `✓ Confirmed Order #${orderNo}! Removed from awaiting list; ${pkgOrder.memberName} can now redeem meals.`
+                                    : `✓ 已确认开通订单 #${orderNo}！已从待确认列表移除，客户 ${pkgOrder.memberName} 现已可在前台选餐。`
                                 );
                               };
 
@@ -5782,11 +5850,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                               return (
                                 <div
                                   key={pkgOrder.id || orderNo}
-                                  className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between space-y-3.5 shadow-sm ${
-                                    isConfirmed
-                                      ? 'bg-emerald-50/70 border-emerald-300'
-                                      : 'bg-white border-amber-300 ring-2 ring-amber-400/20'
-                                  }`}
+                                  className="p-4 rounded-3xl border-2 transition-all flex flex-col justify-between space-y-3.5 shadow-sm bg-white border-amber-300 ring-2 ring-amber-400/20"
                                 >
                                   <div className="space-y-2.5">
                                     {/* Header: Plan Name, Order No & Badges */}
@@ -5825,22 +5889,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 border border-purple-200">
                                           Package Subscription
                                         </span>
-                                        {isConfirmed ? (
-                                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                                            <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                            <span>Admin Confirmed ✓</span>
-                                          </span>
-                                        ) : pkgOrder.autoReplySent ? (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 flex items-center gap-1">
-                                            <CheckCircle className="w-3 h-3 text-sky-600" />
-                                            <span>WA Auto-Reply Sent</span>
-                                          </span>
-                                        ) : (
-                                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                                            <Clock className="w-3 h-3 text-amber-700 animate-spin" />
-                                            <span>WA Auto-Reply Pending</span>
-                                          </span>
-                                        )}
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                          <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                                          <span>Awaiting Admin Confirmation</span>
+                                        </span>
                                       </div>
                                     </div>
 
@@ -5881,29 +5933,18 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
                                   {/* Action Controls: Confirmation Button */}
                                   <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-100">
-                                    {!isConfirmed ? (
-                                      <button
-                                        type="button"
-                                        onClick={handleConfirmPackage}
-                                        className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
-                                      >
-                                        <CheckCircle className="w-4 h-4" />
-                                        <span>
-                                          {language === 'en'
-                                            ? 'Confirm & Allow Customer to Redeem Meal'
-                                            : '确认开通配套 (允许顾客选餐)'}
-                                        </span>
-                                      </button>
-                                    ) : (
-                                      <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-100 text-emerald-900 font-extrabold text-xs flex items-center justify-center gap-1.5 border border-emerald-300">
-                                        <CheckCircle className="w-4 h-4 text-emerald-700" />
-                                        <span>
-                                          {language === 'en'
-                                            ? 'Package Confirmed · Meal Redemption Active'
-                                            : '配套已确认开通 · 顾客可随时选餐'}
-                                        </span>
-                                      </div>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={handleConfirmPackage}
+                                      className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      <span>
+                                        {language === 'en'
+                                          ? 'Confirm & Allow Customer to Redeem Meal'
+                                          : '确认开通配套 (从待办移除并允许顾客选餐)'}
+                                      </span>
+                                    </button>
 
                                     <a
                                       href={`https://wa.me/60${pkgOrder.memberPhone.replace(/\D/g, '').replace(/^(60|0)/, '')}?text=${customerWaText}`}

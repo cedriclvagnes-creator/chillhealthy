@@ -2107,9 +2107,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             </>
                           ) : isPendingActivation ? (
                             <>
-                              <span className="text-[11px] text-sky-400 font-extrabold flex items-center gap-1">
-                                <span>⏳ {language === 'en' ? 'Status: Pending First Meal Order' : '状态：等待首餐预订激活'}</span>
-                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] bg-emerald-500 text-stone-950 font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                  <span>✓ {language === 'en' ? 'Admin Confirmed & Active' : '后台管理员已确认开通'}</span>
+                                </span>
+                                <span className="text-[10px] text-sky-300 font-extrabold flex items-center gap-1">
+                                  <span>⏳ {language === 'en' ? 'Pending 1st Meal Order' : '等待首餐选日激活'}</span>
+                                </span>
+                              </div>
                               <span className="text-[10px] text-stone-300 block">
                                 {language === 'en'
                                   ? `• Validity standard: ${vDays} Mon–Fri weekdays (${vDays === 30 ? '20 meals' : vDays === 15 ? '10 meals' : '5 meals'})`
@@ -2384,6 +2389,42 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                   </div>
                 ) : (
                   <>
+                    {/* Confirmed Banner at Customer Redeem Portal */}
+                    {currentMember?.activePackage && (
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-2 border-emerald-400 text-stone-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
+                            <CheckCircle className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-black text-emerald-950">
+                                {language === 'en' ? 'Package Confirmed by Admin · Redeem Active' : '餐食配套已获后台管理员审核确认 · 选餐已开通'}
+                              </span>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-700 text-white shadow-2xs">
+                                CONFIRMED ✓
+                              </span>
+                            </div>
+                            <p className="text-xs text-stone-600 mt-0.5">
+                              {language === 'en'
+                                ? `Your ${currentMember.activePackage.planName} has been confirmed. Select your delivery slot, address, and delicious bento below!`
+                                : `您的【${currentMember.activePackage.planNameZh || currentMember.activePackage.planName}】已由管理员在后台确认开通！请在下方选择配送时间、送餐地址与心仪菜品进行选餐。`}
+                            </p>
+                          </div>
+                        </div>
+                        {currentMember.activePackage.signupOrderNo && (
+                          <div className="text-right shrink-0 self-start sm:self-auto">
+                            <span className="text-[10px] font-bold text-stone-400 block uppercase">
+                              {language === 'en' ? 'Package Order' : '配套单号'}
+                            </span>
+                            <span className="font-mono text-xs font-black bg-white px-2.5 py-1 rounded-xl border border-emerald-300 text-emerald-900 inline-block mt-0.5">
+                              #{currentMember.activePackage.signupOrderNo}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   {/* LEFT COLUMN: Delivery Settings & Order Form (4-5 cols on desktop) */}
                   <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:sticky lg:top-4">

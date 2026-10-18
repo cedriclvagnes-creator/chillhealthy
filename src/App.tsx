@@ -1057,10 +1057,21 @@ export default function App() {
   };
 
   const handleUpdateMemberAccount = (updatedMember: MemberAccount) => {
+    const cleanUpdatedPhone = (updatedMember.phone || '').replace(/\D/g, '');
     setMembers((prev) =>
-      prev.map((m) => (m.id === updatedMember.id ? updatedMember : m))
+      prev.map((m) => {
+        const cleanMPhone = (m.phone || '').replace(/\D/g, '');
+        if (m.id === updatedMember.id || (cleanUpdatedPhone && cleanMPhone && cleanMPhone === cleanUpdatedPhone)) {
+          return updatedMember;
+        }
+        return m;
+      })
     );
-    if (currentMember?.id === updatedMember.id) {
+    if (
+      currentMember &&
+      (currentMember.id === updatedMember.id ||
+        (cleanUpdatedPhone && (currentMember.phone || '').replace(/\D/g, '') === cleanUpdatedPhone))
+    ) {
       setCurrentMember(updatedMember);
     }
   };

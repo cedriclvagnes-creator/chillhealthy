@@ -486,9 +486,13 @@ export const ThermalStickerPrintModal: React.FC<ThermalStickerPrintModalProps> =
                       <div className="text-[8px] font-bold text-stone-600 mt-1">
                         SPEC: 0 MSG · High Protein · Warm Chef-Sealed Bento
                       </div>
-                      {red.dietaryNotes && (
+                      {red.dietaryNotes ? (
                         <div className="text-[9px] font-black text-red-700 bg-red-50 p-1 rounded border border-red-200 mt-1">
                           ⚠️ NOTE: {red.dietaryNotes}
+                        </div>
+                      ) : (
+                        <div className="text-[8px] font-medium text-stone-500 bg-stone-100 p-1 rounded border border-stone-200 mt-1">
+                          NOTE: Standard Asian Flavor Recipe (No Special Customization)
                         </div>
                       )}
                     </div>
@@ -515,16 +519,18 @@ export const ThermalStickerPrintModal: React.FC<ThermalStickerPrintModalProps> =
                       </div>
                     </div>
 
-                    {/* 7. Verification Checklist & Central Hub Footer */}
-                    <div className="border-t border-black pt-1 text-[8px] space-y-0.5">
+                    {/* 7. Verification Checklist & Central Hub Footer (Clear 3-Row Layout) */}
+                    <div className="border-t border-black pt-1 text-[8px] space-y-1">
                       <div className="flex items-center justify-between font-bold">
-                        <span>[  ] Weighed</span>
-                        <span>[  ] Sealed</span>
-                        <span>[  ] Dispatched</span>
+                        <span>[  ] Prepared & Weighed</span>
+                        <span>[  ] Heat-Sealed</span>
+                        <span>[  ] Handed to Rider</span>
                       </div>
-                      <div className="flex items-center justify-between text-stone-600 pt-0.5">
-                        <span>Hub Hotline: {siteSettings.whatsappDisplay || '+60126189919'}</span>
-                        <span className="font-mono text-[7.5px]">Sorted: Name (A-Z)</span>
+                      <div className="text-center text-stone-600 font-bold text-[7.5px]">
+                        Klang & Selangor Delivery Hub · Kitchen Hotline: {siteSettings.whatsappDisplay || '+60126189919'}
+                      </div>
+                      <div className="text-center text-stone-500 font-mono text-[7px]">
+                        Printed: {new Date().toISOString().replace('T', ' ').substring(0, 16)} · Alphabetical Sort (Customer Name A-Z)
                       </div>
                     </div>
                   </div>
