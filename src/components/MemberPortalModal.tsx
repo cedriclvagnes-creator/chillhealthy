@@ -324,8 +324,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const upcomingWorkdays = useMemo(() => getUpcomingWorkdays(5), []);
   const [batchSchedule, setBatchSchedule] = useState<{ [date: string]: string }>({});
 
-  // Active Package Expiry, First Meal Activation & Admin Special Case Evaluation
-  const activePkg = currentMember?.activePackage;
+  // Active Member & Package lookup ensures real-time sync with admin confirmations
+  const memberPhoneClean = (currentMember?.phone || '').replace(/\D/g, '');
+  const effectiveMember =
+    members.find(
+      (m) =>
+        m.id === currentMember?.id ||
+        (memberPhoneClean && (m.phone || '').replace(/\D/g, '') === memberPhoneClean)
+    ) || currentMember;
+  const activePkg = effectiveMember?.activePackage;
   const expInfo = useMemo(() => {
     if (!activePkg) return null;
     return getEffectivePackageExpiry(activePkg, siteSettings.disabledDeliveryDates || []);
@@ -1076,7 +1083,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     setBatchSchedule(updated);
   };
 
-  const memberRedemptions = allRedemptions.filter((r) => r.memberId === currentMember?.id);
+  const memberRedemptions = allRedemptions.filter((r) => {
+    if (!currentMember) return false;
+    if (r.memberId === currentMember.id) return true;
+    const rPhoneClean = (r.memberPhone || '').replace(/\D/g, '');
+    if (memberPhoneClean && rPhoneClean && memberPhoneClean === rPhoneClean) return true;
+    if (r.memberId && memberPhoneClean && r.memberId.replace(/\D/g, '') === memberPhoneClean) return true;
+    return false;
+  });
   const selectedMealObj = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
 
   const targetPhone = siteSettings.whatsappNumber.replace(/\D/g, '') || '0126189919';
@@ -2069,20 +2083,20 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       {language === 'en' ? 'Active Meal Package' : '当前生效配套'}
                     </span>
                     <p className="font-heading font-extrabold text-white text-sm sm:text-base">
-                      {currentMember.activePackage
+                      {activePkg
                         ? language === 'en'
-                          ? currentMember.activePackage.planName
-                          : currentMember.activePackage.planNameZh
+                          ? activePkg.planName
+                          : activePkg.planNameZh
                         : language === 'en'
                         ? 'No Active Package'
                         : '暂无生效配套'}
                     </p>
-                    {currentMember.activePackage && (() => {
-                      const isPendingAdminConfirmation = currentMember.activePackage.adminConfirmed === false;
-                      const expInfo = getEffectivePackageExpiry(currentMember.activePackage, siteSettings.disabledDeliveryDates || []);
-                      const vDays = expInfo.validityDays || getPlanValidityDays(currentMember.activePackage.planId);
-                      const isPendingActivation = !currentMember.activePackage.isActivated || !currentMember.activePackage.firstRedeemedDate;
-                      const hasSpecialCase = Boolean(currentMember.activePackage.specialCaseExtension);
+                    {activePkg && (() => {
+                      const isPendingAdminConfirmation = activePkg.adminConfirmed === false;
+                      const expInfo = getEffectivePackageExpiry(activePkg, siteSettings.disabledDeliveryDates || []);
+                      const vDays = expInfo.validityDays || getPlanValidityDays(activePkg.planId);
+                      const isPendingActivation = !activePkg.isActivated || !activePkg.firstRedeemedDate;
+                      const hasSpecialCase = Boolean(activePkg.specialCaseExtension);
                       const isPackExpired = Boolean(expInfo.isExpired && !hasSpecialCase);
 
                       return (
@@ -2329,7 +2343,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 )}
 
                 {/* Gate: If Package Subscription is Pending Confirmation by Admin at Back End Office */}
-                {currentMember?.activePackage && currentMember.activePackage.adminConfirmed === false ? (
+                {activePkg && activePkg.adminConfirmed === false ? (
                   <div className="max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-400 shadow-xl text-center space-y-4 animate-in fade-in">
                     <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
                       <Clock className="w-8 h-8 animate-pulse" />
@@ -2348,21 +2362,21 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <div className="flex justify-between items-center text-stone-600">
                         <span>{language === 'en' ? 'Order Number:' : '配套订单编号：'}</span>
                         <span className="font-mono font-black text-stone-900 bg-stone-200/70 px-2 py-0.5 rounded">
-                          #{currentMember.activePackage.signupOrderNo || 'CH-261007-6834'}
+                          #{activePkg.signupOrderNo || 'CH-261007-6834'}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-stone-600">
                         <span>{language === 'en' ? 'Subscribed Package:' : '已订购配套：'}</span>
-                        <span className="font-bold text-emerald-800">{currentMember.activePackage.planName}</span>
+                        <span className="font-bold text-emerald-800">{activePkg.planName}</span>
                       </div>
                       <div className="flex justify-between items-center text-stone-600">
                         <span>{language === 'en' ? 'Customer Details:' : '会员信息：'}</span>
-                        <span className="font-medium text-stone-800">{currentMember.name} · {currentMember.phone}</span>
+                        <span className="font-medium text-stone-800">{effectiveMember.name} · {effectiveMember.phone}</span>
                       </div>
                       <div className="flex justify-between items-center text-stone-600">
                         <span>{language === 'en' ? 'Delivery Address 1:' : '送餐地址一：'}</span>
                         <span className="font-medium text-stone-800 truncate max-w-[280px]">
-                          {currentMember.address}, {currentMember.area} ({currentMember.postalCode})
+                          {effectiveMember.address}, {effectiveMember.area} ({effectiveMember.postalCode})
                         </span>
                       </div>
                     </div>
@@ -2376,7 +2390,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                       <a
                         href={`https://wa.me/60126189919?text=${encodeURIComponent(
-                          `Hi CHILL Healthy! 👋 I have placed a package subscription order #${currentMember.activePackage.signupOrderNo || 'CH-261007-6834'} for ${currentMember.name} (${currentMember.phone}) - ${currentMember.activePackage.planName}. Please help confirm my package at the backend page so I can redeem meals. Thank you!`
+                          `Hi CHILL Healthy! 👋 I have placed a package subscription order #${activePkg.signupOrderNo || 'CH-261007-6834'} for ${effectiveMember.name} (${effectiveMember.phone}) - ${activePkg.planName}. Please help confirm my package at the backend page so I can redeem meals. Thank you!`
                         )}`}
                         target="_blank"
                         rel="noopener noreferrer"
@@ -2390,7 +2404,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                 ) : (
                   <>
                     {/* Confirmed Banner at Customer Redeem Portal */}
-                    {currentMember?.activePackage && (
+                    {activePkg && (
                       <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-2 border-emerald-400 text-stone-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
@@ -2407,18 +2421,18 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             </div>
                             <p className="text-xs text-stone-600 mt-0.5">
                               {language === 'en'
-                                ? `Your ${currentMember.activePackage.planName} has been confirmed. Select your delivery slot, address, and delicious bento below!`
-                                : `您的【${currentMember.activePackage.planNameZh || currentMember.activePackage.planName}】已由管理员在后台确认开通！请在下方选择配送时间、送餐地址与心仪菜品进行选餐。`}
+                                ? `Your ${activePkg.planName} has been confirmed. Select your delivery slot, address, and delicious bento below!`
+                                : `您的【${activePkg.planNameZh || activePkg.planName}】已由管理员在后台确认开通！请在下方选择配送时间、送餐地址与心仪菜品进行选餐。`}
                             </p>
                           </div>
                         </div>
-                        {currentMember.activePackage.signupOrderNo && (
+                        {activePkg.signupOrderNo && (
                           <div className="text-right shrink-0 self-start sm:self-auto">
                             <span className="text-[10px] font-bold text-stone-400 block uppercase">
                               {language === 'en' ? 'Package Order' : '配套单号'}
                             </span>
                             <span className="font-mono text-xs font-black bg-white px-2.5 py-1 rounded-xl border border-emerald-300 text-emerald-900 inline-block mt-0.5">
-                              #{currentMember.activePackage.signupOrderNo}
+                              #{activePkg.signupOrderNo}
                             </span>
                           </div>
                         )}
@@ -3508,7 +3522,20 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {memberRedemptions.map((r) => (
+                        {memberRedemptions.map((r) => {
+                          const isPkgSub =
+                            r.orderType === 'Package Subscription' ||
+                            Boolean(r.deliveryDate && r.deliveryDate.includes('Plan'));
+                          const isConfirmedByAdmin =
+                            r.adminConfirmed === true ||
+                            r.status === 'Confirmed' ||
+                            r.status === 'Delivered' ||
+                            (isPkgSub && (r.adminConfirmed === true || activePkg?.adminConfirmed === true)) ||
+                            (activePkg?.adminConfirmed === true &&
+                              (r.orderNumber === activePkg?.signupOrderNo || isPkgSub)) ||
+                            (activePkg && activePkg.adminConfirmed !== false);
+
+                          return (
                           <div
                             key={r.id}
                             className="p-4 rounded-2xl border border-stone-200 bg-white hover:border-stone-300 transition-all space-y-3 shadow-2xs"
@@ -3544,24 +3571,34 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               </div>
 
                               <div className="flex flex-col items-end gap-1 shrink-0">
-                                <span
-                                  className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
-                                    r.status === 'Delivered'
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : r.status === 'Out for Delivery'
-                                      ? 'bg-sky-100 text-sky-800 animate-pulse'
-                                      : r.status === 'Prepping in Kitchen'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'bg-stone-100 text-stone-700'
-                                  }`}
-                                >
-                                  {r.status === 'Pending' && (language === 'en' ? 'Pending' : '待制作')}
-                                  {r.status === 'Prepping in Kitchen' && (language === 'en' ? 'In Kitchen' : '厨房制作中')}
-                                  {r.status === 'Out for Delivery' && (language === 'en' ? 'Out for Delivery' : '骑手配送中')}
-                                  {r.status === 'Delivered' && (language === 'en' ? 'Delivered' : '已送达')}
-                                </span>
+                                {isConfirmedByAdmin && r.status !== 'Delivered' && r.status !== 'Out for Delivery' && r.status !== 'Prepping in Kitchen' ? (
+                                  <span className="text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                    <span>{language === 'en' ? 'Confirmed' : '已确认开通'}</span>
+                                  </span>
+                                ) : r.status === 'Prepping in Kitchen' ? (
+                                  <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                                    {language === 'en' ? 'In Kitchen' : '厨房制作中'}
+                                  </span>
+                                ) : r.status === 'Out for Delivery' ? (
+                                  <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-sky-100 text-sky-800 animate-pulse border border-sky-300">
+                                    {language === 'en' ? 'Out for Delivery' : '骑手配送中'}
+                                  </span>
+                                ) : r.status === 'Delivered' ? (
+                                  <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    {language === 'en' ? 'Delivered' : '已送达'}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                                    <span>{language === 'en' ? 'Pending Confirmation' : '待店主确认'}</span>
+                                  </span>
+                                )}
+
                                 <span className="text-[9px] px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 font-semibold border border-stone-200">
-                                  {r.recipeStandard || 'Standard Chef Recipe'}
+                                  {isPkgSub
+                                    ? (language === 'en' ? 'Package Subscription' : '套餐订购')
+                                    : (r.recipeStandard || 'Standard Chef Recipe')}
                                 </span>
                               </div>
                             </div>
@@ -3581,7 +3618,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               </a>
                             </div>
                           </div>
-                        ))}
+                        );
+                      })}
                       </div>
                     )}
                   </div>

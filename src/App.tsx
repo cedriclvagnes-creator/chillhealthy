@@ -346,6 +346,52 @@ export default function App() {
     }
   }, [cart]);
 
+  // Synchronize out-of-stock menu updates, confirmed packages, and redemptions across tabs/windows/devices in real time
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'chillhealthy_menu_v2' && e.newValue) {
+        try {
+          const parsed: MealItem[] = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMenuItems(parsed);
+            if (selectedMealForDetail) {
+              const updated = parsed.find((m) => m.id === selectedMealForDetail.id);
+              if (updated) setSelectedMealForDetail(updated);
+            }
+          }
+        } catch {}
+      }
+      if (e.key === 'chillhealthy_members' && e.newValue) {
+        try {
+          const parsed: MemberAccount[] = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setMembers(parsed);
+            if (currentMember) {
+              const cleanCurPhone = (currentMember.phone || '').replace(/\D/g, '');
+              const updated = parsed.find(
+                (m) =>
+                  m.id === currentMember.id ||
+                  (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
+              );
+              if (updated) setCurrentMember(updated);
+            }
+          }
+        } catch {}
+      }
+      if (e.key === 'chillhealthy_redemptions' && e.newValue) {
+        try {
+          const parsed: MealRedemption[] = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setRedemptions(parsed);
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [currentMember, selectedMealForDetail]);
+
   // Evaluate package expirations against current date and suspended dates
   useEffect(() => {
     const suspended = siteSettings.disabledDeliveryDates || [];
@@ -998,10 +1044,23 @@ export default function App() {
 
   const handleUpdatePackages = (newPackages: MealPlan[]) => {
     setPackages(newPackages);
+    try {
+      localStorage.setItem('chillhealthy_packages', JSON.stringify(newPackages));
+    } catch {}
   };
 
   const handleUpdateMenuItems = (newItems: MealItem[]) => {
     setMenuItems(newItems);
+    try {
+      localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(newItems));
+      window.dispatchEvent(new CustomEvent('chillhealthy_menu_updated', { detail: newItems }));
+    } catch {}
+    if (selectedMealForDetail) {
+      const updated = newItems.find((m) => m.id === selectedMealForDetail.id);
+      if (updated) {
+        setSelectedMealForDetail(updated);
+      }
+    }
   };
 
   const handleUpdateRedemptionStatus = (id: string, newStatus: MealRedemption['status']) => {
@@ -1027,7 +1086,15 @@ export default function App() {
 
   const handleUpdateRedemptionOrder = (updatedOrder: MealRedemption) => {
     setRedemptions((prev) => {
-      const next = prev.map((r) => (r.id === updatedOrder.id ? updatedOrder : r));
+      const next = prev.map((r) => {
+        if (
+          r.id === updatedOrder.id ||
+          (updatedOrder.orderNumber && r.orderNumber === updatedOrder.orderNumber)
+        ) {
+          return updatedOrder;
+        }
+        return r;
+      });
       try {
         localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
       } catch {}
@@ -1036,8 +1103,8 @@ export default function App() {
   };
 
   const handleUpdateMemberCredits = (memberId: string, deltaMeals: number) => {
-    setMembers((prev) =>
-      prev.map((m) => {
+    setMembers((prev) => {
+      const next = prev.map((m) => {
         if (m.id === memberId && m.activePackage) {
           const updated = {
             ...m,
@@ -1052,36 +1119,86 @@ export default function App() {
           return updated;
         }
         return m;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleUpdateMemberAccount = (updatedMember: MemberAccount) => {
     const cleanUpdatedPhone = (updatedMember.phone || '').replace(/\D/g, '');
-    setMembers((prev) =>
-      prev.map((m) => {
+    let resolvedMember = updatedMember;
+
+    setMembers((prev) => {
+      const next = prev.map((m) => {
         const cleanMPhone = (m.phone || '').replace(/\D/g, '');
         if (m.id === updatedMember.id || (cleanUpdatedPhone && cleanMPhone && cleanMPhone === cleanUpdatedPhone)) {
-          return updatedMember;
+          resolvedMember = { ...m, ...updatedMember };
+          return resolvedMember;
         }
         return m;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
     if (
       currentMember &&
       (currentMember.id === updatedMember.id ||
         (cleanUpdatedPhone && (currentMember.phone || '').replace(/\D/g, '') === cleanUpdatedPhone))
     ) {
-      setCurrentMember(updatedMember);
+      setCurrentMember(resolvedMember);
+    }
+
+    // When admin confirms a package, immediately synchronize and confirm all matching package subscription orders in redemptions
+    if (updatedMember.activePackage?.adminConfirmed === true) {
+      const signupNo = updatedMember.activePackage.signupOrderNo;
+      setRedemptions((prev) => {
+        const next = prev.map((r) => {
+          const rPhone = (r.memberPhone || '').replace(/\D/g, '');
+          const isMatch =
+            (signupNo && (r.orderNumber === signupNo || r.id === signupNo)) ||
+            (r.orderType === 'Package Subscription' &&
+              (r.memberId === updatedMember.id || (cleanUpdatedPhone && rPhone === cleanUpdatedPhone)));
+          if (isMatch) {
+            return {
+              ...r,
+              adminConfirmed: true,
+              status: r.status === 'Pending' ? 'Confirmed' : r.status,
+            };
+          }
+          return r;
+        });
+        try {
+          localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
     }
   };
 
   const handleAddMemberAccount = (newMember: MemberAccount) => {
-    setMembers((prev) => [newMember, ...prev]);
+    setMembers((prev) => {
+      const next = [newMember, ...prev];
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleDeleteMemberAccount = (memberId: string) => {
-    setMembers((prev) => prev.filter((m) => m.id !== memberId));
+    setMembers((prev) => {
+      const next = prev.filter((m) => m.id !== memberId);
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     if (currentMember?.id === memberId) {
       setCurrentMember(null);
     }
