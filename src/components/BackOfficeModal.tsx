@@ -272,8 +272,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [newMemTotalMeals, setNewMemTotalMeals] = useState<number>(20);
   const [newMemRemainingMeals, setNewMemRemainingMeals] = useState<number>(20);
   const [newMemAddress, setNewMemAddress] = useState('');
-  const [newMemArea, setNewMemArea] = useState('Klang');
-  const [newMemPostal, setNewMemPostal] = useState('41200');
+  const [newMemArea, setNewMemArea] = useState('');
+  const [newMemPostal, setNewMemPostal] = useState('');
   const [newMemAddress2, setNewMemAddress2] = useState('');
   const [newMemArea2, setNewMemArea2] = useState('');
   const [newMemPostal2, setNewMemPostal2] = useState('');
@@ -4175,8 +4175,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           className="w-full py-2 px-2.5 text-xs rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none cursor-pointer bg-stone-50/50"
                         >
                           <option value="all">{language === 'en' ? 'All Slots (Lunch & Dinner)' : '全部餐段 (午餐 & 晚餐)'}</option>
-                          <option value="lunch">{language === 'en' ? 'Lunch Only (11:30 AM – 1:30 PM)' : '仅午餐 (11:30 AM – 1:30 PM)'}</option>
-                          <option value="dinner">{language === 'en' ? 'Dinner Only (5:00 PM – 7:00 PM)' : '仅晚餐 (5:00 PM – 7:00 PM)'}</option>
+                          <option value="lunch">{language === 'en' ? 'Lunch Only (10:00 AM – 2:00 PM)' : '仅午餐 (10:00 AM – 2:00 PM)'}</option>
+                          <option value="dinner">{language === 'en' ? 'Dinner Only (3:00 PM – 7:00 PM)' : '仅晚餐 (3:00 PM – 7:00 PM)'}</option>
                         </select>
                       </div>
 
@@ -4680,8 +4680,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   }
                                   className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 focus:outline-none"
                                 >
-                                  <option value="Lunch (11:30 AM – 1:30 PM)">Lunch (11:30 AM – 1:30 PM)</option>
-                                  <option value="Dinner (5:00 PM – 7:00 PM)">Dinner (5:00 PM – 7:00 PM)</option>
+                                  <option value="Lunch (10:00 AM – 2:00 PM)">Lunch (10:00 AM – 2:00 PM)</option>
+                                  <option value="Dinner (3:00 PM – 7:00 PM)">Dinner (3:00 PM – 7:00 PM)</option>
                                 </select>
                               </div>
                             </div>
@@ -5520,9 +5520,9 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     phone: newMemPhone.trim(),
                     email: `${newMemPhone.trim().replace(/\D/g, '')}@chillhealthy.customer`,
                     password: newMemPassword.trim() || '123456',
-                    address: newMemAddress.trim() || 'Klang Central',
-                    area: newMemArea.trim() || 'Klang',
-                    postalCode: newMemPostal.trim() || '41200',
+                    address: newMemAddress.trim() || '',
+                    area: newMemArea.trim() || '',
+                    postalCode: newMemPostal.trim() || '',
                     address2: newMemAddress2.trim() || undefined,
                     area2: newMemArea2.trim() || undefined,
                     postalCode2: newMemPostal2.trim() || undefined,

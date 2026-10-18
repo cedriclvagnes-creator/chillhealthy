@@ -109,9 +109,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [area, setArea] = useState('Klang / Bukit Tinggi');
+  const [area, setArea] = useState('');
   const [address, setAddress] = useState('');
-  const [postalCode, setPostalCode] = useState('41200');
+  const [postalCode, setPostalCode] = useState('');
 
   // Option for customer to register and buy ala carte meal directly
   const [registerAsMember, setRegisterAsMember] = useState(true);
@@ -121,8 +121,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Address 2 (one account up to 2 addresses for Klang Valley meal plans)
   const [hasAddress2, setHasAddress2] = useState(false);
   const [address2, setAddress2] = useState('');
-  const [area2, setArea2] = useState('Klang / Bukit Tinggi');
-  const [postalCode2, setPostalCode2] = useState('41200');
+  const [area2, setArea2] = useState('');
+  const [postalCode2, setPostalCode2] = useState('');
 
   // Member Referral Code system
   const [referralCodeInput, setReferralCodeInput] = useState(() => {
@@ -254,8 +254,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !address) {
-      alert(language === 'en' ? 'Please complete all required fields.' : '请填写完整联系信息与送餐地址。');
+    if (!name || !phone || !address || !area || !postalCode) {
+      alert(
+        language === 'en'
+          ? 'Please complete all required fields (Name, Phone, Street Address, Area, and Postal Code).'
+          : '请完整填写所有必填配送信息（姓名、手机号、详细街道大厦地址、区域及邮区编号）。'
+      );
       return;
     }
 
@@ -1029,7 +1033,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     value={area}
                     onChange={(e) => setArea(e.target.value)}
                     className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
+                    required
                   >
+                    <option value="">{language === 'en' ? '-- Select Area / City * --' : '-- 请选择区域 / 城市 * --'}</option>
                     <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
                     <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
                     <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>

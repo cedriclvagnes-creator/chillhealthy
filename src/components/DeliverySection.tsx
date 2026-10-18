@@ -82,8 +82,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
               </div>
               <h3 className="text-lg sm:text-xl font-heading font-extrabold text-stone-900 tracking-tight">
                 {language === 'en'
-                  ? 'Klang Valley Fresh Lunch Delivery (Mon–Fri 11:00 AM – 1:30 PM)'
-                  : '巴生谷每日新鲜配送（周一至周五 11:00 AM – 1:30 PM）'}
+                  ? 'Klang Valley Fresh Delivery (Mon–Fri 11:00 AM – 7:00 PM)'
+                  : '巴生谷每日新鲜配送（周一至周五 11:00 AM – 7:00 PM）'}
               </h3>
               <p className="text-xs text-stone-600">
                 {language === 'en'
@@ -92,7 +92,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-stone-600 pt-1">
                 <span className="bg-white border border-stone-200 px-2.5 py-0.5 rounded-md font-medium">📍 Klang Valley Coverage</span>
-                <span className="bg-white border border-stone-200 px-2.5 py-0.5 rounded-md font-medium">⏰ 11:00 AM – 1:30 PM</span>
+                <span className="bg-white border border-stone-200 px-2.5 py-0.5 rounded-md font-medium">⏰ 11:00 AM – 7:00 PM</span>
                 <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-md font-bold">🎁 FREE Delivery with Plans</span>
               </div>
             </div>

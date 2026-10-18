@@ -214,8 +214,8 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 ) : (
                   <span className="whitespace-nowrap">
-                    <span className="hidden sm:inline">{language === 'en' ? 'Member Portal' : '会员中心'}</span>
-                    <span className="sm:hidden">{language === 'en' ? 'Login' : '会员'}</span>
+                    <span className="hidden sm:inline">{language === 'en' ? 'Register / Login' : '会员注册 / 登录'}</span>
+                    <span className="sm:hidden">{language === 'en' ? 'Register' : '注册'}</span>
                   </span>
                 )}
               </button>

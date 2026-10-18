@@ -187,7 +187,7 @@ export default function App() {
     }
   });
 
-  // Current Logged-in Member (default to demo member for instant experience)
+  // Current Logged-in Member (defaults to null - customers must register to log in)
   const [currentMember, setCurrentMember] = useState<MemberAccount | null>(() => {
     try {
       const saved = localStorage.getItem('chillhealthy_current_member');
@@ -199,9 +199,9 @@ export default function App() {
           password: parsed.password && parsed.password !== 'password123' ? parsed.password : '123456',
         };
       }
-      return INITIAL_MEMBERS[0];
+      return null;
     } catch {
-      return INITIAL_MEMBERS[0];
+      return null;
     }
   });
 
@@ -464,37 +464,7 @@ export default function App() {
       return false;
     }
 
-    // If new phone number entered, auto-create account with memberNumber = phone and default password 123456
-    if (pass === '123456' || !pass) {
-      const cleanPhone =
-        phoneDigits.length >= 8
-          ? phoneDigits.startsWith('60')
-            ? phoneDigits.slice(1)
-            : phoneDigits.startsWith('0')
-            ? phoneDigits
-            : `0${phoneDigits}`
-          : rawInput.startsWith('01')
-          ? rawInput
-          : '0126189919';
-
-      const newAcct: MemberAccount = {
-        id: cleanPhone,
-        memberNumber: cleanPhone, // Member login number same as handphone number
-        name: rawInput.includes('@') ? rawInput.split('@')[0] : `Member ${cleanPhone}`,
-        email: rawInput.includes('@') ? rawInput : `${cleanPhone}@customer.chill-healthy.com`,
-        phone: cleanPhone,
-        password: '123456', // Default 123456
-        address: 'Bandar Bukit Tinggi, Klang',
-        area: 'Klang / Bukit Tinggi',
-        postalCode: '41200',
-        activePackage: null, // Register with 0 meals until customer confirms purchase of any meal plan
-        creditsHistory: [],
-      };
-      setMembers((prev) => [newAcct, ...prev]);
-      setCurrentMember(newAcct);
-      return true;
-    }
-
+    // Customer must register account first before they can log in. No auto account creation.
     return false;
   };
 
@@ -513,8 +483,8 @@ export default function App() {
       phone: cleanPhone,
       password: newMemberData.password || '123456', // Default password 123456
       address: newMemberData.address || '',
-      area: newMemberData.area || 'Klang / Bukit Tinggi',
-      postalCode: newMemberData.postalCode || '41200',
+      area: newMemberData.area || '',
+      postalCode: newMemberData.postalCode || '',
       address2: newMemberData.address2 || undefined,
       area2: newMemberData.area2 || undefined,
       postalCode2: newMemberData.postalCode2 || undefined,

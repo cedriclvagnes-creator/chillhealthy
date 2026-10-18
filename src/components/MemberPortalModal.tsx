@@ -154,6 +154,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [accountNotFound, setAccountNotFound] = useState(false);
 
   // Forgot Password via WhatsApp TAC
   const [forgotPhone, setForgotPhone] = useState('');
@@ -237,11 +238,11 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [regPhone, setRegPhone] = useState('');
   const [regPass, setRegPass] = useState('123456');
   const [regAddress, setRegAddress] = useState('');
-  const [regArea, setRegArea] = useState('Klang / Bukit Tinggi');
-  const [regPostal, setRegPostal] = useState('41200');
+  const [regArea, setRegArea] = useState('');
+  const [regPostal, setRegPostal] = useState('');
   const [hasRegAddress2, setHasRegAddress2] = useState(false);
   const [regAddress2, setRegAddress2] = useState('');
-  const [regArea2, setRegArea2] = useState('Klang / Bukit Tinggi');
+  const [regArea2, setRegArea2] = useState('');
   const [regPostal2, setRegPostal2] = useState('');
   const [regError, setRegError] = useState('');
   // Option for customer to register and buy ala carte meal vs register & buy meal plan
@@ -264,8 +265,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [selectedAddressSlot, setSelectedAddressSlot] = useState<1 | 2>(1);
   const [isEditingAddress2, setIsEditingAddress2] = useState(false);
   const [editAddr2, setEditAddr2] = useState('');
-  const [editArea2, setEditArea2] = useState('Klang / Bukit Tinggi');
-  const [editPostal2, setEditPostal2] = useState('41200');
+  const [editArea2, setEditArea2] = useState('');
+  const [editPostal2, setEditPostal2] = useState('');
 
   // Daily Meal Form state
   const [selectedDate, setSelectedDate] = useState(() => getNextWorkday(1));
@@ -428,8 +429,8 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       setDietaryNotes(currentMember.dietaryPreferences || '');
       if (currentMember.address2) {
         setEditAddr2(currentMember.address2);
-        setEditArea2(currentMember.area2 || currentMember.area || 'Klang / Bukit Tinggi');
-        setEditPostal2(currentMember.postalCode2 || currentMember.postalCode || '41200');
+        setEditArea2(currentMember.area2 || currentMember.area || '');
+        setEditPostal2(currentMember.postalCode2 || currentMember.postalCode || '');
       }
     }
   }, [currentMember]);
@@ -467,21 +468,53 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const currentArea =
     selectedAddressSlot === 2 && currentMember?.area2
       ? currentMember.area2
-      : currentMember?.area || 'Klang / Bukit Tinggi';
+      : currentMember?.area || '';
   const currentPostal =
     selectedAddressSlot === 2 && currentMember?.postalCode2
       ? currentMember.postalCode2
-      : currentMember?.postalCode || '41200';
+      : currentMember?.postalCode || '';
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setAccountNotFound(false);
+
+    const cleanInput = loginEmail.trim();
+    const phoneDigits = cleanInput.replace(/\D/g, '');
+
+    // Check if account exists
+    const accountExists = members.some((m) => {
+      const mPhoneDigits = (m.phone || '').replace(/\D/g, '');
+      const mMemberNumDigits = (m.memberNumber || '').replace(/\D/g, '');
+      const mEmail = (m.email || '').toLowerCase().trim();
+
+      const matchesPhone =
+        phoneDigits.length >= 8 &&
+        (mPhoneDigits === phoneDigits ||
+          mMemberNumDigits === phoneDigits ||
+          phoneDigits.includes(mPhoneDigits) ||
+          mMemberNumDigits.includes(phoneDigits));
+      const matchesEmail = cleanInput.toLowerCase() === mEmail;
+
+      return matchesPhone || matchesEmail;
+    });
+
+    if (!accountExists) {
+      setAccountNotFound(true);
+      setLoginError(
+        language === 'en'
+          ? 'Account not found. Customers must register an account first before logging in. Please click "Register" to create your account.'
+          : '未找到该账户！顾客必须先注册新账号才能登录。请点击下方「立即注册新账号」。'
+      );
+      return;
+    }
+
     const success = onLogin(loginEmail, loginPass);
     if (!success) {
       setLoginError(
         language === 'en'
-          ? 'Invalid Member Number or Password. (Default password: 123456)'
-          : '会员账号或密码不正确。（初始默认密码为 123456）'
+          ? 'Incorrect password. (Default password: 123456 or reset via TAC)'
+          : '密码不正确。（初始默认密码为 123456，或通过 TAC 重置）'
       );
     }
   };
@@ -518,6 +551,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
+    if (!regArea.trim()) {
+      setRegError(
+        language === 'en'
+          ? 'Please select a delivery area for Address 1.'
+          : '请选择送餐地址一的所属配送区域。'
+      );
+      return;
+    }
+
     if (!regPostal.trim()) {
       setRegError(
         language === 'en'
@@ -534,6 +576,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
           language === 'en'
             ? 'Address 2 is enabled. Please enter street address or click "Remove Address 2".'
             : '您已开启第二送餐地址。请填写地址二的详细街道，或点击“移除地址二”。'
+        );
+        return;
+      }
+      if (!regArea2.trim()) {
+        setRegError(
+          language === 'en'
+            ? 'Please select a delivery area for Address 2.'
+            : '请选择送餐地址二的所属配送区域。'
         );
         return;
       }
@@ -633,6 +683,10 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     if (!currentMember) return;
     if (!editAddr2.trim() || editAddr2.trim().length < 4) {
       alert(language === 'en' ? 'Please enter a valid street/building address (minimum 4 characters).' : '请输入有效的街道/楼宇送餐地址（至少4个字符）。');
+      return;
+    }
+    if (!editArea2.trim()) {
+      alert(language === 'en' ? 'Please select a delivery area for Address 2.' : '请选择送餐地址二的所属配送区域。');
       return;
     }
     if (!editPostal2 || editPostal2.trim().length !== 5) {
@@ -1323,9 +1377,28 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               {authMode === 'login' ? (
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
                   {loginError && (
-                    <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{loginError}</span>
+                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-2 animate-in fade-in">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                        <span className="font-semibold">{loginError}</span>
+                      </div>
+                      {accountNotFound && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (loginEmail.trim()) {
+                              setRegPhone(loginEmail.trim());
+                            }
+                            setLoginError('');
+                            setAccountNotFound(false);
+                            setAuthMode('register');
+                          }}
+                          className="w-full py-2.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        >
+                          <User className="w-3.5 h-3.5" />
+                          <span>{language === 'en' ? 'Click Here to Register New Account →' : '点击此处立即注册新账号 →'}</span>
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -1397,27 +1470,27 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     {language === 'en' ? 'Log In to Member Portal' : '立即登录会员中心'}
                   </button>
 
-                  {/* Quick Demo Login Preset */}
+                  {/* Customer Notice: Register required before login */}
                   <div className="pt-4 border-t border-stone-100 text-center space-y-2">
-                    <span className="text-[11px] text-stone-400 font-medium block">
-                      {language === 'en' ? 'Quick One-Click Test Demo Accounts (Password: 123456):' : '快速一键免密体验测试账号 (默认密码: 123456)：'}
-                    </span>
-                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickDemoLogin('0126189919')}
-                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold transition-colors cursor-pointer text-left sm:text-center"
-                      >
-                        <span>Agnes Lim (0126189919 · 15 Meals Left)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickDemoLogin('0123344556')}
-                        className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold transition-colors cursor-pointer text-left sm:text-center"
-                      >
-                        <span>Marcus (0123344556 · 4 Meals Left)</span>
-                      </button>
-                    </div>
+                    <p className="text-xs text-stone-500">
+                      {language === 'en'
+                        ? "Don't have an account yet? Customers must register an account first before logging in."
+                        : '还没有会员账号？新顾客须先注册账号方可登录。'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (loginEmail.trim()) {
+                          setRegPhone(loginEmail.trim());
+                        }
+                        setLoginError('');
+                        setAccountNotFound(false);
+                        setAuthMode('register');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-emerald-50 hover:text-emerald-900 border border-stone-200 text-stone-800 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      {language === 'en' ? 'Create / Register New Account →' : '立即注册新账号 →'}
+                    </button>
                   </div>
                 </form>
               ) : authMode === 'forgot' ? (
@@ -1727,7 +1800,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             value={regArea}
                             onChange={(e) => setRegArea(e.target.value)}
                             className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                            required
                           >
+                            <option value="">{language === 'en' ? '-- Select Delivery Area * --' : '-- 请选择配送区域 * --'}</option>
                             <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
                             <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
                             <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
@@ -1813,7 +1888,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               value={regArea2}
                               onChange={(e) => setRegArea2(e.target.value)}
                               className="w-full text-xs px-3 py-2 rounded-xl border border-stone-300 bg-white"
+                              required
                             >
+                              <option value="">{language === 'en' ? '-- Select Delivery Area * --' : '-- 请选择配送区域 * --'}</option>
                               <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi (巴生)</option>
                               <option value="Shah Alam / Kota Kemuning">Shah Alam (莎阿南)</option>
                               <option value="Subang Jaya / USJ">Subang Jaya / USJ (梳邦再也)</option>
@@ -2434,7 +2511,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                 value={editArea2}
                                 onChange={(e) => setEditArea2(e.target.value)}
                                 className="w-full text-xs px-2.5 py-2 rounded-xl border border-stone-200 bg-white font-medium"
+                                required
                               >
+                                <option value="">{language === 'en' ? '-- Select Delivery Area * --' : '-- 请选择配送区域 * --'}</option>
                                 <option value="Klang / Bukit Tinggi">Klang / Bukit Tinggi</option>
                                 <option value="Shah Alam / Kota Kemuning">Shah Alam</option>
                                 <option value="Subang Jaya / USJ">Subang Jaya</option>
