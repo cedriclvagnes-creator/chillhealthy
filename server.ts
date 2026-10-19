@@ -187,8 +187,15 @@ function loadStoreFromDisk(): ServerStore {
         ...defaults.siteSettings,
         ...(parsed.siteSettings || {}),
       };
-      if (!mergedSiteSettings.paymentQrUrl) {
-        mergedSiteSettings.paymentQrUrl = '/duitnow-qr-chillhealthy.svg';
+      if (mergedSiteSettings.paymentQrUrl === '/duitnow-qr-chillhealthy.svg') {
+        mergedSiteSettings.paymentQrUrl = '';
+      }
+      if (
+        mergedSiteSettings.paymentBankName &&
+        (mergedSiteSettings.paymentBankName.includes('HLB') ||
+          mergedSiteSettings.paymentBankName.includes('Hong Leong'))
+      ) {
+        mergedSiteSettings.paymentBankName = 'DuitNow QR';
       }
       if (
         !mergedSiteSettings.paymentMerchantName ||
@@ -359,7 +366,39 @@ async function startServer() {
     let changed = false;
 
     if (siteSettings && typeof siteSettings === 'object') {
-      store.siteSettings = { ...store.siteSettings, ...siteSettings };
+      const cleanedIncomingSettings = { ...siteSettings };
+      if (cleanedIncomingSettings.paymentQrUrl === '/duitnow-qr-chillhealthy.svg') {
+        cleanedIncomingSettings.paymentQrUrl = '';
+      }
+      if (
+        cleanedIncomingSettings.paymentBankName &&
+        (cleanedIncomingSettings.paymentBankName.includes('HLB') ||
+          cleanedIncomingSettings.paymentBankName.includes('Hong Leong'))
+      ) {
+        cleanedIncomingSettings.paymentBankName = 'DuitNow QR';
+      }
+
+      const existingQr =
+        store.siteSettings.paymentQrUrl &&
+        store.siteSettings.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+          ? store.siteSettings.paymentQrUrl
+          : '';
+
+      const nextQr = body.clearPaymentQr
+        ? ''
+        : cleanedIncomingSettings.paymentQrUrl || existingQr;
+
+      store.siteSettings = {
+        ...store.siteSettings,
+        ...cleanedIncomingSettings,
+        paymentQrUrl: nextQr,
+      };
+      changed = true;
+    } else if (body.clearPaymentQr) {
+      store.siteSettings = {
+        ...store.siteSettings,
+        paymentQrUrl: '',
+      };
       changed = true;
     }
 

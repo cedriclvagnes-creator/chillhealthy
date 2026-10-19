@@ -94,6 +94,7 @@ import { normalizeMalaysianPhone } from '../utils/malaysiaPhone';
 import {
   filterOutDeletedMembers,
   filterOutDeletedRedemptions,
+  pushSyncStore,
 } from '../utils/syncClient';
 
 interface BackOfficeModalProps {
@@ -1064,7 +1065,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     triggerToast(language === 'en' ? '✓ Reset to 4-Dish Ala Carte Grid' : '✓ 已恢复四款精选单点拼图展示');
   };
 
-  // Upload Payment QR Code from Device (DuitNow QR Instant Pay)
+  // Upload Payment QR Code from Device (Optimizes photo & syncs across Website, Mobile & Tablet)
   const handlePaymentQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1074,45 +1075,109 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      triggerToast(language === 'en' ? 'Image file size is too large (max 8MB)' : '图片大小超过限制（最大8MB）');
+    if (file.size > 15 * 1024 * 1024) {
+      triggerToast(language === 'en' ? 'Image file size is too large (max 15MB)' : '图片大小超过限制（最大15MB）');
       return;
     }
 
+    const applyQrDataUrl = (finalDataUrl: string) => {
+      const updated: SiteSettings = {
+        ...siteSettings,
+        ...formSettings,
+        paymentQrUrl: finalDataUrl,
+        paymentBankName: 'DuitNow QR',
+      };
+      setFormSettings(updated);
+      onUpdateSiteSettings(updated);
+      try {
+        localStorage.setItem('chillhealthy_duitnow_qr_custom', finalDataUrl);
+        localStorage.setItem('chillhealthy_settings', JSON.stringify(updated));
+      } catch {
+        // ignore storage quota warning
+      }
+      void pushSyncStore({
+        siteSettings: updated,
+        forceBroadcast: true,
+      });
+      triggerToast(
+        language === 'en'
+          ? '✓ QR Photo attached & synchronized across Website, Mobile & Tablet!'
+          : '✓ 收款二维码照片已上传并实时同步至网页、手机与平板！'
+      );
+    };
+
     const reader = new FileReader();
     reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        const updated = {
-          ...formSettings,
-          paymentQrUrl: result,
-        };
-        setFormSettings(updated);
-        onUpdateSiteSettings(updated);
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      // Optimize large camera photos so they sync rapidly and fit cleanly in localStorage across all devices
+      const img = new window.Image();
+      img.onload = () => {
         try {
-          localStorage.setItem('chillhealthy_duitnow_qr_custom', result);
+          const maxDim = 1200;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            const optimizedUrl = canvas.toDataURL('image/jpeg', 0.92);
+            applyQrDataUrl(optimizedUrl);
+            return;
+          }
         } catch {
-          // ignore
+          // fallback to rawDataUrl
         }
-        triggerToast(language === 'en' ? '✓ Payment QR Code updated and live on checkout!' : '✓ 支付收款QR码已更新并在前台结账实时生效！');
-      }
+        applyQrDataUrl(rawDataUrl);
+      };
+      img.onerror = () => {
+        applyQrDataUrl(rawDataUrl);
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleResetPaymentQr = () => {
-    const updated = {
+    const updated: SiteSettings = {
+      ...siteSettings,
       ...formSettings,
       paymentQrUrl: '',
+      paymentBankName: 'DuitNow QR',
     };
     setFormSettings(updated);
     onUpdateSiteSettings(updated);
     try {
       localStorage.removeItem('chillhealthy_duitnow_qr_custom');
+      localStorage.setItem('chillhealthy_settings', JSON.stringify(updated));
     } catch {
       // ignore
     }
-    triggerToast(language === 'en' ? '✓ Reset to official default DuitNow QR' : '✓ 已恢复官方默认 DuitNow QR 收款码');
+    void pushSyncStore({
+      siteSettings: updated,
+      clearPaymentQr: true,
+      forceBroadcast: true,
+    });
+    triggerToast(
+      language === 'en'
+        ? '✓ Cleared QR photo — ready for you to attach a new QR photo'
+        : '✓ 已清除旧二维码，请上传附加您的新收款二维码照片'
+    );
   };
 
   // Save Package changes
@@ -1885,30 +1950,30 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   </div>
 
                   {/* =========================================================================
-                      CARD 2: DUITNOW QR CODE & PAYMENT SETTINGS (Update QR code at back end office)
+                      CARD 2: CHECKOUT PAYMENT QR COLUMN ONLY (Attach photo & sync across Website, Mobile & Tablet)
                       ========================================================================= */}
                   <div className="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-3xl border border-stone-200 shadow-2xs space-y-6">
                     <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <CreditCard className="w-5 h-5 text-pink-600" />
+                          <QrCode className="w-5 h-5 text-pink-600" />
                           <h4 className="font-heading font-extrabold text-base sm:text-lg text-stone-900">
-                            {language === 'en' ? 'DuitNow Payment QR Code & Merchant Settings' : '结账付款二维码与商户收款设置'}
+                            {language === 'en' ? 'Checkout Payment QR Column' : '结账收款二维码栏 (QR Column)'}
                           </h4>
                         </div>
                         <p className="text-xs text-stone-500 mt-0.5">
                           {language === 'en'
-                            ? 'Upload or update the DuitNow QR image displayed on customer checkout & order payment modals.'
-                            : '在此更新或替换前台结账时显示的 DuitNow QR 收款码图片与商户信息，保存后全站即时生效。'}
+                            ? 'Attach your QR photo below and click Update & Synchronize to make it immediately available across Website, Mobile, and Tablet.'
+                            : '在此上传并附加您的收款二维码照片，点击更新并同步后即可在网页端、手机端与平板端全面实时显示。'}
                         </p>
                       </div>
                       <span className="px-2.5 py-1 rounded-full bg-pink-50 border border-pink-200 text-pink-800 text-[11px] font-bold self-start sm:self-auto">
-                        {language === 'en' ? 'Live on Customer Checkout' : '实时同步至前台结账'}
+                        {language === 'en' ? 'Synced Across Website · Mobile · Tablet' : '实时同步至网页 · 手机 · 平板'}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                      {/* Left: QR Form Inputs */}
+                      {/* Left: QR Column Photo Attachment & Controls */}
                       <div className="md:col-span-7 space-y-4">
                         {/* File Upload Hidden Input */}
                         <input
@@ -1919,44 +1984,79 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           className="hidden"
                         />
 
-                        {/* Upload Button & Reset */}
-                        <div>
-                          <label className="text-xs font-bold text-stone-700 block mb-1">
-                            {language === 'en' ? 'Upload New Payment QR Image' : '上传新的收款二维码图片'}
-                          </label>
+                        {/* Upload / Attach QR Photo Box */}
+                        <div className="p-4 rounded-2xl border-2 border-dashed border-pink-300 bg-pink-50/40 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-extrabold text-stone-800 flex items-center gap-1.5">
+                              <Camera className="w-4 h-4 text-pink-600" />
+                              <span>
+                                {language === 'en'
+                                  ? 'Attach Your Payment QR Photo'
+                                  : '上传并附加您的收款二维码照片'}
+                              </span>
+                            </label>
+                            {formSettings.paymentQrUrl &&
+                            formSettings.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg' ? (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                                {language === 'en' ? '✓ QR Photo Attached' : '✓ 已附加二维码照片'}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                                {language === 'en' ? 'No QR Photo Attached Yet' : '尚未上传二维码照片'}
+                              </span>
+                            )}
+                          </div>
+
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() => paymentQrFileInputRef.current?.click()}
                               className="px-4 py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
                             >
-                              <Camera className="w-4 h-4" />
-                              <span>{language === 'en' ? 'Choose Image File from Device' : '从本地设备选择二维码图片'}</span>
+                              <Upload className="w-4 h-4" />
+                              <span>
+                                {language === 'en'
+                                  ? 'Attach / Upload QR Photo from Device'
+                                  : '从设备选择并上传收款二维码照片'}
+                              </span>
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={handleResetPaymentQr}
-                              className="px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
-                              title="Reset to default official DuitNow QR"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              <span>{language === 'en' ? 'Reset to Default QR' : '恢复默认收款码'}</span>
-                            </button>
+                            {formSettings.paymentQrUrl &&
+                              formSettings.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg' && (
+                                <button
+                                  type="button"
+                                  onClick={handleResetPaymentQr}
+                                  className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-stone-100 text-stone-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
+                                  title="Clear current QR photo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                  <span>{language === 'en' ? 'Remove QR Photo' : '移除当前二维码'}</span>
+                                </button>
+                              )}
                           </div>
+
+                          <p className="text-[11px] text-stone-600 leading-snug">
+                            {language === 'en'
+                              ? 'Supports JPG, PNG, WEBP screenshots or camera photos. Once attached and synchronized, your exact QR photo is displayed in the checkout QR column across Website, Mobile, and Tablet.'
+                              : '支持手机截图、相册照片或图片文件（JPG/PNG/WEBP）。上传并点击下方同步按钮后，顾客在电脑网页、手机及平板结账时将直接看到您上传的二维码。'}
+                          </p>
                         </div>
 
                         {/* Or Paste Image URL */}
                         <div>
                           <label className="text-xs font-bold text-stone-700 block mb-1">
-                            {language === 'en' ? 'Or Paste QR Code Image URL' : '或直接粘贴二维码图片 URL 链接'}
+                            {language === 'en' ? 'Or Paste QR Photo URL (Optional)' : '或直接粘贴二维码图片链接 (可选)'}
                           </label>
                           <input
                             type="text"
-                            value={formSettings.paymentQrUrl || ''}
+                            value={
+                              formSettings.paymentQrUrl === '/duitnow-qr-chillhealthy.svg'
+                                ? ''
+                                : formSettings.paymentQrUrl || ''
+                            }
                             onChange={(e) => {
                               const val = e.target.value;
-                              const updated = { ...formSettings, paymentQrUrl: val };
+                              const updated = { ...formSettings, paymentQrUrl: val, paymentBankName: 'DuitNow QR' };
                               setFormSettings(updated);
                               onUpdateSiteSettings(updated);
                               try {
@@ -1964,20 +2064,20 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 else localStorage.removeItem('chillhealthy_duitnow_qr_custom');
                               } catch {}
                             }}
-                            placeholder="https://... or data:image/..."
+                            placeholder="https://... or attach photo from device above"
                             className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-pink-500 font-mono"
                           />
                         </div>
 
-                        {/* QR Margins & Shrink Adjustment (Admin Customization) */}
+                        {/* QR Margins & Shrink Adjustment */}
                         <div className="p-3.5 bg-pink-50/70 rounded-2xl border border-pink-200 space-y-3">
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-bold text-pink-950 flex items-center gap-1.5">
                               <QrCode className="w-4 h-4 text-pink-700" />
-                              <span>{language === 'en' ? 'QR Code Margin & Shrink Fit' : '二维码边距缩放与页边距调节 (Shrink to Margin)'}</span>
+                              <span>{language === 'en' ? 'QR Column Margin & Size Fit' : '二维码边距与缩放调节'}</span>
                             </label>
                             <span className="text-[11px] font-bold text-pink-800 bg-white px-2 py-0.5 rounded-full border border-pink-200">
-                              Padding: {formSettings.paymentQrMargin ?? 8}px · Scale: {formSettings.paymentQrScale ?? 95}%
+                              Padding: {formSettings.paymentQrMargin ?? 4}px · Scale: {formSettings.paymentQrScale ?? 100}%
                             </span>
                           </div>
 
@@ -1985,15 +2085,15 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             {/* Margin Padding Slider */}
                             <div>
                               <div className="flex justify-between text-[11px] font-medium text-stone-700 mb-1">
-                                <span>{language === 'en' ? 'Outer Margin Padding' : '外边距白边 (Margin)'}</span>
-                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrMargin ?? 8} px</span>
+                                <span>{language === 'en' ? 'Outer Margin Padding' : '外边距 (Margin)'}</span>
+                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrMargin ?? 4} px</span>
                               </div>
                               <input
                                 type="range"
                                 min={0}
                                 max={32}
                                 step={2}
-                                value={formSettings.paymentQrMargin ?? 8}
+                                value={formSettings.paymentQrMargin ?? 4}
                                 onChange={(e) => {
                                   const updated = { ...formSettings, paymentQrMargin: Number(e.target.value) };
                                   setFormSettings(updated);
@@ -2012,12 +2112,12 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                       onUpdateSiteSettings(updated);
                                     }}
                                     className={`px-2 py-0.5 text-[10px] rounded-md border font-semibold ${
-                                      (formSettings.paymentQrMargin ?? 8) === pVal
+                                      (formSettings.paymentQrMargin ?? 4) === pVal
                                         ? 'bg-pink-600 text-white border-pink-600'
                                         : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
                                     }`}
                                   >
-                                    {pVal === 0 ? 'Tight (0px)' : `${pVal}px`}
+                                    {pVal === 0 ? 'Full (0px)' : `${pVal}px`}
                                   </button>
                                 ))}
                               </div>
@@ -2026,15 +2126,15 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             {/* Scale Shrink Slider */}
                             <div>
                               <div className="flex justify-between text-[11px] font-medium text-stone-700 mb-1">
-                                <span>{language === 'en' ? 'Shrink / Zoom QR Size' : '缩放大小 (Shrink Scale)'}</span>
-                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrScale ?? 95} %</span>
+                                <span>{language === 'en' ? 'Zoom / Scale QR Photo' : '缩放比例 (Scale)'}</span>
+                                <span className="font-mono font-bold text-pink-800">{formSettings.paymentQrScale ?? 100} %</span>
                               </div>
                               <input
                                 type="range"
                                 min={50}
                                 max={115}
                                 step={5}
-                                value={formSettings.paymentQrScale ?? 95}
+                                value={formSettings.paymentQrScale ?? 100}
                                 onChange={(e) => {
                                   const updated = { ...formSettings, paymentQrScale: Number(e.target.value) };
                                   setFormSettings(updated);
@@ -2043,7 +2143,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 className="w-full accent-pink-600 cursor-pointer"
                               />
                               <div className="flex gap-1.5 mt-1">
-                                {[80, 90, 95, 100].map((sVal) => (
+                                {[85, 95, 100, 105].map((sVal) => (
                                   <button
                                     key={sVal}
                                     type="button"
@@ -2053,7 +2153,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                       onUpdateSiteSettings(updated);
                                     }}
                                     className={`px-2 py-0.5 text-[10px] rounded-md border font-semibold ${
-                                      (formSettings.paymentQrScale ?? 95) === sVal
+                                      (formSettings.paymentQrScale ?? 100) === sVal
                                         ? 'bg-pink-600 text-white border-pink-600'
                                         : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
                                     }`}
@@ -2066,103 +2166,58 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Critical Notice: 0126189919 has NO DuitNow function */}
-                        <div className="p-3 bg-amber-500/10 border-2 border-amber-400 rounded-2xl text-stone-800 space-y-1">
-                          <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-xs">
-                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>
-                              {language === 'en'
-                                ? 'Notice: 0126189919 does NOT have DuitNow Function'
-                                : '重要提示：0126189919 无 DuitNow 手机号转账功能'}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-stone-600 leading-snug">
-                            {language === 'en'
-                              ? 'Customer mobile payments via DuitNow phone number transfer to 0126189919 will fail. The checkout modal instructs customers to scan the official DuitNow QR above or transfer directly to the bank account.'
-                              : '0126189919 仅为客服 WhatsApp，未开通 DuitNow 手机号转账。系统已在前台特别提醒顾客直接扫描上方 DuitNow QR 收款码或转入银行账号。'}
-                          </p>
-                        </div>
-
-                        {/* Merchant Name & Bank Details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">
-                              {language === 'en' ? 'Merchant Name' : '收款商户抬头名称'}
-                            </label>
-                            <input
-                              type="text"
-                              value={formSettings.paymentMerchantName || 'CHILL HEALTHY TRADING'}
-                              onChange={(e) =>
-                                setFormSettings({
-                                  ...formSettings,
-                                  paymentMerchantName: e.target.value,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">
-                              {language === 'en' ? 'Bank Name' : '银行名称'}
-                            </label>
-                            <input
-                              type="text"
-                              value={formSettings.paymentBankName || 'Hong Leong Bank (HLB Connect) / DuitNow QR'}
-                              onChange={(e) =>
-                                setFormSettings({
-                                  ...formSettings,
-                                  paymentBankName: e.target.value,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-xs font-bold text-stone-700 block mb-1">
-                              {language === 'en' ? 'Bank Account No' : '银行账号'}
-                            </label>
-                            <input
-                              type="text"
-                              value={formSettings.paymentAccountNo || '512802521998'}
-                              onChange={(e) =>
-                                setFormSettings({
-                                  ...formSettings,
-                                  paymentAccountNo: e.target.value,
-                                })
-                              }
-                              className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-600 font-mono"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="pt-2">
+                        <div className="pt-1">
                           <button
                             type="button"
                             onClick={() => {
-                              onUpdateSiteSettings(formSettings);
-                              triggerToast(language === 'en' ? '✓ Payment QR & Merchant settings saved!' : '✓ 支付收款码与商户信息已保存！');
+                              const cleanedSettings: SiteSettings = {
+                                ...siteSettings,
+                                ...formSettings,
+                                paymentBankName: 'DuitNow QR',
+                              };
+                              setFormSettings(cleanedSettings);
+                              onUpdateSiteSettings(cleanedSettings);
+                              try {
+                                localStorage.setItem('chillhealthy_settings', JSON.stringify(cleanedSettings));
+                                if (cleanedSettings.paymentQrUrl) {
+                                  localStorage.setItem('chillhealthy_duitnow_qr_custom', cleanedSettings.paymentQrUrl);
+                                }
+                              } catch {}
+                              void pushSyncStore({
+                                siteSettings: cleanedSettings,
+                                forceBroadcast: true,
+                              });
+                              handleSynchronizeData();
+                              triggerToast(
+                                language === 'en'
+                                  ? '✓ QR Photo Updated & Synchronized across Website, Mobile & Tablet!'
+                                  : '✓ 收款二维码已更新并全局同步至网页、手机与平板！'
+                              );
                             }}
-                            className="w-full py-2.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                            className="w-full py-3 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
                           >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>{language === 'en' ? 'Save & Sync Payment Settings' : '保存并同步收款设置'}</span>
+                            <RefreshCw className="w-4 h-4" />
+                            <span>
+                              {language === 'en'
+                                ? 'Update & Synchronize QR (Website, Mobile & Tablet)'
+                                : '保存并同步二维码至全站 (网页 · 手机 · 平板)'}
+                            </span>
                           </button>
                         </div>
                       </div>
 
-                      {/* Right: Live Interactive Card Preview */}
+                      {/* Right: Live QR Column Preview */}
                       <div className="md:col-span-5 bg-stone-50 p-4 rounded-2xl border border-stone-200 flex flex-col items-center">
                         <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mb-2">
-                          {language === 'en' ? 'Live Checkout Preview' : '前台顾客看到的即时预览'}
+                          {language === 'en' ? 'Live QR Column Preview (Click to Attach)' : '前台结账二维码栏预览 (可点击上传)'}
                         </span>
-                        <div className="scale-95 origin-top w-full">
+                        <div className="w-full">
                           <DuitNowPaymentCard
                             language={language}
                             amount={88.0}
                             orderId="SAMPLE-ORD"
                             siteSettings={formSettings}
+                            onTriggerUploadClick={() => paymentQrFileInputRef.current?.click()}
                           />
                         </div>
                       </div>

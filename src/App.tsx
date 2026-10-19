@@ -125,10 +125,24 @@ export default function App() {
             ? '专注做健康餐'
             : parsed.topInstagramVideoTitleZh;
 
+        const customQr = localStorage.getItem('chillhealthy_duitnow_qr_custom') || '';
+        const cleanedParsedQr =
+          parsed.paymentQrUrl && parsed.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+            ? parsed.paymentQrUrl
+            : customQr && customQr !== '/duitnow-qr-chillhealthy.svg'
+            ? customQr
+            : '';
+
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
-          paymentQrUrl: parsed.paymentQrUrl || DEFAULT_SITE_SETTINGS.paymentQrUrl,
+          paymentQrUrl: cleanedParsedQr,
+          paymentBankName:
+            parsed.paymentBankName &&
+            (parsed.paymentBankName.includes('HLB') ||
+              parsed.paymentBankName.includes('Hong Leong'))
+              ? 'DuitNow QR'
+              : parsed.paymentBankName || 'DuitNow QR',
           paymentMerchantName:
             !parsed.paymentMerchantName || parsed.paymentMerchantName === 'Chill Healthy Trading'
               ? DEFAULT_SITE_SETTINGS.paymentMerchantName
@@ -550,10 +564,27 @@ export default function App() {
           : incomingSettings.outOfStockDishes;
 
         setSiteSettings((prev) => {
+          const incomingQr =
+            incomingSettings.paymentQrUrl &&
+            incomingSettings.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+              ? incomingSettings.paymentQrUrl
+              : '';
+          const prevQr =
+            prev.paymentQrUrl && prev.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+              ? prev.paymentQrUrl
+              : '';
+          const resolvedQr = incomingQr || prevQr;
+
           const next: SiteSettings = {
             ...prev,
             ...incomingSettings,
-            paymentQrUrl: incomingSettings.paymentQrUrl || prev.paymentQrUrl || DEFAULT_SITE_SETTINGS.paymentQrUrl,
+            paymentQrUrl: resolvedQr,
+            paymentBankName:
+              incomingSettings.paymentBankName &&
+              (incomingSettings.paymentBankName.includes('HLB') ||
+                incomingSettings.paymentBankName.includes('Hong Leong'))
+                ? 'DuitNow QR'
+                : incomingSettings.paymentBankName || 'DuitNow QR',
             paymentMerchantName:
               !incomingSettings.paymentMerchantName ||
               incomingSettings.paymentMerchantName === 'Chill Healthy Trading'
@@ -561,7 +592,12 @@ export default function App() {
                 : incomingSettings.paymentMerchantName,
             ...(Array.isArray(derivedOutIds) ? { outOfStockDishes: derivedOutIds } : {}),
           };
-          localStorage.setItem('chillhealthy_settings', JSON.stringify(next));
+          try {
+            localStorage.setItem('chillhealthy_settings', JSON.stringify(next));
+            if (resolvedQr) {
+              localStorage.setItem('chillhealthy_duitnow_qr_custom', resolvedQr);
+            }
+          } catch {}
           return next;
         });
       }
@@ -715,8 +751,18 @@ export default function App() {
   const handleSynchronizeData = React.useCallback(() => {
     try {
       const outOfStockIds = menuItems.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+      const customQr = localStorage.getItem('chillhealthy_duitnow_qr_custom') || '';
+      const resolvedQr =
+        siteSettings.paymentQrUrl && siteSettings.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+          ? siteSettings.paymentQrUrl
+          : customQr && customQr !== '/duitnow-qr-chillhealthy.svg'
+          ? customQr
+          : '';
+
       const syncedSettings: SiteSettings = {
         ...siteSettings,
+        paymentQrUrl: resolvedQr,
+        paymentBankName: 'DuitNow QR',
         outOfStockDishes: outOfStockIds,
       };
 
@@ -728,8 +774,14 @@ export default function App() {
       const cleanedMembers = filterOutDeletedMembers(members, savedDelMem);
       const cleanedRedemptions = filterOutDeletedRedemptions(redemptions, savedDelRed, savedDelMem);
 
-      localStorage.setItem('chillhealthy_members', JSON.stringify(cleanedMembers));
-      localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleanedRedemptions));
+      try {
+        localStorage.setItem('chillhealthy_settings', JSON.stringify(syncedSettings));
+        if (resolvedQr) {
+          localStorage.setItem('chillhealthy_duitnow_qr_custom', resolvedQr);
+        }
+        localStorage.setItem('chillhealthy_members', JSON.stringify(cleanedMembers));
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleanedRedemptions));
+      } catch {}
 
       const storageKeys: Array<{ key: string; fallback: unknown }> = [
         { key: 'chillhealthy_settings', fallback: syncedSettings },
@@ -746,7 +798,9 @@ export default function App() {
       storageKeys.forEach(({ key, fallback }) => {
         const raw = localStorage.getItem(key);
         if (raw === null && fallback !== undefined) {
-          localStorage.setItem(key, JSON.stringify(fallback));
+          try {
+            localStorage.setItem(key, JSON.stringify(fallback));
+          } catch {}
         }
       });
 
@@ -761,6 +815,18 @@ export default function App() {
       const latestRedemptionsRaw = localStorage.getItem('chillhealthy_redemptions');
       const latestRefundsRaw = localStorage.getItem('chillhealthy_refund_records');
 
+      const parsedLocalSettings: SiteSettings = latestSettingsRaw
+        ? {
+            ...syncedSettings,
+            ...JSON.parse(latestSettingsRaw),
+            paymentQrUrl:
+              resolvedQr ||
+              (JSON.parse(latestSettingsRaw)?.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+                ? JSON.parse(latestSettingsRaw)?.paymentQrUrl
+                : ''),
+          }
+        : syncedSettings;
+
       const parsedLocalMembers: MemberAccount[] = latestMembersRaw
         ? filterOutDeletedMembers(JSON.parse(latestMembersRaw), savedDelMem)
         : cleanedMembers;
@@ -769,7 +835,7 @@ export default function App() {
         : cleanedRedemptions;
 
       void pushSyncStore({
-        siteSettings: latestSettingsRaw ? JSON.parse(latestSettingsRaw) : syncedSettings,
+        siteSettings: parsedLocalSettings,
         packages: latestPackagesRaw ? JSON.parse(latestPackagesRaw) : packages,
         menuItems: latestMenuRaw ? JSON.parse(latestMenuRaw) : menuItems,
         members: parsedLocalMembers,
@@ -1622,26 +1688,39 @@ export default function App() {
 
   // Back Office Maintenance Handlers (Synchronized across mobile, tablet, and website)
   const handleUpdateSiteSettings = (newSettings: SiteSettings) => {
-    setSiteSettings(newSettings);
+    const cleanedSettings: SiteSettings = {
+      ...newSettings,
+      paymentQrUrl:
+        newSettings.paymentQrUrl === '/duitnow-qr-chillhealthy.svg'
+          ? ''
+          : newSettings.paymentQrUrl || '',
+      paymentBankName: 'DuitNow QR',
+    };
+    setSiteSettings(cleanedSettings);
     try {
-      localStorage.setItem('chillhealthy_settings', JSON.stringify(newSettings));
+      localStorage.setItem('chillhealthy_settings', JSON.stringify(cleanedSettings));
+      if (cleanedSettings.paymentQrUrl) {
+        localStorage.setItem('chillhealthy_duitnow_qr_custom', cleanedSettings.paymentQrUrl);
+      } else {
+        localStorage.removeItem('chillhealthy_duitnow_qr_custom');
+      }
     } catch {}
-    if (newSettings.kitchenPhotoUrl) {
+    if (cleanedSettings.kitchenPhotoUrl) {
       try {
-        localStorage.setItem('chillhealthy_crafted_photo', newSettings.kitchenPhotoUrl);
+        localStorage.setItem('chillhealthy_crafted_photo', cleanedSettings.kitchenPhotoUrl);
       } catch {
         // ignore
       }
     }
-    if (newSettings.heroComboPhotoUrl) {
+    if (cleanedSettings.heroComboPhotoUrl) {
       try {
-        localStorage.setItem('chillhealthy_hero_combo_photo', newSettings.heroComboPhotoUrl);
+        localStorage.setItem('chillhealthy_hero_combo_photo', cleanedSettings.heroComboPhotoUrl);
       } catch {
         // ignore
       }
     }
-    if (Array.isArray(newSettings.outOfStockDishes)) {
-      const outSet = new Set(newSettings.outOfStockDishes);
+    if (Array.isArray(cleanedSettings.outOfStockDishes)) {
+      const outSet = new Set(cleanedSettings.outOfStockDishes);
       setMenuItems((prev) => {
         const syncedMenu = prev.map((m) => ({
           ...m,
@@ -1650,11 +1729,18 @@ export default function App() {
         try {
           localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(syncedMenu));
         } catch {}
-        void pushSyncStore({ siteSettings: newSettings, menuItems: syncedMenu });
+        void pushSyncStore({
+          siteSettings: cleanedSettings,
+          menuItems: syncedMenu,
+          forceBroadcast: true,
+        });
         return syncedMenu;
       });
     } else {
-      void pushSyncStore({ siteSettings: newSettings });
+      void pushSyncStore({
+        siteSettings: cleanedSettings,
+        forceBroadcast: true,
+      });
     }
   };
 

@@ -34,14 +34,14 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   heroComboPhotoUrl: '',
   heroComboMode: 'grid',
   autoSyncMalaysiaBankHolidays: true,
-  // Payment QR customization settings
-  paymentQrUrl: '/duitnow-qr-chillhealthy.svg',
+  // Payment QR customization settings (updated via Back Office QR column)
+  paymentQrUrl: '',
   paymentMerchantName: 'CHILL HEALTHY TRADING',
-  paymentBankName: 'Hong Leong Bank (HLB Connect) / DuitNow QR',
-  paymentAccountNo: '3219-8920-11',
-  paymentDuitNowId: '0126189919',
-  paymentInstructionsEn: 'Scan via any Malaysian bank app, TNG eWallet, ShopeePay, or GrabPay.',
-  paymentInstructionsZh: '支持马来西亚各大银行 App、Touch n Go eWallet、ShopeePay 扫码即付。',
+  paymentBankName: 'DuitNow QR',
+  paymentAccountNo: '',
+  paymentDuitNowId: '',
+  paymentInstructionsEn: 'Scan the QR code below using any Malaysian banking app or eWallet.',
+  paymentInstructionsZh: '请使用马来西亚各大银行 App 或电子钱包扫描下方收款码付款。',
   // Highest-viewed Instagram Video hosted at top of homepage
   topInstagramVideoUrl: '/instagram_reel_DdyTG7it2_J.mp4',
   topInstagramReelUrl: 'https://www.instagram.com/reel/DdyTG7it2_J/?stkn=MWh3b283YzJ3M2JzeQ==',

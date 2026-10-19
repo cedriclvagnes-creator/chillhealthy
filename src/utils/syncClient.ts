@@ -23,6 +23,7 @@ export interface SyncStorePayload {
   deletedRedemptionIds?: string[];
   refundRecords?: MealDeletionRefundRecord[];
   adminCredentials?: { username: string; password: string };
+  clearPaymentQr?: boolean;
   forceBroadcast?: boolean;
   updatedAt?: string;
   hasCustomUpdates?: boolean;
@@ -474,12 +475,32 @@ export function mergeSyncPayloads(stores: SyncStorePayload[]): SyncStorePayload 
   }
 
   const latest = validStores[validStores.length - 1];
+  const mergedSiteSettings = validStores.reduce((acc, s) => {
+    if (!s.siteSettings) return acc;
+    const next = { ...(acc || {}), ...s.siteSettings };
+    if (next.paymentQrUrl === '/duitnow-qr-chillhealthy.svg') {
+      next.paymentQrUrl = '';
+    }
+    if (
+      next.paymentBankName &&
+      (next.paymentBankName.includes('HLB') || next.paymentBankName.includes('Hong Leong'))
+    ) {
+      next.paymentBankName = 'DuitNow QR';
+    }
+    // Preserve custom attached QR photo if an older/peer snapshot had an empty paymentQrUrl
+    const prevCustomQr =
+      acc?.paymentQrUrl && acc.paymentQrUrl !== '/duitnow-qr-chillhealthy.svg'
+        ? acc.paymentQrUrl
+        : '';
+    if (!next.paymentQrUrl && prevCustomQr) {
+      next.paymentQrUrl = prevCustomQr;
+    }
+    return next;
+  }, latest.siteSettings);
+
   return {
     ...latest,
-    siteSettings: validStores.reduce(
-      (acc, s) => (s.siteSettings ? { ...acc, ...s.siteSettings } : acc),
-      latest.siteSettings
-    ),
+    siteSettings: mergedSiteSettings,
     members: mergedMembers,
     deletedMemberIds: combinedDeletedMemberIds,
     redemptions: Array.from(redemptionMap.values()),
@@ -573,18 +594,25 @@ export async function fetchSyncFromServer(): Promise<SyncStorePayload | null> {
   if (stores.length === 0) return null;
   const merged = mergeSyncPayloads(stores);
 
-  // If peer server had newly registered members or redemptions not yet on local /api/sync, heal local /api/sync automatically
+  // If peer server had newly registered members, redemptions, or updated QR settings not yet on local /api/sync, heal local /api/sync automatically
   if (stores.length > 1 && merged && stores[0]) {
     const localMemberCount = Array.isArray(stores[0].members) ? stores[0].members.length : 0;
     const mergedMemberCount = Array.isArray(merged.members) ? merged.members.length : 0;
     const localRedCount = Array.isArray(stores[0].redemptions) ? stores[0].redemptions.length : 0;
     const mergedRedCount = Array.isArray(merged.redemptions) ? merged.redemptions.length : 0;
+    const localQr = stores[0].siteSettings?.paymentQrUrl || '';
+    const mergedQr = merged.siteSettings?.paymentQrUrl || '';
 
-    if (mergedMemberCount > localMemberCount || mergedRedCount > localRedCount) {
+    if (
+      mergedMemberCount > localMemberCount ||
+      mergedRedCount > localRedCount ||
+      (mergedQr && mergedQr !== localQr)
+    ) {
       void fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          siteSettings: merged.siteSettings,
           members: merged.members,
           redemptions: merged.redemptions,
           sourceClientId: SYNC_CLIENT_ID,

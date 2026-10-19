@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, MessageCircle, ExternalLink, QrCode, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, MessageCircle, ExternalLink, QrCode, AlertTriangle, Upload } from 'lucide-react';
 import { Language, SiteSettings } from '../types';
 import { buildWhatsAppUrl } from '../utils/whatsapp';
 
@@ -10,6 +10,7 @@ interface DuitNowPaymentCardProps {
   whatsappNumber?: string;
   siteSettings?: SiteSettings;
   onUpdateQrImage?: (imageUrl: string | null) => void;
+  onTriggerUploadClick?: () => void;
 }
 
 export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
@@ -18,109 +19,88 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   orderId,
   whatsappNumber = '0126189919',
   siteSettings,
+  onTriggerUploadClick,
 }) => {
-  const merchantName = (siteSettings?.paymentMerchantName || 'CHILL HEALTHY TRADING').toUpperCase();
-  // Note: 0126189919 does NOT have DuitNow phone transfer function. Never use it as a fallback DuitNow ID!
-  const customDuitNowId = siteSettings?.paymentDuitNowId && siteSettings.paymentDuitNowId !== '0126189919'
-    ? siteSettings.paymentDuitNowId
-    : '';
-
   const customQrFromStorage =
     typeof window !== 'undefined' ? localStorage.getItem('chillhealthy_duitnow_qr_custom') : null;
-  const effectiveQr =
-    siteSettings?.paymentQrUrl || customQrFromStorage || '/duitnow-qr-chillhealthy.svg';
-  const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 6;
-  const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 98;
+
+  const rawQr = siteSettings?.paymentQrUrl || customQrFromStorage || '';
+  const effectiveQr = rawQr && rawQr !== '/duitnow-qr-chillhealthy.svg' ? rawQr : '';
+
+  const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 4;
+  const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 100;
 
   const paymentWhatsappMessage =
-    `*Chill Healthy Trading - DuitNow QR Payment Receipt*\n` +
+    `*Chill Healthy Trading - QR Payment Receipt*\n` +
     (orderId ? `Order ID: ${orderId}\n` : '') +
     (amount ? `Amount Paid: RM ${amount.toFixed(2)}\n` : '') +
-    `I have completed payment via DuitNow QR to *${merchantName}*.\n` +
+    `I have completed payment via QR scan.\n` +
     `Attached is my payment transfer receipt screenshot. Please confirm my order! ❤️`;
 
   const paymentWhatsappUrl = buildWhatsAppUrl(whatsappNumber, paymentWhatsappMessage);
 
   return (
-    <div className="bg-white rounded-3xl border-2 border-[#e5006b]/80 shadow-xl overflow-hidden max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
+    <div className="bg-white rounded-3xl border-2 border-pink-600/80 shadow-xl overflow-hidden w-full max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-full border border-pink-200 inline-flex items-center gap-1">
           <QrCode className="w-3.5 h-3.5" />
-          <span>DuitNow QR Instant Pay</span>
+          <span>{language === 'en' ? 'QR Scan Payment' : '二维码扫码付款'}</span>
         </span>
-        <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
-          Official Merchant QR
-        </span>
+        {amount !== undefined && amount > 0 && (
+          <span className="text-xs font-extrabold text-pink-700 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-200">
+            RM {amount.toFixed(2)}
+          </span>
+        )}
       </div>
 
-      {/* Official DuitNow QR Standee Card (matching Duitnow.jpeg) */}
-      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-md">
-        {/* Top Arch & Protruding DuitNow QR Logo Header */}
-        <div className="pt-3 bg-white flex flex-col items-center relative">
-          <div className="z-10 bg-white border-2 border-stone-200 rounded-2xl px-3.5 py-2 shadow-xs flex flex-col items-center justify-center -mb-5">
-            <div className="w-7 h-7 rounded-lg bg-[#e5006b] flex items-center justify-center text-white font-black text-sm shadow-2xs">
-              D
+      {/* Clean QR Column Only (Displays exact photo attached in Back Office across Website, Mobile & Tablet) */}
+      <div
+        onClick={onTriggerUploadClick}
+        className={`rounded-2xl border-2 ${
+          effectiveQr ? 'border-stone-200 bg-white' : 'border-dashed border-pink-300 bg-pink-50/40'
+        } overflow-hidden shadow-xs flex flex-col items-center justify-center transition-all ${
+          onTriggerUploadClick ? 'cursor-pointer hover:border-pink-500' : ''
+        }`}
+        style={{ padding: `${qrMargin}px` }}
+      >
+        {effectiveQr ? (
+          <div className="w-full flex items-center justify-center overflow-hidden rounded-xl bg-white">
+            <img
+              src={effectiveQr}
+              alt="Payment QR Code"
+              className="w-full h-auto max-h-[420px] object-contain mx-auto block transition-transform"
+              style={{
+                transform: `scale(${qrScale / 100})`,
+                transformOrigin: 'center',
+              }}
+            />
+          </div>
+        ) : (
+          <div className="py-12 px-6 text-center flex flex-col items-center justify-center space-y-2.5">
+            <div className="w-14 h-14 rounded-2xl bg-pink-100 text-pink-600 flex items-center justify-center shadow-2xs">
+              {onTriggerUploadClick ? <Upload className="w-7 h-7" /> : <QrCode className="w-7 h-7" />}
             </div>
-            <span className="font-heading font-black text-[#e5006b] text-xs tracking-tight leading-none mt-1">
-              DuitNow
-            </span>
-            <span className="font-heading font-black text-[#e5006b] text-[11px] tracking-wider leading-none mt-0.5">
-              QR
-            </span>
-          </div>
-
-          {/* Pink Standee Body (#e5006b) */}
-          <div className="w-full bg-[#e5006b] rounded-t-[2.25rem] pt-8 pb-4 px-5 flex flex-col items-center shadow-inner">
-            {/* White Rounded QR Container */}
-            <div
-              className="w-56 h-56 sm:w-64 sm:h-64 bg-white rounded-2xl flex items-center justify-center shadow-md relative overflow-hidden"
-              style={{ padding: `${qrMargin}px` }}
-            >
-              <img
-                src={effectiveQr}
-                alt={`DuitNow QR ${merchantName}`}
-                className="w-full h-full object-contain transition-transform"
-                style={{
-                  transform: `scale(${qrScale / 100})`,
-                  transformOrigin: 'center',
-                }}
-              />
-            </div>
-
-            {/* Merchant Name in Bold White Uppercase on Pink Background */}
-            <h4 className="font-heading font-black text-white text-sm sm:text-base mt-3.5 tracking-wide uppercase text-center">
-              {merchantName}
-            </h4>
-            {customDuitNowId && (
-              <span className="text-[10px] font-mono font-semibold text-white/90 bg-black/15 px-2 py-0.5 rounded mt-1">
-                DuitNow ID: {customDuitNowId}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* White Bottom Base: MALAYSIA NATIONAL QR & HLB Connect Merchant Partner */}
-        <div className="bg-white px-4 pt-3 pb-3.5 text-center border-t border-stone-100">
-          <div className="font-heading font-black text-stone-900 text-xs sm:text-sm tracking-wide uppercase">
-            MALAYSIA NATIONAL QR
-          </div>
-          <p className="text-[11px] text-stone-700 font-medium mt-0.5">
-            Accepted by participating Banks and e-Wallets
-          </p>
-
-          <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between px-2">
-            <span className="text-[11px] font-semibold text-stone-700">Merchant Partner</span>
-            <div className="inline-flex items-center gap-0.5 font-heading">
-              <span className="font-black text-sm tracking-tight text-[#002d62]">H</span>
-              <span className="font-black text-sm tracking-tight text-[#d91c24]">L</span>
-              <span className="font-black text-sm tracking-tight text-[#002d62]">B</span>
-              <span className="font-bold text-sm tracking-tight text-[#002d62] ml-0.5">Connect</span>
+            <div className="space-y-1">
+              <p className="text-xs font-extrabold text-stone-800">
+                {onTriggerUploadClick
+                  ? language === 'en'
+                    ? 'Click Here to Attach Your QR Photo'
+                    : '点击此处上传并附加您的收款二维码照片'
+                  : language === 'en'
+                  ? 'Payment QR Code Column'
+                  : '结账收款二维码栏'}
+              </p>
+              <p className="text-[11px] text-stone-500 max-w-[230px] mx-auto leading-snug">
+                {language === 'en'
+                  ? 'Attach your QR photo in Back Office Settings and click Synchronize to display across Website, Mobile & Tablet.'
+                  : '请在后台管理上传您的收款二维码照片并点击同步，即可在电脑网页、手机与平板全面显示。'}
+              </p>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* CRITICAL DUITNOW NOTICE: 0126189919 has NO DuitNow function */}
+      {/* Notice: 0126189919 has NO DuitNow phone transfer function */}
       <div className="mt-3 p-3 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-stone-900 space-y-1.5 text-left">
         <div className="flex items-center gap-1.5 text-amber-900 font-black text-xs">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -132,12 +112,12 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
         </div>
         <p className="text-[11px] text-stone-700 leading-snug">
           {language === 'en'
-            ? 'Please directly SCAN the DuitNow QR above using your banking app (MAE, CIMB, TNG, Public Bank, etc.). Do NOT attempt to transfer via DuitNow using phone number 0126189919.'
-            : '请务必直接使用银行 App (MAE/CIMB/TNG/Public Bank等) 扫描上方 DuitNow QR 收款码付款。请勿输入手机号码 0126189919 进行 DuitNow 转账。'}
+            ? 'Please directly SCAN the QR code above using your banking app or eWallet. Do NOT transfer via DuitNow phone number to 0126189919.'
+            : '请直接使用银行 App 或电子钱包扫描上方二维码付款。请勿输入手机号码 0126189919 进行转账。'}
         </p>
       </div>
 
-      {/* Crucial instruction: After payment must whatsapp receipt */}
+      {/* After payment WhatsApp receipt */}
       <div className="mt-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-stone-800 text-center space-y-2">
         <div className="flex items-center justify-center gap-1.5 text-emerald-900 font-extrabold text-xs">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
