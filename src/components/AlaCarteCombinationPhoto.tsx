@@ -10,8 +10,9 @@ import {
   Save,
   Check,
   Upload,
+  AlertCircle,
 } from 'lucide-react';
-import { Language } from '../types';
+import { Language, MealItem } from '../types';
 
 export interface AlaCarteGridItem {
   id: string;
@@ -22,6 +23,7 @@ export interface AlaCarteGridItem {
   protein?: string;
   description?: string;
   descriptionZh?: string;
+  isOutOfStock?: boolean;
 }
 
 interface AlaCarteCombinationPhotoProps {
@@ -30,6 +32,8 @@ interface AlaCarteCombinationPhotoProps {
   allowEdit?: boolean;
   customPhotoUrl?: string;
   comboMode?: 'photo' | 'grid' | 'spread';
+  menuItems?: MealItem[];
+  onSelectMeal?: (meal: MealItem) => void;
 }
 
 const STORAGE_KEY_PHOTO = 'chillhealthy_hero_combo_photo';
@@ -86,6 +90,8 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
   allowEdit = false,
   customPhotoUrl,
   comboMode,
+  menuItems = [],
+  onSelectMeal,
 }) => {
   const [customPhoto, setCustomPhoto] = useState<string | null>(() => {
     if (customPhotoUrl) return customPhotoUrl;
@@ -357,71 +363,112 @@ export const AlaCarteCombinationPhoto: React.FC<AlaCarteCombinationPhotoProps> =
             className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
           />
         ) : (
-          /* 2x2 Grid of authentic official ala carte meals */
+          /* 2x2 Grid of authentic official ala carte meals (Synchronized with live menuItems & Out of Stock status) */
           <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-0.5 bg-stone-900">
-            {alaCarteItems.map((item, index) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  if (allowEdit) {
-                    handleOpenEditModal(index);
-                  } else if (onExploreMenu) {
-                    onExploreMenu();
+            {alaCarteItems.map((item, index) => {
+              // Match with live menuItems to reflect real-time Out of Stock status & updates
+              const matchedMeal = menuItems.find(
+                (m) =>
+                  m.id === item.id ||
+                  m.name.toLowerCase() === item.name.toLowerCase() ||
+                  m.name.toLowerCase().includes(item.name.toLowerCase()) ||
+                  item.name.toLowerCase().includes(m.name.toLowerCase()) ||
+                  (m.nameZh && item.nameZh && (m.nameZh.includes(item.nameZh) || item.nameZh.includes(m.nameZh)))
+              ) || menuItems[index];
+
+              const isItemOutOfStock = Boolean(matchedMeal?.isOutOfStock || item.isOutOfStock);
+              const displayImage = matchedMeal?.image || item.image;
+              const displayName = language === 'en' ? (matchedMeal?.name || item.name) : (matchedMeal?.nameZh || item.nameZh);
+              const displayProtein = matchedMeal ? `${matchedMeal.protein}g Protein` : item.protein;
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    if (allowEdit) {
+                      handleOpenEditModal(index);
+                    } else if (onSelectMeal && matchedMeal) {
+                      onSelectMeal(matchedMeal);
+                    } else if (onExploreMenu) {
+                      onExploreMenu();
+                    }
+                  }}
+                  className={`relative w-full h-full overflow-hidden group/item bg-stone-800 ${
+                    allowEdit || onSelectMeal || onExploreMenu ? 'cursor-pointer' : ''
+                  }`}
+                  title={
+                    allowEdit
+                      ? language === 'en'
+                        ? `Click to edit ${displayName}`
+                        : `点击编辑 ${displayName}`
+                      : language === 'en'
+                      ? `View Details for ${displayName}`
+                      : `查看详情 ${displayName}`
                   }
-                }}
-                className={`relative w-full h-full overflow-hidden group/item bg-stone-800 ${
-                  allowEdit || onExploreMenu ? 'cursor-pointer' : ''
-                }`}
-                title={
-                  allowEdit
-                    ? (language === 'en' ? `Click to edit ${item.name}` : `点击编辑 ${item.nameZh}`)
-                    : (language === 'en' ? `View Menu for ${item.name}` : `浏览菜单 ${item.nameZh}`)
-                }
-              >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover/item:scale-110"
-                />
+                >
+                  <img
+                    src={displayImage}
+                    alt={displayName}
+                    className={`w-full h-full object-cover transition-transform duration-500 group-hover/item:scale-110 ${
+                      isItemOutOfStock ? 'opacity-65 grayscale-[45%]' : ''
+                    }`}
+                  />
 
-                {/* Hover overlay hint */}
-                {allowEdit ? (
-                  <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                    <span className="px-2 py-1 rounded-lg bg-stone-900/85 text-[11px] font-bold text-white flex items-center gap-1">
-                      <Edit3 className="w-3 h-3 text-emerald-400" />
-                      <span>{language === 'en' ? 'Edit' : '编辑'}</span>
-                    </span>
-                  </div>
-                ) : onExploreMenu ? (
-                  <div className="absolute inset-0 bg-stone-900/20 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                    <span className="px-2 py-1 rounded-lg bg-stone-900/80 text-[10px] font-bold text-white">
-                      {language === 'en' ? 'View Menu' : '查看菜单'}
-                    </span>
-                  </div>
-                ) : null}
+                  {/* Sold Out / Out of Stock Synchronized Overlay */}
+                  {isItemOutOfStock && (
+                    <div className="absolute inset-0 bg-stone-950/50 backdrop-blur-[1px] flex items-center justify-center p-2 z-10 pointer-events-none">
+                      <span className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider shadow-lg border border-rose-400/50 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>{language === 'en' ? 'Sold Out' : '已售罄'}</span>
+                      </span>
+                    </div>
+                  )}
 
-                {/* Dish badge & protein */}
-                <div className="absolute top-2 left-2 pointer-events-none flex flex-col gap-1 items-start">
-                  <span className="px-1.5 py-0.5 rounded-md bg-stone-900/80 backdrop-blur-xs text-[10px] font-semibold text-white/90 border border-white/15">
-                    {language === 'en' ? item.name : item.nameZh}
-                  </span>
-                  {item.protein && (
-                    <span className="px-1.5 py-0.2 rounded-md bg-emerald-900/80 text-[9px] font-bold text-emerald-300 border border-emerald-500/20">
-                      {item.protein}
+                  {/* Hover overlay hint */}
+                  {allowEdit ? (
+                    <div className="absolute inset-0 bg-stone-900/30 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-20">
+                      <span className="px-2 py-1 rounded-lg bg-stone-900/85 text-[11px] font-bold text-white flex items-center gap-1">
+                        <Edit3 className="w-3 h-3 text-emerald-400" />
+                        <span>{language === 'en' ? 'Edit' : '编辑'}</span>
+                      </span>
+                    </div>
+                  ) : (onSelectMeal || onExploreMenu) ? (
+                    <div className="absolute inset-0 bg-stone-900/20 opacity-0 group-hover/item:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-20">
+                      <span className="px-2 py-1 rounded-lg bg-stone-900/80 text-[10px] font-bold text-white">
+                        {language === 'en' ? 'View Dish' : '查看餐点'}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {/* Dish badge & protein */}
+                  <div className="absolute top-2 left-2 pointer-events-none flex flex-col gap-1 items-start z-20">
+                    <span className="px-1.5 py-0.5 rounded-md bg-stone-900/80 backdrop-blur-xs text-[10px] font-semibold text-white/90 border border-white/15 truncate max-w-[140px]">
+                      {displayName}
                     </span>
+                    {isItemOutOfStock ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-rose-600 text-[9px] font-extrabold text-white uppercase">
+                        {language === 'en' ? 'Out of Stock' : '已售罄'}
+                      </span>
+                    ) : (
+                      displayProtein && (
+                        <span className="px-1.5 py-0.2 rounded-md bg-emerald-900/80 text-[9px] font-bold text-emerald-300 border border-emerald-500/20">
+                          {displayProtein}
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  {/* Marker for the last two ala carte items */}
+                  {index >= 2 && (
+                    <div className="absolute bottom-2 right-2 pointer-events-none z-20">
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-500/90 text-[9px] font-black text-stone-900">
+                        {index === 2 ? 'Ala Carte #3' : 'Ala Carte #4'}
+                      </span>
+                    </div>
                   )}
                 </div>
-
-                {/* Marker for the last two ala carte items */}
-                {index >= 2 && (
-                  <div className="absolute bottom-2 right-2 pointer-events-none">
-                    <span className="px-1.5 py-0.5 rounded-md bg-amber-500/90 text-[9px] font-black text-stone-900">
-                      {index === 2 ? 'Ala Carte #3' : 'Ala Carte #4'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

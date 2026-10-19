@@ -492,21 +492,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       : `已选择 WhatsApp Direct Pay，请协助提供转账方式 / DuitNow QR 收款码完成付款，谢谢！🥗`);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="relative bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200">
+    <div
+      className="fixed inset-0 z-50 overflow-hidden bg-stone-900/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 md:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative bg-white w-full max-w-xl max-h-[85dvh] sm:max-h-[88vh] flex flex-col rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
+          className="absolute top-3.5 right-3.5 z-20 px-3 py-1.5 rounded-full bg-stone-900/80 hover:bg-red-600 text-white text-xs font-extrabold flex items-center gap-1 shadow-md transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
+          <span>{language === 'en' ? 'Close' : '关闭'}</span>
         </button>
 
         {orderSuccess ? (
           /* =========================================================================
              ORDER SUCCESS: EXACT STEP 1 -> STEP 2 -> STEP 3 CONFIRMATION
              ========================================================================= */
-          <div className="p-6 sm:p-8 text-center space-y-5">
+          <div className="p-5 sm:p-7 text-center space-y-5 flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto animate-bounce">
               <CheckCircle className="w-10 h-10" />
             </div>
@@ -817,7 +824,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           /* =========================================================================
              CHECKOUT FORM: ORDERING DETAILS & 2-ADDRESS SUPPORT
              ========================================================================= */
-          <form onSubmit={handleSubmit} className="p-6 sm:p-7 space-y-4 max-h-[85vh] overflow-y-auto">
+          <form onSubmit={handleSubmit} className="p-5 sm:p-7 space-y-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <div>
               <div className="flex items-center gap-2">
                 <Truck className="w-5 h-5 text-emerald-700" />

@@ -26,6 +26,8 @@ interface CalorieGoalCalculatorProps {
   onOpenPlans?: () => void;
   onOpenMemberPortal?: () => void;
   onOpenMenu?: () => void;
+  menuItems?: MealItem[];
+  outOfStockDishes?: string[];
 }
 
 export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
@@ -37,6 +39,8 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
   onOpenPlans,
   onOpenMemberPortal,
   onOpenMenu,
+  menuItems = MEAL_ITEMS,
+  outOfStockDishes = [],
 }) => {
   const [gender, setGender] = useState<'male' | 'female'>('female');
   const [goal, setGoal] = useState<'loss' | 'maintain' | 'muscle'>('loss');
@@ -71,44 +75,56 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
     targetProtein = Math.round(weight * 2.0);
   }
 
-  // Recommended meals
-  const recommendedMeals = MEAL_ITEMS.filter((meal) => {
-    if (goal === 'loss') {
-      return meal.calories <= 500 && meal.protein >= 35;
-    } else if (goal === 'muscle') {
-      return meal.protein >= 40;
-    } else {
-      return meal.category.includes('signature');
-    }
-  }).slice(0, 3);
+  // Recommended meals (synchronized with live menuItems & stock status)
+  const activeMenu = menuItems && menuItems.length > 0 ? menuItems : MEAL_ITEMS;
+  const recommendedMeals = activeMenu
+    .filter((meal) => {
+      const isOut = Boolean(meal.isOutOfStock || outOfStockDishes.includes(meal.id));
+      if (isOut) return false;
+      if (goal === 'loss') {
+        return meal.calories <= 500 && meal.protein >= 35;
+      } else if (goal === 'muscle') {
+        return meal.protein >= 40;
+      } else {
+        return meal.category.includes('signature');
+      }
+    })
+    .slice(0, 3);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200">
+    <div
+      className="fixed inset-0 z-50 overflow-hidden bg-stone-900/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 md:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative bg-white w-full max-w-2xl max-h-[85dvh] sm:max-h-[88vh] flex flex-col rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-stone-100/90 hover:bg-stone-200 text-stone-700 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
+          className="absolute top-3.5 right-3.5 z-20 px-3 py-1.5 rounded-full bg-stone-900/80 hover:bg-red-600 text-white text-xs font-extrabold flex items-center gap-1 shadow-md border border-white/25 transition-colors cursor-pointer"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
+          <span>{language === 'en' ? 'Close' : '关闭'}</span>
         </button>
 
         {!hasPurchasedMealPlan ? (
           /* =========================================================================
              LOCKED STATE: THE MEAL CALCULATOR ONLY GRANTED TO WHOM HAS PURCHASED MEAL PLAN
              ========================================================================= */
-          <div>
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* Locked Header */}
-            <div className="bg-stone-900 text-white p-6 sm:p-8 relative overflow-hidden">
+            <div className="bg-stone-900 text-white p-5 sm:p-7 relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2.5 border border-amber-400/30">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2 border border-amber-400/30">
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
                 <span>{language === 'en' ? 'Meal Plan Subscriber Perk' : '健康餐配套会员专属特权'}</span>
               </div>
-              <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-white">
+              <h2 className="font-heading text-xl sm:text-2xl font-extrabold text-white pr-16">
                 {language === 'en' ? 'Calorie & Macro Matcher' : '智能热量与营养素计算器'}
               </h2>
-              <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-lg leading-relaxed">
+              <p className="text-xs text-stone-300 mt-1 max-w-lg leading-relaxed">
                 {language === 'en'
                   ? 'Personalized daily calorie deficit and macro planning is exclusively granted to customers who have purchased a CHILL Healthy Meal Plan.'
                   : '量身定制的每日卡路里赤字与宏量营养规划，专为已订购潮轻食健康餐配套的顾客开放。'}
@@ -116,7 +132,7 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
             </div>
 
             {/* Locked Body: Decision for Plans vs Ala Carte */}
-            <div className="p-6 sm:p-8 space-y-6 max-h-[65vh] overflow-y-auto bg-stone-50/50">
+            <div className="p-5 sm:p-6 space-y-5 flex-1 min-h-0 overflow-y-auto overscroll-contain bg-stone-50/50">
               {/* Logged in member with 0 meals notice */}
               {currentMember && (
                 <div className="p-4 rounded-2xl bg-white border border-stone-200 shadow-2xs space-y-1.5">
@@ -256,10 +272,10 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
           /* =========================================================================
              UNLOCKED STATE: GRANTED TO WHOM HAS PURCHASED MEAL PLAN
              ========================================================================= */
-          <div>
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* Header */}
-            <div className="bg-emerald-900 text-white p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="bg-emerald-900 text-white p-5 sm:p-7 shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pr-16">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-800 text-emerald-300 text-xs font-bold uppercase tracking-wider">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>{language === 'en' ? 'CHILL Smart Matcher' : '潮轻食 · 智能热量匹配'}</span>
@@ -275,10 +291,10 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
                 </div>
               </div>
 
-              <h2 className="font-heading text-2xl sm:text-3xl font-extrabold">
+              <h2 className="font-heading text-xl sm:text-2xl font-extrabold">
                 {language === 'en' ? 'Find Your Perfect Meal Box' : '量身定制您的减脂/增肌卡路里'}
               </h2>
-              <p className="text-xs sm:text-sm text-emerald-100 mt-1 max-w-lg">
+              <p className="text-xs text-emerald-100 mt-1 max-w-lg">
                 {language === 'en'
                   ? 'Calculate your daily energy expenditure and instantly match meal boxes designed for your body goal.'
                   : '输入您的身体数据与生活目标，系统将自动核算推荐每日摄入及契合度最高的轻食餐盒。'}
@@ -286,7 +302,7 @@ export const CalorieGoalCalculator: React.FC<CalorieGoalCalculatorProps> = ({
             </div>
 
             {/* Form Inputs */}
-            <div className="p-6 space-y-6 max-h-[65vh] overflow-y-auto">
+            <div className="p-5 sm:p-6 space-y-5 flex-1 min-h-0 overflow-y-auto overscroll-contain">
               {/* Goal selection */}
               <div>
                 <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block mb-2">

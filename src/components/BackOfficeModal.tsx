@@ -118,6 +118,7 @@ interface BackOfficeModalProps {
   onAdminAuthChange?: (isAuthenticated: boolean) => void;
   refundRecords?: MealDeletionRefundRecord[];
   onSaveOfficialReceipt?: (receipt: OfficialReceipt) => void;
+  onSynchronizeData?: () => void;
 }
 
 export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
@@ -147,6 +148,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   onAdminAuthChange,
   refundRecords = [],
   onSaveOfficialReceipt,
+  onSynchronizeData,
 }) => {
   // Stored admin credentials in localStorage (configurable by admin)
   const [adminCredentials, setAdminCredentials] = useState<{ username: string; password: string }>(() => {
@@ -223,6 +225,17 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   const [editablePackages, setEditablePackages] = useState<MealPlan[]>(JSON.parse(JSON.stringify(packages)));
   const [selectedPlanForEdit, setSelectedPlanForEdit] = useState<MealPlan | null>(editablePackages[0] || null);
 
+  // Keep local editablePackages synchronized with external packages
+  useEffect(() => {
+    setEditablePackages(packages);
+    if (selectedPlanForEdit) {
+      const refreshed = packages.find((p) => p.id === selectedPlanForEdit.id);
+      if (refreshed) {
+        setSelectedPlanForEdit(refreshed);
+      }
+    }
+  }, [packages]);
+
   // Local editable copy of Menu
   const [editableMenu, setEditableMenu] = useState<MealItem[]>(JSON.parse(JSON.stringify(menuItems)));
   const [selectedMealForEdit, setSelectedMealForEdit] = useState<MealItem | null>(editableMenu[0] || null);
@@ -241,8 +254,105 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     }
   }, [menuItems]);
 
-  // Success toast
+  // Success toast & Synchronize Data state
   const [toastMsg, setToastMsg] = useState('');
+  const [isSyncingData, setIsSyncingData] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('chillhealthy_last_sync');
+    } catch {
+      return null;
+    }
+  });
+
+  // Hard refresh localStorage data, push/pull cross-device state, and dispatch StorageEvent across all application tabs
+  const handleSynchronizeData = () => {
+    setIsSyncingData(true);
+    try {
+      // 1. Flush any in-memory BackOffice edits (menu stock, settings, packages) first so they are never lost
+      const outOfStockIds = editableMenu.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+      const mergedSettings: SiteSettings = {
+        ...siteSettings,
+        ...formSettings,
+        outOfStockDishes: outOfStockIds,
+      };
+      setFormSettings(mergedSettings);
+      onUpdateSiteSettings(mergedSettings);
+      onUpdateMenuItems(editableMenu);
+      onUpdatePackages(editablePackages);
+
+      localStorage.setItem('chillhealthy_settings', JSON.stringify(mergedSettings));
+      localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(editableMenu));
+      localStorage.setItem('chillhealthy_packages_v3', JSON.stringify(editablePackages));
+
+      const savedAdminCreds = localStorage.getItem('chill_admin_credentials');
+      if (savedAdminCreds) {
+        const parsedCreds = JSON.parse(savedAdminCreds);
+        if (parsedCreds?.username && parsedCreds?.password) {
+          setAdminCredentials(parsedCreds);
+          setNewAdminUser(parsedCreds.username);
+          setNewAdminPass(parsedCreds.password);
+        }
+      }
+
+      // 2. Trigger parent hard refresh & cross-device server sync
+      if (onSynchronizeData) {
+        onSynchronizeData();
+      }
+
+      // 3. Write sync timestamp and broadcast StorageEvent across all application tabs
+      const syncTimestamp = new Date().toISOString();
+      localStorage.setItem('chillhealthy_last_sync', syncTimestamp);
+      setLastSyncedAt(syncTimestamp);
+
+      const keysToBroadcast = [
+        'chillhealthy_settings',
+        'chillhealthy_packages_v3',
+        'chillhealthy_menu_v2',
+        'chillhealthy_members',
+        'chillhealthy_current_member',
+        'chillhealthy_redemptions',
+        'chillhealthy_refund_records',
+        'chillhealthy_cart',
+        'chillhealthy_last_sync',
+      ];
+
+      keysToBroadcast.forEach((key) => {
+        const val = localStorage.getItem(key);
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key,
+            newValue: val,
+            storageArea: localStorage,
+          })
+        );
+      });
+
+      // Also dispatch a full-storage refresh event (key: null)
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: null,
+          storageArea: localStorage,
+        })
+      );
+
+      setToastMsg(
+        language === 'en'
+          ? '✓ Synchronized Data across Website, Tablet & Mobile!'
+          : '✓ 数据已全局同步至网页、平板与手机端！'
+      );
+      setTimeout(() => setToastMsg(''), 3500);
+    } catch {
+      setToastMsg(
+        language === 'en'
+          ? '⚠️ Unable to synchronize data.'
+          : '⚠️ 同步数据时出错。'
+      );
+      setTimeout(() => setToastMsg(''), 3500);
+    } finally {
+      setTimeout(() => setIsSyncingData(false), 450);
+    }
+  };
 
   // Daily 5:00 PM Member Order Report state
   const [dailyReportDate, setDailyReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -1017,9 +1127,17 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     if (!selectedMealForEdit) return;
 
     const updated = editableMenu.map((m) => (m.id === selectedMealForEdit.id ? selectedMealForEdit : m));
+    const outOfStockIds = updated.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+    const updatedSettings = { ...formSettings, outOfStockDishes: outOfStockIds };
     setEditableMenu(updated);
+    setFormSettings(updatedSettings);
     onUpdateMenuItems(updated);
-    triggerToast(language === 'en' ? `✓ Dish "${selectedMealForEdit.name}" updated!` : `✓ 餐品 "${selectedMealForEdit.nameZh}" 修改已保存！`);
+    onUpdateSiteSettings(updatedSettings);
+    triggerToast(
+      language === 'en'
+        ? `✓ Dish "${selectedMealForEdit.name}" saved & synced across mobile, tablet & website!`
+        : `✓ 餐品 "${selectedMealForEdit.nameZh}" 修改已保存并同步至手机、平板与网页端！`
+    );
   };
 
   // Upload dish image from device as DataURL
@@ -1052,36 +1170,46 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   };
 
   // Toggle stock status for a meal (In Stock vs Out of Stock)
-  const handleToggleStock = (mealId: string, e?: React.MouseEvent) => {
+  const handleToggleStock = (mealId: string, e?: React.MouseEvent, explicitOutOfStock?: boolean) => {
     if (e) e.stopPropagation();
     const updated = editableMenu.map((m) => {
       if (m.id === mealId) {
-        return { ...m, isOutOfStock: !m.isOutOfStock };
+        const nextOut = explicitOutOfStock !== undefined ? explicitOutOfStock : !m.isOutOfStock;
+        return { ...m, isOutOfStock: nextOut };
       }
       return m;
     });
+    const outOfStockIds = updated.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+    const updatedSettings = { ...formSettings, outOfStockDishes: outOfStockIds };
     setEditableMenu(updated);
+    setFormSettings(updatedSettings);
     onUpdateMenuItems(updated);
+    onUpdateSiteSettings(updatedSettings);
     if (selectedMealForEdit && selectedMealForEdit.id === mealId) {
+      const nextOut = explicitOutOfStock !== undefined ? explicitOutOfStock : !selectedMealForEdit.isOutOfStock;
       setSelectedMealForEdit({
         ...selectedMealForEdit,
-        isOutOfStock: !selectedMealForEdit.isOutOfStock,
+        isOutOfStock: nextOut,
       });
     }
     const target = updated.find((m) => m.id === mealId);
     const isNowOut = target?.isOutOfStock;
     triggerToast(
       language === 'en'
-        ? `✓ "${target?.name}" marked as ${isNowOut ? '🔴 OUT OF STOCK' : '🟢 IN STOCK'}`
-        : `✓ "${target?.nameZh}" 已设置为【${isNowOut ? '🔴 已售罄/缺货' : '🟢 正常供应'}】`
+        ? `✓ "${target?.name}" marked as ${isNowOut ? '🔴 OUT OF STOCK' : '🟢 IN STOCK'} (Synced to all devices)`
+        : `✓ "${target?.nameZh}" 已设置为【${isNowOut ? '🔴 已售罄/缺货' : '🟢 正常供应'}】（已同步至所有设备）`
     );
   };
 
   // Mark all dishes in or out of stock in batch
   const handleMarkAllStock = (inStock: boolean) => {
     const updated = editableMenu.map((m) => ({ ...m, isOutOfStock: !inStock }));
+    const outOfStockIds = updated.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+    const updatedSettings = { ...formSettings, outOfStockDishes: outOfStockIds };
     setEditableMenu(updated);
+    setFormSettings(updatedSettings);
     onUpdateMenuItems(updated);
+    onUpdateSiteSettings(updatedSettings);
     if (selectedMealForEdit) {
       setSelectedMealForEdit({
         ...selectedMealForEdit,
@@ -1090,8 +1218,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
     }
     triggerToast(
       inStock
-        ? (language === 'en' ? '✓ All items marked IN STOCK' : '✓ 全部菜品已设为【正常供应有货】')
-        : (language === 'en' ? '✓ All items marked OUT OF STOCK' : '✓ 全部菜品已设为【已售罄/缺货】')
+        ? (language === 'en' ? '✓ All items marked IN STOCK across all devices' : '✓ 全部菜品已设为【正常供应有货】并同步所有设备')
+        : (language === 'en' ? '✓ All items marked OUT OF STOCK across all devices' : '✓ 全部菜品已设为【已售罄/缺货】并同步所有设备')
     );
   };
 
@@ -1134,7 +1262,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 w-screen h-screen min-h-screen bg-stone-900 text-stone-900 flex flex-col overflow-hidden animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 w-full h-dvh bg-stone-900 text-stone-900 flex flex-col overflow-hidden animate-in fade-in duration-150">
       {!isAdminAuthenticated ? (
         /* Admin Login Gate - Full Screen Experience */
         <div className="w-full h-full flex flex-col bg-stone-950 overflow-y-auto">
@@ -1295,13 +1423,30 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
               </div>
             </div>
 
-            {/* Action Buttons: Return to Store, Copy Link, Export, Logout */}
+            {/* Action Buttons: Synchronize Data, Return to Store, Copy Link, Export, Logout */}
             <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
               {toastMsg && (
                 <div className="hidden lg:inline-flex px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold animate-pulse">
                   {toastMsg}
                 </div>
               )}
+
+              {/* Prominent Synchronize Data Button */}
+              <button
+                type="button"
+                id="admin-btn-synchronize-data"
+                onClick={handleSynchronizeData}
+                disabled={isSyncingData}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-stone-950 text-xs font-black flex items-center gap-2 shadow-md hover:shadow-cyan-400/25 active:scale-95 transition-all cursor-pointer ring-2 ring-cyan-300/60"
+                title={
+                  language === 'en'
+                    ? `Hard refresh localStorage data and dispatch storage event across all tabs${lastSyncedAt ? ` (Last synced: ${new Date(lastSyncedAt).toLocaleTimeString()})` : ''}`
+                    : `强制刷新本地存储数据并向所有标签页广播同步事件${lastSyncedAt ? ` (上次同步: ${new Date(lastSyncedAt).toLocaleTimeString()})` : ''}`
+                }
+              >
+                <RefreshCw className={`w-4 h-4 text-stone-950 ${isSyncingData ? 'animate-spin' : ''}`} />
+                <span>{language === 'en' ? 'Synchronize Data' : 'Synchronize Data (同步数据)'}</span>
+              </button>
 
               <button
                 type="button"
@@ -3137,7 +3282,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                 <div className="flex items-center gap-2 shrink-0">
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedMealForEdit({ ...selectedMealForEdit, isOutOfStock: false })}
+                                    onClick={(e) => handleToggleStock(selectedMealForEdit.id, e, false)}
                                     className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                                       !selectedMealForEdit.isOutOfStock
                                         ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30 font-black'
@@ -3148,7 +3293,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedMealForEdit({ ...selectedMealForEdit, isOutOfStock: true })}
+                                    onClick={(e) => handleToggleStock(selectedMealForEdit.id, e, true)}
                                     className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                                       selectedMealForEdit.isOutOfStock
                                         ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-500/30 font-black'

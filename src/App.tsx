@@ -52,6 +52,24 @@ import {
 import { synchronizeMalaysiaWeekdayBankHolidays } from './utils/malaysiaHolidays';
 import { normalizeMalaysianPhone } from './utils/malaysiaPhone';
 import { generateUniqueOrderNumber } from './utils/whatsapp';
+import {
+  pushSyncStore,
+  fetchSyncStore,
+  subscribeToRealTimeSync,
+  SyncStorePayload,
+} from './utils/syncClient';
+
+function reconcileMenuWithOutOfStockList(
+  items: MealItem[],
+  outOfStockIds?: string[]
+): MealItem[] {
+  if (!Array.isArray(outOfStockIds)) return items;
+  const outSet = new Set(outOfStockIds);
+  return items.map((m) => ({
+    ...m,
+    isOutOfStock: outSet.has(m.id) || Boolean(m.isOutOfStock),
+  }));
+}
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -152,18 +170,23 @@ export default function App() {
   // Dynamic Menu Items (dishes and photos editable via Back Office, synced with official chillhealthy.com items)
   const [menuItems, setMenuItems] = useState<MealItem[]>(() => {
     try {
+      const savedSettingsRaw = localStorage.getItem('chillhealthy_settings');
+      const savedOutIds: string[] = savedSettingsRaw
+        ? JSON.parse(savedSettingsRaw)?.outOfStockDishes || []
+        : [];
       const saved = localStorage.getItem('chillhealthy_menu_v2');
       if (saved) {
         const parsed: MealItem[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length >= 20) {
-          // Ensure all official items including the last two ala carte items are present!
           const existingIds = new Set(parsed.map((m) => m.id));
           const missing = MEAL_ITEMS.filter((m) => !existingIds.has(m.id));
-          return missing.length > 0 ? [...parsed, ...missing] : parsed;
+          const combined = missing.length > 0 ? [...parsed, ...missing] : parsed;
+          return reconcileMenuWithOutOfStockList(combined, savedOutIds);
         }
       }
-      localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(MEAL_ITEMS));
-      return MEAL_ITEMS;
+      const initial = reconcileMenuWithOutOfStockList(MEAL_ITEMS, savedOutIds);
+      localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(initial));
+      return initial;
     } catch {
       return MEAL_ITEMS;
     }
@@ -346,9 +369,326 @@ export default function App() {
     }
   }, [cart]);
 
-  // Synchronize out-of-stock menu updates, confirmed packages, and redemptions across tabs/windows/devices in real time
+  // Hard refresh all state slices directly from localStorage
+  const reloadAllFromLocalStorage = React.useCallback(() => {
+    try {
+      const savedSettings = localStorage.getItem('chillhealthy_settings');
+      if (savedSettings) {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSiteSettings((prev) => ({
+          ...DEFAULT_SITE_SETTINGS,
+          ...prev,
+          ...parsedSettings,
+        }));
+      }
+
+      const savedPackages =
+        localStorage.getItem('chillhealthy_packages_v3') ||
+        localStorage.getItem('chillhealthy_packages');
+      if (savedPackages) {
+        const parsedPackages: MealPlan[] = JSON.parse(savedPackages);
+        if (Array.isArray(parsedPackages) && parsedPackages.length > 0) {
+          setPackages(parsedPackages);
+        }
+      }
+
+      const savedMenu = localStorage.getItem('chillhealthy_menu_v2');
+      if (savedMenu) {
+        const parsedMenu: MealItem[] = JSON.parse(savedMenu);
+        if (Array.isArray(parsedMenu) && parsedMenu.length > 0) {
+          setMenuItems(parsedMenu);
+          setSelectedMealForDetail((prev) => {
+            if (!prev) return null;
+            return parsedMenu.find((m) => m.id === prev.id) || prev;
+          });
+        }
+      }
+
+      const savedMembers = localStorage.getItem('chillhealthy_members');
+      let latestMembers: MemberAccount[] | null = null;
+      if (savedMembers) {
+        const parsedMembers: MemberAccount[] = JSON.parse(savedMembers);
+        if (Array.isArray(parsedMembers)) {
+          latestMembers = parsedMembers;
+          setMembers(parsedMembers);
+        }
+      }
+
+      const savedCurrentMember = localStorage.getItem('chillhealthy_current_member');
+      if (savedCurrentMember && savedCurrentMember !== 'null') {
+        const parsedCur: MemberAccount = JSON.parse(savedCurrentMember);
+        if (parsedCur && parsedCur.id) {
+          const cleanCurPhone = (parsedCur.phone || '').replace(/\D/g, '');
+          const syncedCur =
+            latestMembers?.find(
+              (m) =>
+                m.id === parsedCur.id ||
+                (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
+            ) || parsedCur;
+          setCurrentMember(syncedCur);
+        }
+      } else if (latestMembers) {
+        setCurrentMember((prev) => {
+          if (!prev) return null;
+          const cleanCurPhone = (prev.phone || '').replace(/\D/g, '');
+          return (
+            latestMembers!.find(
+              (m) =>
+                m.id === prev.id ||
+                (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
+            ) || prev
+          );
+        });
+      }
+
+      const savedRedemptions = localStorage.getItem('chillhealthy_redemptions');
+      if (savedRedemptions) {
+        const parsedRedemptions: MealRedemption[] = JSON.parse(savedRedemptions);
+        if (Array.isArray(parsedRedemptions)) {
+          setRedemptions(parsedRedemptions);
+        }
+      }
+
+      const savedRefunds = localStorage.getItem('chillhealthy_refund_records');
+      if (savedRefunds) {
+        const parsedRefunds: MealDeletionRefundRecord[] = JSON.parse(savedRefunds);
+        if (Array.isArray(parsedRefunds)) {
+          setRefundRecords(parsedRefunds);
+        }
+      }
+
+      const savedCart = localStorage.getItem('chillhealthy_cart');
+      if (savedCart) {
+        const parsedCart: CartItem[] = JSON.parse(savedCart);
+        if (Array.isArray(parsedCart)) {
+          setCart(parsedCart);
+        }
+      }
+    } catch {
+      // ignore malformed storage entries
+    }
+  }, []);
+
+  // Apply incoming real-time cross-device store payload (from Express SSE / REST / BroadcastChannel)
+  const applyRemoteSyncPayload = React.useCallback((payload: SyncStorePayload) => {
+    try {
+      const incomingMenu =
+        Array.isArray(payload.menuItems) && payload.menuItems.length > 0
+          ? payload.menuItems
+          : null;
+      const incomingSettings =
+        payload.siteSettings && typeof payload.siteSettings === 'object'
+          ? payload.siteSettings
+          : null;
+
+      if (incomingMenu) {
+        const outIds = incomingSettings?.outOfStockDishes;
+        const syncedMenu = Array.isArray(outIds)
+          ? incomingMenu.map((m) => ({
+              ...m,
+              isOutOfStock: outIds.includes(m.id) || Boolean(m.isOutOfStock),
+            }))
+          : incomingMenu;
+
+        setMenuItems(syncedMenu);
+        localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(syncedMenu));
+        setSelectedMealForDetail((prev) => {
+          if (!prev) return null;
+          return syncedMenu.find((m) => m.id === prev.id) || prev;
+        });
+      }
+
+      if (incomingSettings) {
+        const derivedOutIds = incomingMenu
+          ? incomingMenu
+              .filter((m) => Boolean(m.isOutOfStock) || incomingSettings.outOfStockDishes?.includes(m.id))
+              .map((m) => m.id)
+          : incomingSettings.outOfStockDishes;
+
+        setSiteSettings((prev) => {
+          const next: SiteSettings = {
+            ...prev,
+            ...incomingSettings,
+            ...(Array.isArray(derivedOutIds) ? { outOfStockDishes: derivedOutIds } : {}),
+          };
+          localStorage.setItem('chillhealthy_settings', JSON.stringify(next));
+          return next;
+        });
+      }
+
+      if (Array.isArray(payload.packages) && payload.packages.length > 0) {
+        setPackages(payload.packages);
+        localStorage.setItem('chillhealthy_packages_v3', JSON.stringify(payload.packages));
+      }
+
+      if (Array.isArray(payload.members)) {
+        const syncedMembers = payload.members;
+        setMembers(syncedMembers);
+        localStorage.setItem('chillhealthy_members', JSON.stringify(syncedMembers));
+        setCurrentMember((prev) => {
+          if (!prev) return null;
+          const cleanCurPhone = (prev.phone || '').replace(/\D/g, '');
+          const updatedCur = syncedMembers.find(
+            (m) =>
+              m.id === prev.id ||
+              (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
+          );
+          if (updatedCur) {
+            localStorage.setItem('chillhealthy_current_member', JSON.stringify(updatedCur));
+            return updatedCur;
+          }
+          return prev;
+        });
+      }
+
+      if (Array.isArray(payload.redemptions)) {
+        setRedemptions(payload.redemptions);
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(payload.redemptions));
+      }
+
+      if (Array.isArray(payload.refundRecords)) {
+        setRefundRecords(payload.refundRecords);
+        localStorage.setItem('chillhealthy_refund_records', JSON.stringify(payload.refundRecords));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Subscribe to real-time cross-device & cross-tab updates (SSE + BroadcastChannel + Visibility)
+  useEffect(() => {
+    const unsubscribe = subscribeToRealTimeSync((payload) => {
+      applyRemoteSyncPayload(payload);
+    });
+    return () => unsubscribe();
+  }, [applyRemoteSyncPayload]);
+
+  // Synchronize localStorage data, push/pull server state, and broadcast storage events across all open application tabs & devices
+  const handleSynchronizeData = React.useCallback(() => {
+    try {
+      const outOfStockIds = menuItems.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+      const syncedSettings: SiteSettings = {
+        ...siteSettings,
+        outOfStockDishes: outOfStockIds,
+      };
+
+      const storageKeys: Array<{ key: string; fallback: unknown }> = [
+        { key: 'chillhealthy_settings', fallback: syncedSettings },
+        { key: 'chillhealthy_packages_v3', fallback: packages },
+        { key: 'chillhealthy_menu_v2', fallback: menuItems },
+        { key: 'chillhealthy_members', fallback: members },
+        { key: 'chillhealthy_current_member', fallback: currentMember },
+        { key: 'chillhealthy_redemptions', fallback: redemptions },
+        { key: 'chillhealthy_refund_records', fallback: refundRecords },
+        { key: 'chillhealthy_cart', fallback: cart },
+      ];
+
+      // Ensure every key exists in localStorage
+      storageKeys.forEach(({ key, fallback }) => {
+        const raw = localStorage.getItem(key);
+        if (raw === null && fallback !== undefined) {
+          localStorage.setItem(key, JSON.stringify(fallback));
+        }
+      });
+
+      // Perform hard refresh of React state from localStorage
+      reloadAllFromLocalStorage();
+
+      // Read latest localStorage values and push to cross-device sync server so mobile, tablet, and website stay in sync
+      const latestSettingsRaw = localStorage.getItem('chillhealthy_settings');
+      const latestPackagesRaw = localStorage.getItem('chillhealthy_packages_v3');
+      const latestMenuRaw = localStorage.getItem('chillhealthy_menu_v2');
+      const latestMembersRaw = localStorage.getItem('chillhealthy_members');
+      const latestRedemptionsRaw = localStorage.getItem('chillhealthy_redemptions');
+      const latestRefundsRaw = localStorage.getItem('chillhealthy_refund_records');
+
+      void pushSyncStore({
+        siteSettings: latestSettingsRaw ? JSON.parse(latestSettingsRaw) : syncedSettings,
+        packages: latestPackagesRaw ? JSON.parse(latestPackagesRaw) : packages,
+        menuItems: latestMenuRaw ? JSON.parse(latestMenuRaw) : menuItems,
+        members: latestMembersRaw ? JSON.parse(latestMembersRaw) : members,
+        redemptions: latestRedemptionsRaw ? JSON.parse(latestRedemptionsRaw) : redemptions,
+        refundRecords: latestRefundsRaw ? JSON.parse(latestRefundsRaw) : refundRecords,
+      }).then((serverStore) => {
+        if (serverStore) {
+          applyRemoteSyncPayload(serverStore);
+        } else {
+          void fetchSyncStore().then((fetched) => {
+            if (fetched) applyRemoteSyncPayload(fetched);
+          });
+        }
+      });
+
+      // Update sync timestamp in localStorage to trigger native StorageEvent across all other tabs
+      const syncTimestamp = new Date().toISOString();
+      localStorage.setItem('chillhealthy_last_sync', syncTimestamp);
+
+      // Dispatch StorageEvent for each key and the sync signal so all listeners react immediately
+      storageKeys.forEach(({ key }) => {
+        const val = localStorage.getItem(key);
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key,
+            newValue: val,
+            storageArea: localStorage,
+          })
+        );
+      });
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'chillhealthy_last_sync',
+          newValue: syncTimestamp,
+          storageArea: localStorage,
+        })
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [
+    siteSettings,
+    packages,
+    menuItems,
+    members,
+    currentMember,
+    redemptions,
+    refundRecords,
+    cart,
+    reloadAllFromLocalStorage,
+    applyRemoteSyncPayload,
+  ]);
+
+  // Synchronize out-of-stock menu updates, confirmed packages, settings, and redemptions across tabs/windows/devices in real time
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key || e.key === 'chillhealthy_last_sync') {
+        reloadAllFromLocalStorage();
+        return;
+      }
+      if (e.key === 'chillhealthy_settings' && e.newValue) {
+        try {
+          const parsed: SiteSettings = JSON.parse(e.newValue);
+          if (parsed && typeof parsed === 'object') {
+            setSiteSettings((prev) => ({ ...prev, ...parsed }));
+            if (Array.isArray(parsed.outOfStockDishes)) {
+              const outSet = new Set(parsed.outOfStockDishes);
+              setMenuItems((prevMenu) =>
+                prevMenu.map((m) => ({
+                  ...m,
+                  isOutOfStock: outSet.has(m.id),
+                }))
+              );
+            }
+          }
+        } catch {}
+      }
+      if ((e.key === 'chillhealthy_packages_v3' || e.key === 'chillhealthy_packages') && e.newValue) {
+        try {
+          const parsed: MealPlan[] = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPackages(parsed);
+          }
+        } catch {}
+      }
       if (e.key === 'chillhealthy_menu_v2' && e.newValue) {
         try {
           const parsed: MealItem[] = JSON.parse(e.newValue);
@@ -386,11 +726,19 @@ export default function App() {
           }
         } catch {}
       }
+      if (e.key === 'chillhealthy_refund_records' && e.newValue) {
+        try {
+          const parsed: MealDeletionRefundRecord[] = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setRefundRecords(parsed);
+          }
+        } catch {}
+      }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [currentMember, selectedMealForDetail]);
+  }, [currentMember, selectedMealForDetail, reloadAllFromLocalStorage]);
 
   // Evaluate package expirations against current date and suspended dates
   useEffect(() => {
@@ -545,17 +893,27 @@ export default function App() {
         : [],
     };
 
+    let nextMembers: MemberAccount[] = [];
     if (existingIndex >= 0) {
       setMembers((prev) => {
         const copy = [...prev];
         copy[existingIndex] = { ...copy[existingIndex], ...newAcct };
+        nextMembers = copy;
         return copy;
       });
     } else {
-      setMembers((prev) => [newAcct, ...prev]);
+      setMembers((prev) => {
+        nextMembers = [newAcct, ...prev];
+        return nextMembers;
+      });
     }
     setCurrentMember(newAcct);
     setJustRegisteredMember(true);
+    setTimeout(() => {
+      if (nextMembers.length > 0) {
+        void pushSyncStore({ members: nextMembers });
+      }
+    }, 0);
     try {
       sessionStorage.removeItem('chillhealthy_dismiss_urge_plan');
     } catch {
@@ -681,9 +1039,12 @@ export default function App() {
       ],
     };
 
+    const nextMembers = members.map((m) => (m.id === updatedMember.id ? updatedMember : m));
+    const nextRedemptions = [newRedemption, ...redemptions];
     setCurrentMember(updatedMember);
-    setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
-    setRedemptions((prev) => [newRedemption, ...prev]);
+    setMembers(nextMembers);
+    setRedemptions(nextRedemptions);
+    void pushSyncStore({ members: nextMembers, redemptions: nextRedemptions });
     return true;
   };
 
@@ -768,9 +1129,12 @@ export default function App() {
       ],
     };
 
+    const nextMembers = members.map((m) => (m.id === updatedMember.id ? updatedMember : m));
+    const nextRedemptions = [...newTickets, ...redemptions];
     setCurrentMember(updatedMember);
-    setMembers((prev) => prev.map((m) => (m.id === updatedMember.id ? updatedMember : m)));
-    setRedemptions((prev) => [...newTickets, ...prev]);
+    setMembers(nextMembers);
+    setRedemptions(nextRedemptions);
+    void pushSyncStore({ members: nextMembers, redemptions: nextRedemptions });
     return true;
   };
 
@@ -1023,9 +1387,12 @@ export default function App() {
     }
   };
 
-  // Back Office Maintenance Handlers
+  // Back Office Maintenance Handlers (Synchronized across mobile, tablet, and website)
   const handleUpdateSiteSettings = (newSettings: SiteSettings) => {
     setSiteSettings(newSettings);
+    try {
+      localStorage.setItem('chillhealthy_settings', JSON.stringify(newSettings));
+    } catch {}
     if (newSettings.kitchenPhotoUrl) {
       try {
         localStorage.setItem('chillhealthy_crafted_photo', newSettings.kitchenPhotoUrl);
@@ -1040,17 +1407,47 @@ export default function App() {
         // ignore
       }
     }
+    if (Array.isArray(newSettings.outOfStockDishes)) {
+      const outSet = new Set(newSettings.outOfStockDishes);
+      setMenuItems((prev) => {
+        const syncedMenu = prev.map((m) => ({
+          ...m,
+          isOutOfStock: outSet.has(m.id),
+        }));
+        try {
+          localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(syncedMenu));
+        } catch {}
+        void pushSyncStore({ siteSettings: newSettings, menuItems: syncedMenu });
+        return syncedMenu;
+      });
+    } else {
+      void pushSyncStore({ siteSettings: newSettings });
+    }
   };
 
   const handleUpdatePackages = (newPackages: MealPlan[]) => {
     setPackages(newPackages);
     try {
+      localStorage.setItem('chillhealthy_packages_v3', JSON.stringify(newPackages));
       localStorage.setItem('chillhealthy_packages', JSON.stringify(newPackages));
     } catch {}
+    void pushSyncStore({ packages: newPackages });
   };
 
   const handleUpdateMenuItems = (newItems: MealItem[]) => {
     setMenuItems(newItems);
+    const outIds = newItems.filter((m) => Boolean(m.isOutOfStock)).map((m) => m.id);
+    setSiteSettings((prev) => {
+      const updatedSettings: SiteSettings = {
+        ...prev,
+        outOfStockDishes: outIds,
+      };
+      try {
+        localStorage.setItem('chillhealthy_settings', JSON.stringify(updatedSettings));
+      } catch {}
+      void pushSyncStore({ menuItems: newItems, siteSettings: updatedSettings });
+      return updatedSettings;
+    });
     try {
       localStorage.setItem('chillhealthy_menu_v2', JSON.stringify(newItems));
       window.dispatchEvent(new CustomEvent('chillhealthy_menu_updated', { detail: newItems }));
@@ -1069,6 +1466,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ redemptions: next });
       return next;
     });
   };
@@ -1080,6 +1478,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ redemptions: next });
       return next;
     });
   };
@@ -1098,6 +1497,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ redemptions: next });
       return next;
     });
   };
@@ -1123,6 +1523,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ members: next });
       return next;
     });
   };
@@ -1143,6 +1544,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ members: next });
       return next;
     });
 
@@ -1176,6 +1578,7 @@ export default function App() {
         try {
           localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
         } catch {}
+        void pushSyncStore({ redemptions: next });
         return next;
       });
     }
@@ -1187,6 +1590,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ members: next });
       return next;
     });
   };
@@ -1197,6 +1601,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
+      void pushSyncStore({ members: next });
       return next;
     });
     if (currentMember?.id === memberId) {
@@ -1205,8 +1610,8 @@ export default function App() {
   };
 
   const handleSaveOfficialReceipt = (receipt: OfficialReceipt) => {
-    setMembers((prev) =>
-      prev.map((m) => {
+    setMembers((prev) => {
+      const next = prev.map((m) => {
         if (m.id === receipt.memberId) {
           const existingList = m.officialReceipts || [];
           const index = existingList.findIndex((r) => r.id === receipt.id || r.receiptNumber === receipt.receiptNumber);
@@ -1224,8 +1629,13 @@ export default function App() {
           return updatedMember;
         }
         return m;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(next));
+      } catch {}
+      void pushSyncStore({ members: next });
+      return next;
+    });
   };
 
   // Delete / Cancel meal order with automatic quota restore for customer WITH RECORD
@@ -1267,68 +1677,64 @@ export default function App() {
       operator: 'Owner Admin (#admin)',
     };
 
-    setRefundRecords((prev) => {
-      const updated = [newRecord, ...prev];
-      try {
-        localStorage.setItem('chillhealthy_refund_records', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    // 2. Remove from redemptions state and localStorage
-    setRedemptions((prev) => {
-      const next = prev.filter((r) => r.id !== redemptionId);
-      try {
-        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-
-    // 3. Automatically restore quota to member account with detailed record
-    setMembers((prev) =>
-      prev.map((m) => {
-        if (m.id === target.memberId || m.phone === target.memberPhone) {
-          const currentRemaining = m.activePackage?.remainingMeals || 0;
-          const totalMeals = m.activePackage?.totalMeals || (currentRemaining + refundQty);
-          const updated: MemberAccount = {
-            ...m,
-            activePackage: m.activePackage
-              ? {
-                  ...m.activePackage,
-                  remainingMeals: currentRemaining + refundQty,
-                }
-              : {
-                  planId: 'restored-quota',
-                  planName: 'Restored Meal Quota',
-                  planNameZh: '已返还餐券配额',
-                  totalMeals: totalMeals,
-                  remainingMeals: refundQty,
-                  purchasedDate: new Date().toISOString().split('T')[0],
-                  expiryDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
-                },
-            creditsHistory: [
-              {
-                id: `cr-refund-${Date.now()}`,
-                date: new Date().toISOString().split('T')[0],
-                type: 'refund' as const,
-                amount: refundQty,
-                note: `Quota Refund: Order #${target.id} (${target.mealName} for ${target.deliveryDate}) cancelled. +${refundQty} meal restored to package balance (New balance: ${balanceAfter} meals).`,
+    const nextRefunds = [newRecord, ...refundRecords];
+    const nextRedemptions = redemptions.filter((r) => r.id !== redemptionId);
+    const nextMembers = members.map((m) => {
+      if (m.id === target.memberId || m.phone === target.memberPhone) {
+        const currentRemaining = m.activePackage?.remainingMeals || 0;
+        const totalMeals = m.activePackage?.totalMeals || (currentRemaining + refundQty);
+        const updated: MemberAccount = {
+          ...m,
+          activePackage: m.activePackage
+            ? {
+                ...m.activePackage,
+                remainingMeals: currentRemaining + refundQty,
+              }
+            : {
+                planId: 'restored-quota',
+                planName: 'Restored Meal Quota',
+                planNameZh: '已返还餐券配额',
+                totalMeals: totalMeals,
+                remainingMeals: refundQty,
+                purchasedDate: new Date().toISOString().split('T')[0],
+                expiryDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
               },
-              ...(m.creditsHistory || []),
-            ],
-          };
+          creditsHistory: [
+            {
+              id: `cr-refund-${Date.now()}`,
+              date: new Date().toISOString().split('T')[0],
+              type: 'refund' as const,
+              amount: refundQty,
+              note: `Quota Refund: Order #${target.id} (${target.mealName} for ${target.deliveryDate}) cancelled. +${refundQty} meal restored to package balance (New balance: ${balanceAfter} meals).`,
+            },
+            ...(m.creditsHistory || []),
+          ],
+        };
 
-          if (currentMember?.id === m.id) {
-            setCurrentMember(updated);
-            try {
-              localStorage.setItem('chillhealthy_current_member', JSON.stringify(updated));
-            } catch {}
-          }
-          return updated;
+        if (currentMember?.id === m.id) {
+          setCurrentMember(updated);
+          try {
+            localStorage.setItem('chillhealthy_current_member', JSON.stringify(updated));
+          } catch {}
         }
-        return m;
-      })
-    );
+        return updated;
+      }
+      return m;
+    });
+
+    setRefundRecords(nextRefunds);
+    setRedemptions(nextRedemptions);
+    setMembers(nextMembers);
+    try {
+      localStorage.setItem('chillhealthy_refund_records', JSON.stringify(nextRefunds));
+      localStorage.setItem('chillhealthy_redemptions', JSON.stringify(nextRedemptions));
+      localStorage.setItem('chillhealthy_members', JSON.stringify(nextMembers));
+    } catch {}
+    void pushSyncStore({
+      refundRecords: nextRefunds,
+      redemptions: nextRedemptions,
+      members: nextMembers,
+    });
 
     return true;
   };
@@ -1343,6 +1749,7 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_settings', JSON.stringify(nextSettings));
       } catch {}
+      void pushSyncStore({ siteSettings: nextSettings });
       return nextSettings;
     });
   };
@@ -1360,6 +1767,7 @@ export default function App() {
     try {
       localStorage.setItem('chillhealthy_settings', JSON.stringify(nextSettings));
     } catch {}
+    void pushSyncStore({ siteSettings: nextSettings });
     return syncRes;
   };
 
@@ -1572,6 +1980,8 @@ export default function App() {
           onViewPlans={() => scrollToSection('plans')}
           onViewOrderGuide={() => scrollToSection('order-guide')}
           siteSettings={siteSettings}
+          menuItems={menuItems}
+          onSelectMeal={(meal) => setSelectedMealForDetail(meal)}
         />
 
         <MenuSection
@@ -1697,21 +2107,6 @@ export default function App() {
         currentMember={currentMember}
       />
 
-      {/* Meal Detail Customization Modal */}
-      {selectedMealForDetail && (
-        <MealDetailModal
-          meal={selectedMealForDetail}
-          language={language}
-          onClose={() => setSelectedMealForDetail(null)}
-          onAddToCart={handleAddToCart}
-          onUpdateMeal={(updatedMeal) => {
-            const next = menuItems.map((m) => (m.id === updatedMeal.id ? updatedMeal : m));
-            handleUpdateMenuItems(next);
-            setSelectedMealForDetail(updatedMeal);
-          }}
-        />
-      )}
-
       {/* Calorie & TDEE Goal Matcher Modal */}
       {isCalorieModalOpen && (
         <CalorieGoalCalculator
@@ -1720,6 +2115,8 @@ export default function App() {
           onClose={() => setIsCalorieModalOpen(false)}
           onSelectRecommendedMeal={(meal) => setSelectedMealForDetail(meal)}
           currentMember={currentMember}
+          menuItems={menuItems}
+          outOfStockDishes={siteSettings.outOfStockDishes || []}
           onOpenPlans={() => {
             setIsCalorieModalOpen(false);
             scrollToSection('plans');
@@ -1775,6 +2172,7 @@ export default function App() {
               try {
                 localStorage.setItem('chillhealthy_redemptions', JSON.stringify(updated));
               } catch {}
+              void pushSyncStore({ redemptions: updated });
               return updated;
             });
           }}
@@ -1801,6 +2199,7 @@ export default function App() {
           allRedemptions={redemptions}
           members={members}
           siteSettings={siteSettings}
+          onSelectMeal={(meal) => setSelectedMealForDetail(meal)}
           onOpenMenu={() => {
             setIsMemberPortalOpen(false);
             scrollToSection('menu');
@@ -1868,6 +2267,7 @@ export default function App() {
           onAddMemberAccount={handleAddMemberAccount}
           onDeleteMemberAccount={handleDeleteMemberAccount}
           onSaveOfficialReceipt={handleSaveOfficialReceipt}
+          onSynchronizeData={handleSynchronizeData}
           refundRecords={refundRecords}
           initialTab={backOfficeTab}
         />
@@ -1878,7 +2278,6 @@ export default function App() {
         isOpen={isUrgePlanModalOpen}
         onClose={() => {
           setIsUrgePlanModalOpen(false);
-          // Any how, after urge on buying plan, pls allow customer to order ala carte too
           if (pendingAlaCarteItem) {
             executeAddToCart(pendingAlaCarteItem);
             setPendingAlaCarteItem(null);
@@ -1896,7 +2295,6 @@ export default function App() {
           } catch {
             // ignore
           }
-          // Any how, after urge on buying plan, pls allow customer to order ala carte too
           if (pendingAlaCarteItem) {
             executeAddToCart(pendingAlaCarteItem);
             setPendingAlaCarteItem(null);
@@ -1911,6 +2309,21 @@ export default function App() {
             : undefined
         }
       />
+
+      {/* Meal Detail Customization Modal - Rendered at Top Layer (z-[90]) so customer can view & close any item across Mobile, Tablet, and Website */}
+      {selectedMealForDetail && (
+        <MealDetailModal
+          meal={selectedMealForDetail}
+          language={language}
+          onClose={() => setSelectedMealForDetail(null)}
+          onAddToCart={handleAddToCart}
+          onUpdateMeal={(updatedMeal) => {
+            const next = menuItems.map((m) => (m.id === updatedMeal.id ? updatedMeal : m));
+            handleUpdateMenuItems(next);
+            setSelectedMealForDetail(updatedMeal);
+          }}
+        />
+      )}
     </div>
   );
 }

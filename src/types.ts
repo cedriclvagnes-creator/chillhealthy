@@ -172,6 +172,7 @@ export interface SiteSettings {
   topInstagramVideoTitleZh?: string;
   topInstagramVideoViews?: string;
   showTopInstagramVideo?: boolean;
+  outOfStockDishes?: string[];
 }
 
 export interface HomepageContent {
@@ -314,7 +315,7 @@ export interface MealRedemption {
   totalAmount?: number;
   paymentMethod?: string;
   itemsSummary?: string;
-  status: 'Pending' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
+  status: 'Pending' | 'Confirmed' | 'Prepping in Kitchen' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
   dietaryNotes?: string;
   createdAt: string;
   redeemedAt?: string;

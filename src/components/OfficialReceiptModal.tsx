@@ -137,10 +137,15 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
   const whatsappUrl = buildWhatsAppUrl(receipt.memberPhone, buildReceiptWhatsAppMessage(receipt));
 
   return (
-    <div className="fixed inset-0 z-70 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
-      <div className="bg-white w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col my-auto max-h-[95vh] print:max-h-none print:border-none print:shadow-none print:rounded-none">
+    <div
+      className="fixed inset-0 z-70 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-hidden print:p-0 print:bg-white"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white w-full max-w-3xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-stone-200 flex flex-col my-auto max-h-[85dvh] sm:max-h-[88vh] print:max-h-none print:border-none print:shadow-none print:rounded-none">
         {/* Top Actions Bar (Hidden on Print) */}
-        <div className="bg-stone-900 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-stone-800 no-print">
+        <div className="bg-stone-900 text-white px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-stone-800 shrink-0 no-print">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               <FileText className="w-4 h-4" />
@@ -198,9 +203,10 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white transition-colors cursor-pointer ml-1"
+              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer ml-1"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
+              <span>{language === 'en' ? 'Close' : '关闭'}</span>
             </button>
           </div>
         </div>
@@ -322,7 +328,7 @@ export const OfficialReceiptModal: React.FC<OfficialReceiptModalProps> = ({
         )}
 
         {/* Scrollable Official Receipt Content (The printable document) */}
-        <div className="overflow-y-auto p-4 sm:p-8 space-y-6 printable-receipt-container bg-white text-stone-900 print:p-0">
+        <div className="overflow-y-auto min-h-0 flex-1 overscroll-contain p-4 sm:p-8 space-y-6 printable-receipt-container bg-white text-stone-900 print:p-0">
           {/* Header row: Logo & Official Business Details */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b-2 border-stone-900">
             <div>

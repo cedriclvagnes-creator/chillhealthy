@@ -59,19 +59,26 @@ export const UrgeBuyPlanModal: React.FC<UrgeBuyPlanModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/75 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-stone-950/75 backdrop-blur-sm animate-in fade-in duration-200 overflow-hidden"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div 
-        className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl border-2 border-amber-400/80 overflow-hidden flex flex-col max-h-[92vh]"
+        className="relative w-full max-w-xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl border-2 border-amber-400/80 overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[88vh] my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Decorative Header */}
-        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 p-5 sm:p-6 text-white relative">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 p-4 sm:p-6 text-white relative shrink-0">
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-black/20 hover:bg-black/40 text-white transition-colors cursor-pointer"
+            className="absolute top-3.5 right-3.5 px-3 py-1.5 rounded-full bg-black/35 hover:bg-red-600 text-white text-xs font-extrabold flex items-center gap-1 transition-colors cursor-pointer border border-white/25"
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
+            <span>{isEn ? 'Close' : '关闭'}</span>
           </button>
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-amber-100 text-xs font-black uppercase tracking-wider mb-2 border border-white/30">
@@ -101,7 +108,7 @@ export const UrgeBuyPlanModal: React.FC<UrgeBuyPlanModalProps> = ({
         </div>
 
         {/* Content Body: Plan vs Ala Carte Comparison */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1 overscroll-contain space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Left: Ala Carte Limitations */}
             <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex flex-col justify-between">

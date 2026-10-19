@@ -97,6 +97,7 @@ interface MemberPortalModalProps {
   onOpenMenu?: () => void;
   onOpenPlans?: () => void;
   onOpenCalorie?: () => void;
+  onSelectMeal?: (meal: MealItem) => void;
 }
 
 // Utility: get next workday (Mon-Fri) string YYYY-MM-DD
@@ -148,6 +149,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   onOpenMenu,
   onOpenPlans,
   onOpenCalorie,
+  onSelectMeal,
 }) => {
   // Login / Register / Forgot Password state
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
@@ -268,13 +270,36 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   const [editArea2, setEditArea2] = useState('');
   const [editPostal2, setEditPostal2] = useState('');
 
+  const isMealOutOfStock = (meal?: MealItem) => {
+    if (!meal) return false;
+    return Boolean(meal.isOutOfStock || siteSettings.outOfStockDishes?.includes(meal.id));
+  };
+
+  const availableMenuItems = useMemo(() => {
+    const inStock = menuItems.filter((m) => !isMealOutOfStock(m));
+    return inStock.length > 0 ? inStock : menuItems;
+  }, [menuItems, siteSettings.outOfStockDishes]);
+
   // Daily Meal Form state
   const [selectedDate, setSelectedDate] = useState(() => getNextWorkday(1));
   const [selectedSlot, setSelectedSlot] = useState('Lunch (10:00 AM – 2:00 PM)');
-  const [selectedMealId, setSelectedMealId] = useState(menuItems[0]?.id || '');
+  const [selectedMealId, setSelectedMealId] = useState(
+    () => menuItems.find((m) => !m.isOutOfStock && !siteSettings.outOfStockDishes?.includes(m.id))?.id || menuItems[0]?.id || ''
+  );
   const [mealQuantity, setMealQuantity] = useState(1);
   const [dietaryNotes, setDietaryNotes] = useState('');
   const [redemptionSuccessMsg, setRedemptionSuccessMsg] = useState('');
+
+  // Keep selectedMealId pointing to an in-stock dish if the currently selected dish becomes Out of Stock
+  useEffect(() => {
+    const current = menuItems.find((m) => m.id === selectedMealId);
+    if (!current || isMealOutOfStock(current)) {
+      const firstAvailable = availableMenuItems[0];
+      if (firstAvailable && firstAvailable.id !== selectedMealId) {
+        setSelectedMealId(firstAvailable.id);
+      }
+    }
+  }, [menuItems, siteSettings.outOfStockDishes, selectedMealId, availableMenuItems]);
 
   // Daily Meal Redemption Confirmed Popup & Double-Booking Awareness state
   const [redemptionSuccessPopup, setRedemptionSuccessPopup] = useState<{
@@ -418,17 +443,17 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     }
   }, [selectedDate, remainingAllowedQtyOnSelectedDate, mealQuantity]);
 
-  // Initialize batch planner with defaults
+  // Initialize batch planner with defaults (only in-stock dishes)
   useEffect(() => {
-    if (menuItems.length > 0 && Object.keys(batchSchedule).length === 0) {
+    if (availableMenuItems.length > 0 && Object.keys(batchSchedule).length === 0) {
       const initial: { [date: string]: string } = {};
       const targetDays = visibleWorkdays.length > 0 ? visibleWorkdays : upcomingWorkdays;
       targetDays.forEach((dateStr, idx) => {
-        initial[dateStr] = menuItems[idx % menuItems.length]?.id || menuItems[0]?.id;
+        initial[dateStr] = availableMenuItems[idx % availableMenuItems.length]?.id || availableMenuItems[0]?.id;
       });
       setBatchSchedule(initial);
     }
-  }, [menuItems, visibleWorkdays, upcomingWorkdays]);
+  }, [availableMenuItems, visibleWorkdays, upcomingWorkdays]);
 
   // Sync member addresses when currentMember changes
   useEffect(() => {
@@ -855,7 +880,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
-    const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || menuItems[0];
+    const chosenMeal = menuItems.find((m) => m.id === selectedMealId) || availableMenuItems[0] || menuItems[0];
+    if (isMealOutOfStock(chosenMeal)) {
+      alert(
+        language === 'en'
+          ? `⚠️ Sorry, "${chosenMeal.name}" is currently Out of Stock. Please select another dish.`
+          : `⚠️ 抱歉，“${chosenMeal.nameZh}”当前已售罄（Out of Stock），请选择其他在售餐品。`
+      );
+      return;
+    }
 
     const doSubmitRedemption = () => {
       const orderNo = generateUniqueOrderNumber('CH');
@@ -1073,12 +1106,14 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
     );
   };
 
-  // Randomize batch meals
+  // Randomize batch meals (using only in-stock dishes)
   const handleRandomizeBatch = () => {
     const updated: { [date: string]: string } = {};
     upcomingWorkdays.forEach((dateStr) => {
-      const randomDish = menuItems[Math.floor(Math.random() * menuItems.length)];
-      updated[dateStr] = randomDish.id;
+      const randomDish = availableMenuItems[Math.floor(Math.random() * availableMenuItems.length)] || menuItems[0];
+      if (randomDish) {
+        updated[dateStr] = randomDish.id;
+      }
     });
     setBatchSchedule(updated);
   };
@@ -1099,7 +1134,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
   return (
     <div
       id="customer-redeem-fullscreen-page"
-      className="fixed inset-0 z-50 w-screen h-screen min-h-screen bg-stone-100 text-stone-900 flex flex-col overflow-hidden animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 w-full h-dvh bg-stone-100 text-stone-900 flex flex-col overflow-hidden animate-in fade-in duration-150"
     >
       {/* =========================================================================
           TOP COMMAND & NAVIGATION BAR (FULL WIDTH, OPTIMIZED ACROSS MOBILE & DESKTOP)
@@ -1336,7 +1371,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       {/* =========================================================================
           MAIN BODY CONTAINER (FULL PAGE VERTICAL SCROLL, NO CONFINED POPUP)
           ========================================================================= */}
-      <div className="flex-1 overflow-y-auto bg-stone-100">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-stone-100">
         {!currentMember ? (
           /* =========================================================================
              1. GUEST LOGIN & REGISTER SCREEN (RESPONSIVE FULL-PAGE CARD)
@@ -2107,9 +2142,9 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                 <span className="text-[11px] bg-amber-400 text-stone-950 font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
                                   <span>⏳ {language === 'en' ? 'WA Auto-Reply Pending · Admin Review' : '待店主确认开通 (WA回执待处理)'}</span>
                                 </span>
-                                {currentMember.activePackage.signupOrderNo && (
+                                {activePkg.signupOrderNo && (
                                   <span className="text-[10px] font-mono font-bold text-amber-300">
-                                    #{currentMember.activePackage.signupOrderNo}
+                                    #{activePkg.signupOrderNo}
                                   </span>
                                 )}
                               </div>
@@ -2144,7 +2179,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             <>
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <span className={`text-[11px] font-extrabold ${isPackExpired ? 'text-red-400' : 'text-emerald-400'}`}>
-                                  📅 {language === 'en' ? 'Validity Date: Until' : '有效截止日期：至'} {expInfo.effectiveExpiryDate || currentMember.activePackage.expiryDate}
+                                  📅 {language === 'en' ? 'Validity Date: Until' : '有效截止日期：至'} {expInfo.effectiveExpiryDate || activePkg.expiryDate}
                                 </span>
                                 {hasSpecialCase && (
                                   <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded">
@@ -2154,12 +2189,12 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                               </div>
                               <span className="text-[10px] text-stone-300 block">
                                 {language === 'en'
-                                  ? `• ${vDays} Mon–Fri weekdays (Activated on ${currentMember.activePackage.firstRedeemedDate} · ${expInfo.remainingWorkdays} workdays left)`
-                                  : `• 共 ${vDays} 个工作日（于 ${currentMember.activePackage.firstRedeemedDate} 激活 · 剩余 ${expInfo.remainingWorkdays} 个工作日）`}
+                                  ? `• ${vDays} Mon–Fri weekdays (Activated on ${activePkg.firstRedeemedDate} · ${expInfo.remainingWorkdays} workdays left)`
+                                  : `• 共 ${vDays} 个工作日（于 ${activePkg.firstRedeemedDate} 激活 · 剩余 ${expInfo.remainingWorkdays} 个工作日）`}
                               </span>
-                              {hasSpecialCase && currentMember.activePackage.specialCaseNotes && (
+                              {hasSpecialCase && activePkg.specialCaseNotes && (
                                 <span className="text-[10px] text-amber-300 block">
-                                  • {language === 'en' ? 'Special Case Note: ' : '特批说明：'}{currentMember.activePackage.specialCaseNotes}
+                                  • {language === 'en' ? 'Special Case Note: ' : '特批说明：'}{activePkg.specialCaseNotes}
                                 </span>
                               )}
                               <span className="text-[10px] text-amber-300/90 block">
@@ -3150,15 +3185,24 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                     {/* Responsive Dish Cards Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                       {filteredMenuItems.map((meal) => {
-                        const isSelected = selectedMealId === meal.id;
+                        const isOut = isMealOutOfStock(meal);
+                        const isSelected = selectedMealId === meal.id && !isOut;
                         return (
                           <div
                             key={meal.id}
-                            onClick={() => setSelectedMealId(meal.id)}
-                            className={`p-3 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between bg-white relative group ${
-                              isSelected
-                                ? 'border-emerald-600 ring-2 ring-emerald-600/30 shadow-md bg-emerald-50/20'
-                                : 'border-stone-200 hover:border-stone-300 hover:shadow-xs'
+                            onClick={() => {
+                              if (isOut) {
+                                if (onSelectMeal) onSelectMeal(meal);
+                                return;
+                              }
+                              setSelectedMealId(meal.id);
+                            }}
+                            className={`p-3 rounded-2xl border transition-all flex flex-col justify-between bg-white relative group ${
+                              isOut
+                                ? 'border-red-200 bg-stone-50/90 opacity-85 cursor-pointer'
+                                : isSelected
+                                ? 'border-emerald-600 ring-2 ring-emerald-600/30 shadow-md bg-emerald-50/20 cursor-pointer'
+                                : 'border-stone-200 hover:border-stone-300 hover:shadow-xs cursor-pointer'
                             }`}
                           >
                             {/* Photo and Header */}
@@ -3171,40 +3215,82 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                   onError={(e) => {
                                     e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
                                   }}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  className={`w-full h-full object-cover transition-transform duration-300 ${
+                                    isOut ? 'grayscale opacity-75' : 'group-hover:scale-105'
+                                  }`}
                                 />
-                                {isSelected && (
-                                  <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold flex items-center gap-1 shadow-sm">
-                                    <Check className="w-3 h-3" />
-                                    <span>SELECTED</span>
+                                {isOut ? (
+                                  <div className="absolute inset-0 bg-stone-950/45 backdrop-blur-[1px] flex items-center justify-center">
+                                    <span className="px-3 py-1 rounded-full bg-red-600 text-white text-[11px] font-black uppercase tracking-wider shadow-lg border border-white/30">
+                                      {language === 'en' ? 'SOLD OUT' : '已售罄 Out of Stock'}
+                                    </span>
                                   </div>
+                                ) : (
+                                  isSelected && (
+                                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold flex items-center gap-1 shadow-sm">
+                                      <Check className="w-3 h-3" />
+                                      <span>SELECTED</span>
+                                    </div>
+                                  )
                                 )}
                                 <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold">
                                   {meal.calories} kcal · {meal.protein}g protein
                                 </div>
                               </div>
 
-                              <h5 className="font-heading font-bold text-xs sm:text-sm text-stone-900 group-hover:text-emerald-800 transition-colors">
-                                {language === 'en' ? meal.name : meal.nameZh}
-                              </h5>
+                              <div className="flex items-start justify-between gap-1.5">
+                                <h5 className="font-heading font-bold text-xs sm:text-sm text-stone-900 group-hover:text-emerald-800 transition-colors">
+                                  {language === 'en' ? meal.name : meal.nameZh}
+                                </h5>
+                                {isOut && (
+                                  <span className="shrink-0 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-extrabold">
+                                    {language === 'en' ? 'Out of Stock' : '已售罄'}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11px] text-stone-500 line-clamp-1 mt-0.5">
                                 {language === 'en' ? meal.subtitle || meal.description : meal.subtitleZh || meal.descriptionZh}
                               </p>
                             </div>
 
-                            {/* Card Footer: RM0 benefit and select button */}
-                            <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between text-xs">
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200" title={language === 'en' ? 'Standard Chef Recipe (RM 0)' : '标准主厨配方 (RM 0)'}>
-                                {language === 'en' ? 'Standard (RM 0)' : '标准配方 (RM 0)'}
-                              </span>
+                            {/* Card Footer: RM0 benefit, View Item button, and select button */}
+                            <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between gap-1.5 text-xs">
+                              {onSelectMeal ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSelectMeal(meal);
+                                  }}
+                                  className="text-[11px] font-bold text-stone-600 hover:text-emerald-800 bg-stone-100 hover:bg-emerald-50 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  {language === 'en' ? 'View Item' : '查看详情'}
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  {language === 'en' ? 'Standard (RM 0)' : '标准配方 (RM 0)'}
+                                </span>
+                              )}
                               <span
                                 className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors ${
-                                  isSelected
+                                  isOut
+                                    ? 'bg-red-100 text-red-700 font-bold'
+                                    : isSelected
                                     ? 'bg-emerald-700 text-white font-extrabold'
                                     : 'bg-stone-100 text-stone-700 group-hover:bg-emerald-50 group-hover:text-emerald-800'
                                 }`}
                               >
-                                {isSelected ? (language === 'en' ? 'Chosen' : '已选') : (language === 'en' ? 'Select' : '选择此餐')}
+                                {isOut
+                                  ? language === 'en'
+                                    ? 'Sold Out'
+                                    : '已售罄'
+                                  : isSelected
+                                  ? language === 'en'
+                                    ? 'Chosen'
+                                    : '已选'
+                                  : language === 'en'
+                                  ? 'Select'
+                                  : '选择此餐'}
                               </span>
                             </div>
                           </div>
@@ -3393,11 +3479,15 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                                     }
                                     className="w-full text-xs px-2 py-2 rounded-xl border border-stone-200 bg-white"
                                   >
-                                    {menuItems.map((m) => (
-                                      <option key={m.id} value={m.id}>
-                                        {language === 'en' ? m.name : m.nameZh} ({m.calories} kcal)
-                                      </option>
-                                    ))}
+                                    {menuItems.map((m) => {
+                                      const out = isMealOutOfStock(m);
+                                      return (
+                                        <option key={m.id} value={m.id} disabled={out}>
+                                          {language === 'en' ? m.name : m.nameZh} ({m.calories} kcal)
+                                          {out ? (language === 'en' ? ' — SOLD OUT' : ' — 已售罄') : ''}
+                                        </option>
+                                      );
+                                    })}
                                   </select>
                                 </div>
 
@@ -3530,7 +3620,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                             r.adminConfirmed === true ||
                             r.status === 'Confirmed' ||
                             r.status === 'Delivered' ||
-                            (isPkgSub && (r.adminConfirmed === true || activePkg?.adminConfirmed === true)) ||
+                            (isPkgSub && activePkg?.adminConfirmed === true) ||
                             (activePkg?.adminConfirmed === true &&
                               (r.orderNumber === activePkg?.signupOrderNo || isPkgSub)) ||
                             (activePkg && activePkg.adminConfirmed !== false);
@@ -4160,7 +4250,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
             if (e.target === e.currentTarget) setRedemptionSuccessPopup(null);
           }}
         >
-          <div className="relative bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-stone-200 animate-in zoom-in-95 flex flex-col max-h-[90vh] sm:max-h-[88vh] my-auto overflow-hidden">
+          <div className="relative bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-stone-200 animate-in zoom-in-95 flex flex-col max-h-[84dvh] sm:max-h-[86vh] my-auto overflow-hidden">
             {/* Top Emerald Header */}
             <div className="bg-gradient-to-r from-emerald-800 to-teal-800 text-white px-5 py-4 sm:px-6 sm:py-4.5 relative overflow-hidden shrink-0">
               <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
@@ -4197,7 +4287,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
               </div>
             </div>
 
-            <div className="p-4 sm:p-5 space-y-3 sm:space-y-3.5 overflow-y-auto flex-1 overscroll-contain">
+            <div className="p-4 sm:p-5 space-y-3 sm:space-y-3.5 overflow-y-auto min-h-0 flex-1 overscroll-contain">
               {/* Unique Order Number Banner with Copy */}
               {redemptionSuccessPopup.orderNumber && (
                 <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 shadow-2xs">

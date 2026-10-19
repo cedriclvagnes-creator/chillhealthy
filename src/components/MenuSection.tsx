@@ -24,8 +24,12 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isMenuExpanded, setIsMenuExpanded] = useState(false);
+  const [isMenuExpanded, setIsMenuExpanded] = useState(true);
   const INITIAL_COUNT = 6;
+
+  const totalCount = menuItems.length;
+  const outOfStockCount = useMemo(() => menuItems.filter((m) => m.isOutOfStock).length, [menuItems]);
+  const inStockCount = totalCount - outOfStockCount;
 
   const categories: { id: Category; labelEn: string; labelZh: string }[] = [
     { id: 'all', labelEn: 'All Dishes', labelZh: '全部餐点' },
@@ -76,6 +80,31 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
               ? 'Every single meal is balanced by certified nutritionists, cooked with premium whole foods, and sealed fresh every morning.'
               : '每份餐盒均由专业营养团队精确配比三大宏量营养素，采用65°C低温真空慢煮与轻煎工艺，少油低钠，满足您对健康与美味的所有期待。'}
           </p>
+
+          {/* Live Synchronized Kitchen Stock Indicator */}
+          <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs text-xs">
+            <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>
+                {language === 'en'
+                  ? `${inStockCount} Dishes In Stock`
+                  : `${inStockCount} 款现做供应中`}
+              </span>
+            </span>
+            {outOfStockCount > 0 && (
+              <>
+                <span className="text-stone-300">|</span>
+                <span className="inline-flex items-center gap-1 font-extrabold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>
+                    {language === 'en'
+                      ? `${outOfStockCount} Sold Out`
+                      : `${outOfStockCount} 款已售罄`}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Search & Category Filter Controls */}
@@ -304,17 +333,25 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
 
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => onSelectMeal(meal)}
-                        className="px-3 py-2 rounded-xl text-xs font-bold text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-stone-700 hover:text-stone-950 bg-stone-100/80 hover:bg-stone-200/80 transition-colors cursor-pointer"
                       >
-                        {language === 'en' ? 'Customize' : '自选定制'}
+                        {meal.isOutOfStock
+                          ? language === 'en'
+                            ? 'View Item'
+                            : '查看详情'
+                          : language === 'en'
+                          ? 'Customize'
+                          : '自选定制'}
                       </button>
 
                       {meal.isOutOfStock ? (
                         <button
-                          disabled
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-200 text-stone-400 text-xs font-bold cursor-not-allowed"
-                          title="This item is currently sold out"
+                          type="button"
+                          onClick={() => onSelectMeal(meal)}
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 text-xs font-extrabold cursor-pointer transition-colors"
+                          title={language === 'en' ? 'Currently sold out — click to view details' : '已售罄 — 点击查看详情'}
                         >
                           <AlertCircle className="w-4 h-4" />
                           <span>{language === 'en' ? 'Sold Out' : '已售罄'}</span>
@@ -322,6 +359,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({
                       ) : (
                         <button
                           id={`btn-quick-add-${meal.id}`}
+                          type="button"
                           onClick={() => onQuickAdd(meal)}
                           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs hover:shadow-emerald-700/20 active:scale-95 transition-all cursor-pointer"
                           title="Quick Add to Cart"

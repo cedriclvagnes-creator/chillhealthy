@@ -9,6 +9,8 @@ import {
   Save,
   Upload,
   Image as ImageIcon,
+  CheckCircle2,
+  ArrowLeft,
 } from 'lucide-react';
 import { MealItem, Language, CartItem } from '../types';
 
@@ -42,22 +44,34 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const [editedMeal, setEditedMeal] = useState<MealItem | null>(meal);
   const [editSavedToast, setEditSavedToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sync editedMeal if incoming meal changes
+  // Sync editedMeal and reset scroll position when incoming meal changes
   useEffect(() => {
     setEditedMeal(meal);
+    setQuantity(1);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   }, [meal]);
 
-  // Keyboard shortcut: Escape to close
+  // Lock background page scroll while modal is open & support Escape key to close
   useEffect(() => {
+    if (!meal) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [meal, onClose]);
 
   if (!meal) return null;
 
@@ -84,7 +98,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
       price: unitPrice,
       quantity: quantity,
       image: currentMeal.image,
-      calories: currentMeal.calories + (substitutions.extraProtein ? 120 : 0) - (substitutions.lowCarbBase ? 150 : 0),
+      calories:
+        currentMeal.calories +
+        (substitutions.extraProtein ? 120 : 0) -
+        (substitutions.lowCarbBase ? 150 : 0),
       protein: currentMeal.protein + (substitutions.extraProtein ? 25 : 0),
       substitutions: substitutions,
       notes: notes.trim() || undefined,
@@ -130,16 +147,17 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
           onClose();
         }
       }}
-      className="fixed inset-0 z-50 bg-stone-950/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden"
+      className="fixed inset-0 z-[120] bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto overscroll-contain"
       role="dialog"
       aria-modal="true"
       aria-labelledby="meal-detail-title"
     >
-      <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-stone-200 flex flex-col max-h-[88dvh] sm:max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Dedicated High-Visibility Top Command Header (Always accessible and visible on Mobile, Tablet & Desktop) */}
-        <div className="shrink-0 bg-white border-b border-stone-200/80 px-3.5 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-3 z-30">
+      {/* Viewable-area constrained dialog box for Mobile, Tablet & Website */}
+      <div className="relative bg-white w-full max-w-xl md:max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl border border-stone-200 flex flex-col max-h-[82dvh] sm:max-h-[84dvh] md:max-h-[85vh] min-h-0 my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* 1. Sticky Top Command Header (Always visible & accessible on Mobile, Tablet & Desktop) */}
+        <div className="shrink-0 bg-white border-b border-stone-200 px-3.5 py-2.5 sm:px-5 sm:py-3 flex items-center justify-between gap-2.5 z-30">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-200 shadow-2xs">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-200 shadow-2xs">
               <img
                 src={currentMeal.image}
                 alt=""
@@ -152,8 +170,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 id="meal-detail-title" className="font-heading font-extrabold text-xs sm:text-sm text-stone-900 truncate">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h3
+                  id="meal-detail-title"
+                  className="font-heading font-extrabold text-xs sm:text-sm text-stone-900 truncate"
+                >
                   {language === 'en' ? currentMeal.name : currentMeal.nameZh}
                 </h3>
                 {isOutOfStock ? (
@@ -191,29 +212,39 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               >
                 <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
                 <span className="hidden sm:inline">
-                  {isEditing ? (language === 'en' ? 'Cancel Edit' : '取消编辑') : (language === 'en' ? 'Edit Dish' : '编辑菜品')}
+                  {isEditing
+                    ? language === 'en'
+                      ? 'Cancel Edit'
+                      : '取消编辑'
+                    : language === 'en'
+                    ? 'Edit Dish'
+                    : '编辑菜品'}
                 </span>
               </button>
             )}
 
-            {/* Prominent High-Contrast Top Close Button */}
+            {/* High-Contrast Always-Visible Top Close Button */}
             <button
               type="button"
+              id="meal-modal-top-close-btn"
               onClick={onClose}
-              className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 hover:text-black font-extrabold text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-stone-200 shadow-2xs"
+              className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-stone-900 hover:bg-rose-600 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs"
               aria-label="Close modal"
               title={language === 'en' ? 'Close view (Esc)' : '关闭窗口 (Esc)'}
             >
-              <X className="w-4 h-4 text-stone-600" />
+              <X className="w-4 h-4" />
               <span>{language === 'en' ? 'Close' : '关闭'}</span>
             </button>
           </div>
         </div>
 
-        {/* Scrollable Modal Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-5 text-left">
+        {/* 2. Scrollable Modal Content (min-h-0 guarantees proper flex scrolling on iPad, Mobile & Desktop) */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-4 text-left"
+        >
           {/* Hero Image Box */}
-          <div className="relative h-48 sm:h-60 w-full rounded-2xl overflow-hidden bg-stone-100 shadow-xs shrink-0">
+          <div className="relative h-44 sm:h-56 w-full rounded-2xl overflow-hidden bg-stone-100 shadow-xs shrink-0">
             <img
               src={currentMeal.image}
               alt={currentMeal.name}
@@ -222,10 +253,24 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 e.currentTarget.src =
                   'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80';
               }}
-              className={`w-full h-full object-cover ${isOutOfStock ? 'opacity-70 grayscale-[40%]' : ''}`}
+              className={`w-full h-full object-cover ${
+                isOutOfStock ? 'opacity-70 grayscale-[40%]' : ''
+              }`}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-end p-4 sm:p-6 text-white">
-              <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+
+            {/* Floating Quick-Close Button on Image Corner */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-3 right-3 z-20 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center backdrop-blur-xs border border-white/25 shadow-lg transition-all cursor-pointer active:scale-95"
+              aria-label="Close item view"
+              title={language === 'en' ? 'Close' : '关闭'}
+            >
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent flex flex-col justify-end p-4 sm:p-5 text-white pointer-events-none">
+              <div className="flex flex-wrap items-center gap-1.5 mb-1">
                 {isOutOfStock && (
                   <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-xs font-black uppercase shadow-xs flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
@@ -249,10 +294,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 )}
               </div>
 
-              <h2 id="meal-detail-title" className="font-heading text-xl sm:text-2xl md:text-3xl font-extrabold leading-tight">
+              <h2 className="font-heading text-lg sm:text-2xl font-extrabold leading-tight">
                 {language === 'en' ? currentMeal.name : currentMeal.nameZh}
               </h2>
-              <p className="text-xs sm:text-sm text-stone-200 mt-1 line-clamp-2">
+              <p className="text-xs text-stone-200 mt-0.5 line-clamp-2">
                 {language === 'en' ? currentMeal.subtitle : currentMeal.subtitleZh}
               </p>
             </div>
@@ -264,12 +309,16 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
                 <AlertCircle className="w-4 h-4" />
               </div>
-              <div>
-                <span>{language === 'en' ? 'Currently Out of Stock / Sold Out' : '此餐品当前已售罄 / 厨房补货中'}</span>
+              <div className="flex-1 min-w-0">
+                <span>
+                  {language === 'en'
+                    ? 'Currently Out of Stock / Sold Out'
+                    : '此餐品当前已售罄 / 厨房补货中'}
+                </span>
                 <p className="text-[11px] font-normal text-rose-700 mt-0.5">
                   {language === 'en'
-                    ? 'This item has been marked as Out of Stock by kitchen admin. Please view details and choose another delicious meal!'
-                    : '该餐品已在后台标记为缺货售罄，您可以完整查看成分与营养说明，并在前台选购其他丰盛餐品！'}
+                    ? 'This item has been marked as Out of Stock by kitchen admin. You can view its nutrition facts below and close this window to choose another delicious meal!'
+                    : '该餐品已在后台标记为缺货售罄，您可查看下方营养与食材说明，随后点击关闭返回餐单选购其他餐点！'}
                 </p>
               </div>
             </div>
@@ -277,20 +326,62 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
           {/* Edit Mode vs Standard View Mode */}
           {isEditing && editedMeal ? (
-            <form onSubmit={handleSaveMealEdits} className="space-y-4 bg-stone-50/70 p-4 rounded-2xl border border-stone-200">
+            <form
+              onSubmit={handleSaveMealEdits}
+              className="space-y-4 bg-stone-50/70 p-4 rounded-2xl border border-stone-200"
+            >
               <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
                   <Edit3 className="w-4 h-4" />
-                  <span>{language === 'en' ? 'Edit Dish Information' : '编辑菜品信息（照片、名称、蛋白质、描述）'}</span>
+                  <span>
+                    {language === 'en'
+                      ? 'Edit Dish Information'
+                      : '编辑菜品信息（照片、名称、蛋白质、描述）'}
+                  </span>
                 </span>
                 <span className="text-[11px] text-stone-400">ID: {editedMeal.id}</span>
+              </div>
+
+              {/* Quick Stock Toggle inside Edit Mode */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-stone-200">
+                <span className="text-xs font-bold text-stone-800">
+                  {language === 'en' ? 'Stock Status:' : '库存状态：'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditedMeal({ ...editedMeal, isOutOfStock: false })}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                      !editedMeal.isOutOfStock
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    {language === 'en' ? 'In Stock' : '供应中'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditedMeal({ ...editedMeal, isOutOfStock: true })}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                      editedMeal.isOutOfStock
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-stone-100 text-stone-600'
+                    }`}
+                  >
+                    {language === 'en' ? 'Sold Out' : '已售罄'}
+                  </button>
+                </div>
               </div>
 
               {/* Photo URL & Device Upload */}
               <div className="bg-white p-3.5 rounded-2xl border border-stone-200 space-y-2">
                 <label className="text-xs font-bold text-stone-700 block flex items-center gap-1.5">
                   <ImageIcon className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{language === 'en' ? 'Dish Photo (URL or File Upload) *' : '菜品照片 (URL链接或文件上传) *'}</span>
+                  <span>
+                    {language === 'en'
+                      ? 'Dish Photo (URL or File Upload) *'
+                      : '菜品照片 (URL链接或文件上传) *'}
+                  </span>
                 </label>
                 <input
                   type="url"
@@ -314,7 +405,9 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold cursor-pointer transition-colors"
                   >
                     <Upload className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>{language === 'en' ? 'Upload Image from Device' : '从设备上传新照片'}</span>
+                    <span>
+                      {language === 'en' ? 'Upload Image from Device' : '从设备上传新照片'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -350,30 +443,42 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               {/* Price & Calories & Protein */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-stone-700 block mb-1">Price (RM)</label>
+                  <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                    Price (RM)
+                  </label>
                   <input
                     type="number"
                     step="0.1"
                     value={editedMeal.price}
-                    onChange={(e) => setEditedMeal({ ...editedMeal, price: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setEditedMeal({ ...editedMeal, price: parseFloat(e.target.value) || 0 })
+                    }
                     className="w-full text-xs px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-stone-700 block mb-1">Calories (kcal)</label>
+                  <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                    Calories (kcal)
+                  </label>
                   <input
                     type="number"
                     value={editedMeal.calories}
-                    onChange={(e) => setEditedMeal({ ...editedMeal, calories: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setEditedMeal({ ...editedMeal, calories: parseInt(e.target.value) || 0 })
+                    }
                     className="w-full text-xs px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-stone-700 block mb-1">Protein (g)</label>
+                  <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                    Protein (g)
+                  </label>
                   <input
                     type="number"
                     value={editedMeal.protein}
-                    onChange={(e) => setEditedMeal({ ...editedMeal, protein: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setEditedMeal({ ...editedMeal, protein: parseInt(e.target.value) || 0 })
+                    }
                     className="w-full text-xs px-2.5 py-1.5 rounded-xl border border-stone-200 bg-white"
                   />
                 </div>
@@ -381,11 +486,15 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
               {/* Description */}
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">Description (Chinese)</label>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Description (Chinese)
+                </label>
                 <textarea
                   rows={2}
                   value={editedMeal.descriptionZh}
-                  onChange={(e) => setEditedMeal({ ...editedMeal, descriptionZh: e.target.value })}
+                  onChange={(e) =>
+                    setEditedMeal({ ...editedMeal, descriptionZh: e.target.value })
+                  }
                   className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 bg-white"
                 />
               </div>
@@ -403,44 +512,60 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>{editSavedToast ? (language === 'en' ? 'Saved!' : '已保存!') : (language === 'en' ? 'Save Changes' : '保存菜品')}</span>
+                  <span>
+                    {editSavedToast
+                      ? language === 'en'
+                        ? 'Saved!'
+                        : '已保存!'
+                      : language === 'en'
+                      ? 'Save Changes'
+                      : '保存菜品'}
+                  </span>
                 </button>
               </div>
             </form>
           ) : (
             <>
               {/* Nutrition Macro Pills */}
-              <div className="bg-stone-50 rounded-2xl p-3.5 sm:p-4 border border-stone-200/80">
+              <div className="bg-stone-50 rounded-2xl p-3 sm:p-4 border border-stone-200/80">
                 <div className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
                   {language === 'en' ? 'Nutritional Facts (Per Box)' : '单份完整营养成分'}
                 </div>
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-stone-200 shadow-2xs">
+                  <div className="bg-white p-2 rounded-xl border border-stone-200 shadow-2xs">
                     <span className="text-[10px] text-stone-500 block uppercase font-bold">
                       {language === 'en' ? 'Calories' : '热量'}
                     </span>
-                    <span className="text-base sm:text-lg font-extrabold text-stone-900">{currentMeal.calories}</span>
+                    <span className="text-sm sm:text-base font-extrabold text-stone-900">
+                      {currentMeal.calories}
+                    </span>
                     <span className="text-[10px] text-stone-400 block">kcal</span>
                   </div>
-                  <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs">
+                  <div className="bg-white p-2 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs">
                     <span className="text-[10px] text-emerald-700 block uppercase font-bold">
                       {language === 'en' ? 'Protein' : '蛋白质'}
                     </span>
-                    <span className="text-base sm:text-lg font-extrabold text-emerald-700">{currentMeal.protein}g</span>
+                    <span className="text-sm sm:text-base font-extrabold text-emerald-700">
+                      {currentMeal.protein}g
+                    </span>
                     <span className="text-[10px] text-emerald-600 block">Lean</span>
                   </div>
-                  <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-stone-200 shadow-2xs">
+                  <div className="bg-white p-2 rounded-xl border border-stone-200 shadow-2xs">
                     <span className="text-[10px] text-stone-500 block uppercase font-bold">
                       {language === 'en' ? 'Carbs' : '优质碳水'}
                     </span>
-                    <span className="text-base sm:text-lg font-extrabold text-stone-900">{currentMeal.carbs}g</span>
+                    <span className="text-sm sm:text-base font-extrabold text-stone-900">
+                      {currentMeal.carbs}g
+                    </span>
                     <span className="text-[10px] text-stone-400 block">Low GI</span>
                   </div>
-                  <div className="bg-white p-2 sm:p-2.5 rounded-xl border border-stone-200 shadow-2xs">
+                  <div className="bg-white p-2 rounded-xl border border-stone-200 shadow-2xs">
                     <span className="text-[10px] text-stone-500 block uppercase font-bold">
                       {language === 'en' ? 'Healthy Fat' : '健康油脂'}
                     </span>
-                    <span className="text-base sm:text-lg font-extrabold text-stone-900">{currentMeal.fat}g</span>
+                    <span className="text-sm sm:text-base font-extrabold text-stone-900">
+                      {currentMeal.fat}g
+                    </span>
                     <span className="text-[10px] text-stone-400 block">Clean</span>
                   </div>
                 </div>
@@ -462,14 +587,16 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   {language === 'en' ? 'Fresh Whole Ingredients' : '新鲜天然全食材'}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
-                  {(language === 'en' ? currentMeal.ingredients : currentMeal.ingredientsZh).map((ing, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 text-xs font-medium"
-                    >
-                      {ing}
-                    </span>
-                  ))}
+                  {(language === 'en' ? currentMeal.ingredients : currentMeal.ingredientsZh).map(
+                    (ing, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 text-xs font-medium"
+                      >
+                        {ing}
+                      </span>
+                    )
+                  )}
                 </div>
                 {currentMeal.allergens && currentMeal.allergens.length > 0 && (
                   <p className="text-xs text-amber-700 mt-2 flex items-center gap-1.5">
@@ -485,10 +612,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
               {/* Customization & Substitutions (Only relevant when in stock) */}
               {!isOutOfStock && (
-                <div className="pt-2 border-t border-stone-200 space-y-3">
+                <div className="pt-2 border-t border-stone-200 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs sm:text-sm font-bold text-stone-900 flex items-center gap-2">
-                      <span>{language === 'en' ? 'Customize Meal Options' : '个性化定制选项'}</span>
+                      <span>
+                        {language === 'en' ? 'Customize Meal Options' : '个性化定制选项'}
+                      </span>
                       <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wide">
                         {language === 'en' ? 'Ala Carte Exclusive' : '仅限单点顾客'}
                       </span>
@@ -501,7 +630,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   </p>
 
                   {/* Low carb base swap */}
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
+                  <label className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
@@ -522,11 +651,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-emerald-700">+RM 3.50</span>
+                    <span className="text-xs font-bold text-emerald-700 shrink-0">+RM 3.50</span>
                   </label>
 
                   {/* Extra protein */}
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
+                  <label className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
@@ -547,11 +676,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-emerald-700">+RM 6.00</span>
+                    <span className="text-xs font-bold text-emerald-700 shrink-0">+RM 6.00</span>
                   </label>
 
                   {/* Dressing on side */}
-                  <label className="flex items-center justify-between p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
+                  <label className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-stone-200 hover:border-emerald-500 cursor-pointer transition-colors bg-white">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
@@ -572,54 +701,79 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-stone-400">FREE</span>
+                    <span className="text-xs font-bold text-stone-400 shrink-0">FREE</span>
                   </label>
 
                   {/* Special Instructions */}
                   <div className="pt-1">
                     <label className="text-xs font-bold text-stone-700 block mb-1">
-                      {language === 'en' ? 'Kitchen Notes / Dietary Request' : '特殊备注 (如不吃香菜、少盐等)'}
+                      {language === 'en'
+                        ? 'Kitchen Notes / Dietary Request'
+                        : '特殊备注 (如不吃香菜、少盐等)'}
                     </label>
                     <input
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder={language === 'en' ? 'e.g. No onion, cutlery needed...' : '如：不要葱蒜、附环保餐具等'}
+                      placeholder={
+                        language === 'en'
+                          ? 'e.g. No onion, cutlery needed...'
+                          : '如：不要葱蒜、附环保餐具等'
+                      }
                       className="w-full text-xs px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
                     />
                   </div>
                 </div>
               )}
+
+              {/* End-of-Item View Close Bar (Lets customer immediately close after viewing item details) */}
+              <div className="pt-2 border-t border-stone-200/80">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer border border-stone-200/90"
+                >
+                  <ArrowLeft className="w-4 h-4 text-stone-600" />
+                  <span>
+                    {language === 'en'
+                      ? 'Done Viewing Item · Close & Back to Menu'
+                      : '已查看完毕 · 关闭窗口并返回餐单'}
+                  </span>
+                </button>
+              </div>
             </>
           )}
         </div>
 
-        {/* Modal Sticky Bottom Bar (Always viewable and easy to close across mobile, tablet, and website) */}
-        <div className="shrink-0 p-3 sm:p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between gap-2.5 sm:gap-4 pb-[max(0.85rem,env(safe-area-inset-bottom))]">
+        {/* 3. Sticky Bottom Action Bar (Always viewable & easy to close across Mobile, Tablet & Website) */}
+        <div className="shrink-0 p-3 sm:p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between gap-2.5 sm:gap-3 z-30">
           {/* Prominent Always-Visible Close Button */}
           <button
             type="button"
+            id="meal-modal-bottom-close-btn"
             onClick={onClose}
-            className="px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl border-2 border-stone-300 hover:border-stone-400 bg-white hover:bg-stone-100 text-stone-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
+            className="px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-xl border-2 border-stone-300 hover:border-stone-400 bg-white hover:bg-stone-100 text-stone-900 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
             title={language === 'en' ? 'Close item view' : '关闭餐品详情'}
           >
-            <X className="w-4 h-4 text-stone-600" />
+            <X className="w-4 h-4 text-stone-700" />
             <span>{language === 'en' ? 'Close' : '关闭窗口'}</span>
           </button>
 
           {isOutOfStock ? (
-            <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 py-2 px-3 sm:px-4 rounded-xl bg-rose-50 border border-rose-200 text-left">
-              <div className="flex items-center gap-1.5 text-rose-700 text-xs font-black">
+            <div className="flex-1 flex items-center justify-between gap-2 py-2 px-3 sm:px-4 rounded-xl bg-rose-50 border border-rose-200 text-left min-w-0">
+              <div className="flex items-center gap-1.5 text-rose-700 text-xs font-black truncate">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{language === 'en' ? 'Sold Out · Out of Stock' : '此餐品已售罄 / 厨房补货中'}</span>
+                <span className="truncate">
+                  {language === 'en' ? 'Sold Out · Out of Stock' : '此餐品已售罄'}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-xs cursor-pointer active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-xs cursor-pointer active:scale-95 transition-all shrink-0 flex items-center gap-1"
               >
                 <X className="w-3.5 h-3.5" />
-                <span>{language === 'en' ? 'Close & Return to Menu' : '关闭并返回餐单'}</span>
+                <span>{language === 'en' ? 'Back to Menu' : '返回餐单'}</span>
               </button>
             </div>
           ) : (
@@ -635,7 +789,9 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 >
                   <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <span className="px-2.5 sm:px-3 font-bold text-xs sm:text-sm text-stone-900">{quantity}</span>
+                <span className="px-2.5 sm:px-3 font-bold text-xs sm:text-sm text-stone-900">
+                  {quantity}
+                </span>
                 <button
                   type="button"
                   onClick={() => setQuantity(quantity + 1)}

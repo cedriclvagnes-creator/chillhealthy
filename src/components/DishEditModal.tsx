@@ -68,17 +68,22 @@ export const DishEditModal: React.FC<DishEditModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/75 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-stone-200 relative my-8 max-h-[90vh] flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/75 backdrop-blur-xs p-2.5 sm:p-4 md:p-6 overflow-hidden"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-stone-200 relative my-auto max-h-[85dvh] sm:max-h-[88vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-stone-100 shrink-0">
+        <div className="flex items-center justify-between pb-3.5 border-b border-stone-100 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-700 text-white flex items-center justify-center font-bold shadow-xs">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-heading font-extrabold text-stone-900 text-lg">
+                <h3 className="font-heading font-extrabold text-stone-900 text-base sm:text-lg">
                   {language === 'en' ? 'Edit Dish, Photo & Stock' : '编辑餐品、图片与库存'}
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
@@ -89,15 +94,17 @@ export const DishEditModal: React.FC<DishEditModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
+            <span>{language === 'en' ? 'Close' : '关闭'}</span>
           </button>
         </div>
 
         {/* Scrollable Form */}
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs overflow-y-auto pr-1 flex-1">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs overflow-y-auto min-h-0 pr-1 flex-1 overscroll-contain">
           
           {/* Stock Availability Control Banner */}
           <div className="p-3.5 rounded-2xl border transition-all bg-stone-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
