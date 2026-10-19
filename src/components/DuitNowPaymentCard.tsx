@@ -19,15 +19,18 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   whatsappNumber = '0126189919',
   siteSettings,
 }) => {
-  const merchantName = siteSettings?.paymentMerchantName || 'Chill Healthy Trading';
+  const merchantName = (siteSettings?.paymentMerchantName || 'CHILL HEALTHY TRADING').toUpperCase();
   // Note: 0126189919 does NOT have DuitNow phone transfer function. Never use it as a fallback DuitNow ID!
   const customDuitNowId = siteSettings?.paymentDuitNowId && siteSettings.paymentDuitNowId !== '0126189919'
     ? siteSettings.paymentDuitNowId
     : '';
 
-  const effectiveQr = siteSettings?.paymentQrUrl || (typeof window !== 'undefined' ? localStorage.getItem('chillhealthy_duitnow_qr_custom') : null);
-  const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 8;
-  const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 95;
+  const customQrFromStorage =
+    typeof window !== 'undefined' ? localStorage.getItem('chillhealthy_duitnow_qr_custom') : null;
+  const effectiveQr =
+    siteSettings?.paymentQrUrl || customQrFromStorage || '/duitnow-qr-chillhealthy.svg';
+  const qrMargin = typeof siteSettings?.paymentQrMargin === 'number' ? siteSettings.paymentQrMargin : 6;
+  const qrScale = typeof siteSettings?.paymentQrScale === 'number' ? siteSettings.paymentQrScale : 98;
 
   const paymentWhatsappMessage =
     `*Chill Healthy Trading - DuitNow QR Payment Receipt*\n` +
@@ -39,7 +42,7 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
   const paymentWhatsappUrl = buildWhatsAppUrl(whatsappNumber, paymentWhatsappMessage);
 
   return (
-    <div className="bg-white rounded-3xl border-2 border-pink-500/80 shadow-xl overflow-hidden max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
+    <div className="bg-white rounded-3xl border-2 border-[#e5006b]/80 shadow-xl overflow-hidden max-w-sm mx-auto p-4 sm:p-5 relative text-stone-900">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] font-bold text-pink-700 bg-pink-50 px-2.5 py-1 rounded-full border border-pink-200 inline-flex items-center gap-1">
           <QrCode className="w-3.5 h-3.5" />
@@ -50,186 +53,69 @@ export const DuitNowPaymentCard: React.FC<DuitNowPaymentCardProps> = ({
         </span>
       </div>
 
-      {/* The DuitNow QR Voucher Card */}
-      <div className="rounded-2xl border-4 border-[#e5006b] p-4 bg-white text-center flex flex-col items-center shadow-inner">
-        {/* Top DuitNow Logo */}
-        <div className="flex items-center justify-center gap-1.5 mb-2">
-          <div className="w-6 h-6 rounded-full bg-[#e5006b] flex items-center justify-center text-white font-black text-xs">
-            D
-          </div>
-          <div className="text-left leading-none">
-            <span className="font-heading font-black text-[#e5006b] text-base tracking-tight block">
+      {/* Official DuitNow QR Standee Card (matching Duitnow.jpeg) */}
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden shadow-md">
+        {/* Top Arch & Protruding DuitNow QR Logo Header */}
+        <div className="pt-3 bg-white flex flex-col items-center relative">
+          <div className="z-10 bg-white border-2 border-stone-200 rounded-2xl px-3.5 py-2 shadow-xs flex flex-col items-center justify-center -mb-5">
+            <div className="w-7 h-7 rounded-lg bg-[#e5006b] flex items-center justify-center text-white font-black text-sm shadow-2xs">
+              D
+            </div>
+            <span className="font-heading font-black text-[#e5006b] text-xs tracking-tight leading-none mt-1">
               DuitNow
             </span>
-            <span className="text-[10px] font-bold tracking-widest text-[#e5006b] block">QR</span>
+            <span className="font-heading font-black text-[#e5006b] text-[11px] tracking-wider leading-none mt-0.5">
+              QR
+            </span>
+          </div>
+
+          {/* Pink Standee Body (#e5006b) */}
+          <div className="w-full bg-[#e5006b] rounded-t-[2.25rem] pt-8 pb-4 px-5 flex flex-col items-center shadow-inner">
+            {/* White Rounded QR Container */}
+            <div
+              className="w-56 h-56 sm:w-64 sm:h-64 bg-white rounded-2xl flex items-center justify-center shadow-md relative overflow-hidden"
+              style={{ padding: `${qrMargin}px` }}
+            >
+              <img
+                src={effectiveQr}
+                alt={`DuitNow QR ${merchantName}`}
+                className="w-full h-full object-contain transition-transform"
+                style={{
+                  transform: `scale(${qrScale / 100})`,
+                  transformOrigin: 'center',
+                }}
+              />
+            </div>
+
+            {/* Merchant Name in Bold White Uppercase on Pink Background */}
+            <h4 className="font-heading font-black text-white text-sm sm:text-base mt-3.5 tracking-wide uppercase text-center">
+              {merchantName}
+            </h4>
+            {customDuitNowId && (
+              <span className="text-[10px] font-mono font-semibold text-white/90 bg-black/15 px-2 py-0.5 rounded mt-1">
+                DuitNow ID: {customDuitNowId}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* QR Code Graphic Container with margin & scale adjustment */}
-        <div
-          className="w-52 h-52 sm:w-60 sm:h-60 bg-white rounded-xl flex items-center justify-center border border-stone-200 shadow-2xs relative overflow-hidden"
-          style={{ padding: `${qrMargin}px` }}
-        >
-          {effectiveQr ? (
-            <img
-              src={effectiveQr}
-              alt={`DuitNow QR ${merchantName}`}
-              className="w-full h-full object-contain transition-transform"
-              style={{
-                transform: `scale(${qrScale / 100})`,
-                transformOrigin: 'center',
-              }}
-            />
-          ) : (
-            /* High-fidelity SVG recreation of the official Chill Healthy Trading DuitNow QR */
-            <svg
-              viewBox="0 0 240 240"
-              className="w-full h-full text-[#e5006b] transition-transform"
-              fill="currentColor"
-              style={{
-                transform: `scale(${qrScale / 100})`,
-                transformOrigin: 'center',
-              }}
-            >
-              {/* Outer boundary & finder patterns */}
-              {/* Top-Left Finder */}
-              <rect x="15" y="15" width="55" height="55" rx="4" fill="#e5006b" />
-              <rect x="23" y="23" width="39" height="39" rx="2" fill="white" />
-              <rect x="31" y="31" width="23" height="23" rx="2" fill="#e5006b" />
-
-              {/* Top-Right Finder */}
-              <rect x="170" y="15" width="55" height="55" rx="4" fill="#e5006b" />
-              <rect x="178" y="23" width="39" height="39" rx="2" fill="white" />
-              <rect x="186" y="31" width="23" height="23" rx="2" fill="#e5006b" />
-
-              {/* Bottom-Left Finder */}
-              <rect x="15" y="170" width="55" height="55" rx="4" fill="#e5006b" />
-              <rect x="23" y="178" width="39" height="39" rx="2" fill="white" />
-              <rect x="31" y="186" width="23" height="23" rx="2" fill="#e5006b" />
-
-              {/* Bottom-Right Alignment pattern */}
-              <rect x="175" y="175" width="35" height="35" rx="3" fill="#e5006b" />
-              <rect x="183" y="183" width="19" height="19" rx="1" fill="white" />
-              <rect x="189" y="189" width="7" height="7" rx="1" fill="#e5006b" />
-
-              {/* Timing patterns & dense QR modules representing Chill Healthy Trading */}
-              {/* Horizontal timing */}
-              <rect x="80" y="42" width="7" height="7" rx="1" />
-              <rect x="96" y="42" width="7" height="7" rx="1" />
-              <rect x="112" y="42" width="7" height="7" rx="1" />
-              <rect x="128" y="42" width="7" height="7" rx="1" />
-              <rect x="144" y="42" width="7" height="7" rx="1" />
-
-              {/* Vertical timing */}
-              <rect x="42" y="80" width="7" height="7" rx="1" />
-              <rect x="42" y="96" width="7" height="7" rx="1" />
-              <rect x="42" y="112" width="7" height="7" rx="1" />
-              <rect x="42" y="128" width="7" height="7" rx="1" />
-              <rect x="42" y="144" width="7" height="7" rx="1" />
-
-              {/* Data Modules Grid */}
-              <rect x="80" y="20" width="7" height="14" rx="1" />
-              <rect x="96" y="20" width="14" height="7" rx="1" />
-              <rect x="120" y="20" width="7" height="14" rx="1" />
-              <rect x="136" y="20" width="21" height="7" rx="1" />
-
-              <rect x="80" y="60" width="14" height="14" rx="1" />
-              <rect x="104" y="60" width="7" height="7" rx="1" />
-              <rect x="120" y="60" width="14" height="7" rx="1" />
-              <rect x="144" y="60" width="7" height="14" rx="1" />
-
-              <rect x="20" y="80" width="14" height="7" rx="1" />
-              <rect x="20" y="96" width="7" height="14" rx="1" />
-              <rect x="20" y="120" width="14" height="7" rx="1" />
-              <rect x="20" y="136" width="7" height="21" rx="1" />
-
-              <rect x="60" y="80" width="14" height="14" rx="1" />
-              <rect x="60" y="104" width="7" height="7" rx="1" />
-              <rect x="60" y="120" width="14" height="7" rx="1" />
-              <rect x="60" y="144" width="7" height="14" rx="1" />
-
-              {/* Center cluster */}
-              <rect x="80" y="80" width="14" height="7" rx="1" />
-              <rect x="104" y="80" width="14" height="14" rx="1" />
-              <rect x="128" y="80" width="7" height="7" rx="1" />
-              <rect x="144" y="80" width="14" height="14" rx="1" />
-
-              <rect x="80" y="96" width="7" height="14" rx="1" />
-              <rect x="96" y="104" width="14" height="7" rx="1" />
-              <rect x="120" y="96" width="14" height="14" rx="1" />
-              <rect x="144" y="104" width="7" height="14" rx="1" />
-
-              <rect x="80" y="120" width="14" height="14" rx="1" />
-              <rect x="104" y="120" width="7" height="14" rx="1" />
-              <rect x="120" y="120" width="14" height="7" rx="1" />
-              <rect x="144" y="120" width="14" height="14" rx="1" />
-
-              <rect x="80" y="144" width="14" height="7" rx="1" />
-              <rect x="104" y="144" width="14" height="14" rx="1" />
-              <rect x="128" y="144" width="7" height="7" rx="1" />
-
-              {/* Right column modules */}
-              <rect x="170" y="80" width="14" height="7" rx="1" />
-              <rect x="194" y="80" width="7" height="14" rx="1" />
-              <rect x="210" y="80" width="14" height="7" rx="1" />
-
-              <rect x="170" y="96" width="7" height="14" rx="1" />
-              <rect x="186" y="104" width="14" height="7" rx="1" />
-              <rect x="210" y="96" width="7" height="14" rx="1" />
-
-              <rect x="170" y="120" width="14" height="14" rx="1" />
-              <rect x="194" y="120" width="7" height="14" rx="1" />
-              <rect x="210" y="120" width="14" height="7" rx="1" />
-
-              <rect x="170" y="144" width="7" height="14" rx="1" />
-              <rect x="186" y="144" width="14" height="7" rx="1" />
-              <rect x="210" y="144" width="7" height="14" rx="1" />
-
-              {/* Bottom cluster */}
-              <rect x="80" y="170" width="14" height="14" rx="1" />
-              <rect x="104" y="170" width="7" height="7" rx="1" />
-              <rect x="120" y="170" width="14" height="14" rx="1" />
-              <rect x="144" y="170" width="7" height="7" rx="1" />
-
-              <rect x="80" y="194" width="7" height="14" rx="1" />
-              <rect x="96" y="194" width="14" height="7" rx="1" />
-              <rect x="120" y="194" width="7" height="14" rx="1" />
-              <rect x="136" y="194" width="21" height="7" rx="1" />
-
-              <rect x="80" y="215" width="14" height="7" rx="1" />
-              <rect x="104" y="215" width="14" height="7" rx="1" />
-              <rect x="128" y="215" width="7" height="7" rx="1" />
-              <rect x="144" y="215" width="14" height="7" rx="1" />
-            </svg>
-          )}
-        </div>
-
-        {/* Merchant Name under QR */}
-        <h4 className="font-heading font-extrabold text-stone-900 text-base sm:text-lg mt-2 tracking-tight">
-          {merchantName}
-        </h4>
-        {customDuitNowId && (
-          <span className="text-[11px] font-mono font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded mt-0.5">
-            DuitNow ID: {customDuitNowId}
-          </span>
-        )}
-
-        {/* Pink Banner */}
-        <div className="w-full bg-[#e5006b] text-white py-1.5 px-3 rounded-md mt-2 shadow-xs">
-          <span className="font-heading font-black text-xs sm:text-sm tracking-wider uppercase">
+        {/* White Bottom Base: MALAYSIA NATIONAL QR & HLB Connect Merchant Partner */}
+        <div className="bg-white px-4 pt-3 pb-3.5 text-center border-t border-stone-100">
+          <div className="font-heading font-black text-stone-900 text-xs sm:text-sm tracking-wide uppercase">
             MALAYSIA NATIONAL QR
-          </span>
-        </div>
+          </div>
+          <p className="text-[11px] text-stone-700 font-medium mt-0.5">
+            Accepted by participating Banks and e-Wallets
+          </p>
 
-        {/* Footer info & MAE logo */}
-        <div className="mt-2 text-[10px] text-stone-500 font-medium">
-          <p>Accepted by participating Banks & e-Wallets (MAE, CIMB, TNG, Public Bank)</p>
-          <p className="text-[9px] text-stone-400 mt-0.5">Merchant Partner</p>
-          <div className="flex items-center justify-center gap-1 mt-1">
-            <span className="inline-block font-black text-[#f7b500] text-sm bg-black px-1.5 py-0.5 rounded-sm tracking-wider">
-              MAE
-            </span>
-            <span className="text-[10px] font-bold text-stone-700">by Maybank2u</span>
+          <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between px-2">
+            <span className="text-[11px] font-semibold text-stone-700">Merchant Partner</span>
+            <div className="inline-flex items-center gap-0.5 font-heading">
+              <span className="font-black text-sm tracking-tight text-[#002d62]">H</span>
+              <span className="font-black text-sm tracking-tight text-[#d91c24]">L</span>
+              <span className="font-black text-sm tracking-tight text-[#002d62]">B</span>
+              <span className="font-bold text-sm tracking-tight text-[#002d62] ml-0.5">Connect</span>
+            </div>
           </div>
         </div>
       </div>

@@ -183,8 +183,22 @@ function loadStoreFromDisk(): ServerStore {
         ? mergeRedemptionsList([], parsed.redemptions, deletedRedemptionIds, deletedMemberIds)
         : [];
 
+      const mergedSiteSettings = {
+        ...defaults.siteSettings,
+        ...(parsed.siteSettings || {}),
+      };
+      if (!mergedSiteSettings.paymentQrUrl) {
+        mergedSiteSettings.paymentQrUrl = '/duitnow-qr-chillhealthy.svg';
+      }
+      if (
+        !mergedSiteSettings.paymentMerchantName ||
+        mergedSiteSettings.paymentMerchantName === 'Chill Healthy Trading'
+      ) {
+        mergedSiteSettings.paymentMerchantName = 'CHILL HEALTHY TRADING';
+      }
+
       return {
-        siteSettings: { ...defaults.siteSettings, ...(parsed.siteSettings || {}) },
+        siteSettings: mergedSiteSettings,
         packages:
           Array.isArray(parsed.packages) && parsed.packages.length > 0
             ? parsed.packages
@@ -238,8 +252,48 @@ function broadcastSyncEvent(sourceClientId?: string) {
   }
 }
 
+function replicateToPeerOrigin(req: express.Request, body: any) {
+  try {
+    if (req.headers['x-peer-replicated']) return;
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
+    let peerHost = '';
+    if (host.startsWith('ais-dev-')) {
+      peerHost = host.replace(/^ais-dev-/, 'ais-pre-');
+    } else if (host.startsWith('ais-pre-')) {
+      peerHost = host.replace(/^ais-pre-/, 'ais-dev-');
+    }
+    if (!peerHost || peerHost === host) return;
+
+    const peerUrl = `https://${peerHost}/api/sync`;
+    void fetch(peerUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Peer-Replicated': 'true',
+      },
+      body: JSON.stringify(body),
+    }).catch(() => {
+      // ignore if peer container is sleeping
+    });
+  } catch {
+    // ignore
+  }
+}
+
 async function startServer() {
   const app = express();
+
+  // Enable CORS so Live Mode (ais-pre) and Dev Mode (ais-dev) synchronize seamlessly across all devices worldwide
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Peer-Replicated');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
 
   // Support base64 photo uploads and full store synchronization payloads
   app.use(express.json({ limit: '50mb' }));
@@ -285,6 +339,7 @@ async function startServer() {
   // POST /api/sync - Update Back Office / Store state & broadcast to all devices worldwide
   app.post('/api/sync', (req, res) => {
     const body = req.body || {};
+    replicateToPeerOrigin(req, body);
     const {
       siteSettings,
       packages,

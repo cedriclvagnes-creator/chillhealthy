@@ -13,7 +13,9 @@ export function normalizeMalaysianPhone(raw: string): string {
   if (!raw) return '';
   let digits = raw.replace(/\D/g, '');
 
-  if (digits.startsWith('60')) {
+  if (digits.startsWith('0060')) {
+    digits = '0' + digits.slice(4);
+  } else if (digits.startsWith('60')) {
     digits = '0' + digits.slice(2);
   } else if (digits.startsWith('0')) {
     // already starts with 0

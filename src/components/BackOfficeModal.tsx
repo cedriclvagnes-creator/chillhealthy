@@ -2091,7 +2091,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={formSettings.paymentMerchantName || 'Chill Healthy Trading'}
+                              value={formSettings.paymentMerchantName || 'CHILL HEALTHY TRADING'}
                               onChange={(e) =>
                                 setFormSettings({
                                   ...formSettings,
@@ -2108,7 +2108,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={formSettings.paymentBankName || 'Maybank'}
+                              value={formSettings.paymentBankName || 'Hong Leong Bank (HLB Connect) / DuitNow QR'}
                               onChange={(e) =>
                                 setFormSettings({
                                   ...formSettings,
@@ -5944,7 +5944,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {combinedPending.map((pkgOrder) => {
-                              const orderNo = pkgOrder.orderNumber || 'CH-261007-6834';
+                              const orderNo = pkgOrder.orderNumber || `CH-${pkgOrder.memberPhone || pkgOrder.id}`;
                               const cleanPkgPhone = (pkgOrder.memberPhone || '').replace(/\D/g, '');
                               const matchedMember = members.find(
                                 (m) => (cleanPkgPhone && (m.phone || '').replace(/\D/g, '') === cleanPkgPhone) || m.id === pkgOrder.memberId

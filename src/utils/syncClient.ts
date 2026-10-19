@@ -71,32 +71,41 @@ export function isLegacyDeletedSeedAccount(
   const refUpper = (member.referralCode || '').trim().toUpperCase();
   const orderNo = member.activePackage?.signupOrderNo || '';
 
-  // Always block the 3 deleted demo seed accounts (Agnes Lim, Marcus Tan, uuu)
+  // Always block the deleted demo seed account signatures
   if (
     idLower === 'mem-uuu-8587' ||
     nameLower === 'uuu' ||
     refUpper === 'CHILL-UUU8587' ||
-    orderNo === 'CH-261007-6834'
+    orderNo === 'CH-261007-6834' ||
+    emailLower === 'marcus@fitkl.com' ||
+    emailLower === 'member@chill-healthy.com' ||
+    member.activePackage?.purchasedDate === '2026-09-01' ||
+    member.activePackage?.purchasedDate === '2026-09-02'
   ) {
     return true;
+  }
+
+  // Any fresh account registered after 2026-10-19T06:50:00Z is a real live customer registration
+  if (member.registeredAt) {
+    const regMs = new Date(member.registeredAt).getTime();
+    if (!Number.isNaN(regMs) && regMs >= new Date('2026-10-19T06:50:00.000Z').getTime()) {
+      return false;
+    }
   }
 
   if (
     nameLower === 'marcus tan' ||
     nameLower === 'marcus' ||
-    emailLower === 'marcus@fitkl.com' ||
     refUpper === 'CHILL-MARCUS4556' ||
-    (!member.registeredAt && member.id === '0123344556')
+    member.id === '0123344556'
   ) {
     return true;
   }
 
   if (
     nameLower === 'agnes lim' ||
-    emailLower === 'member@chill-healthy.com' ||
     refUpper === 'CHILL-AGNES9919' ||
-    (!member.registeredAt && member.id === '0126189919') ||
-    member.activePackage?.purchasedDate === '2026-09-01'
+    member.id === '0126189919'
   ) {
     return true;
   }
@@ -273,10 +282,27 @@ export function mergeSingleMember(existing: MemberAccount, incoming: MemberAccou
     }
   }
 
-  const resolvedActivePackage =
-    incoming.activePackage !== undefined
+  let resolvedActivePackage =
+    incoming.activePackage !== undefined && incoming.activePackage !== null
       ? incoming.activePackage
       : existing.activePackage || null;
+
+  if (existing.activePackage && incoming.activePackage) {
+    const isSameOrder =
+      (existing.activePackage.signupOrderNo &&
+        existing.activePackage.signupOrderNo === incoming.activePackage.signupOrderNo) ||
+      (existing.activePackage.planId === incoming.activePackage.planId &&
+        existing.activePackage.purchasedDate === incoming.activePackage.purchasedDate);
+    if (isSameOrder && (existing.activePackage.adminConfirmed || incoming.activePackage.adminConfirmed)) {
+      resolvedActivePackage = {
+        ...existing.activePackage,
+        ...incoming.activePackage,
+        adminConfirmed: true,
+        adminConfirmedAt:
+          incoming.activePackage.adminConfirmedAt || existing.activePackage.adminConfirmedAt,
+      };
+    }
+  }
 
   return {
     ...existing,
@@ -365,6 +391,105 @@ export function mergeMembersLists(
 }
 
 /**
+ * Resolves all live and dev sync endpoints so registrations on any device (Shared Live URL ais-pre or Dev URL ais-dev)
+ * synchronize instantaneously across all environments and devices worldwide.
+ */
+function getSyncEndpoints(): string[] {
+  const endpoints = new Set<string>(['/api/sync']);
+  if (typeof window !== 'undefined' && window.location) {
+    const origin = window.location.origin;
+    if (origin.includes('ais-dev-')) {
+      endpoints.add(`${origin.replace('ais-dev-', 'ais-pre-')}/api/sync`);
+    } else if (origin.includes('ais-pre-')) {
+      endpoints.add(`${origin.replace('ais-pre-', 'ais-dev-')}/api/sync`);
+    }
+  }
+  return Array.from(endpoints);
+}
+
+/**
+ * Merges multiple SyncStorePayload snapshots from local and peer live/dev servers into a single authoritative store.
+ */
+export function mergeSyncPayloads(stores: SyncStorePayload[]): SyncStorePayload | null {
+  const validStores = stores.filter((s) => s && typeof s === 'object');
+  if (validStores.length === 0) return null;
+  if (validStores.length === 1) return validStores[0];
+
+  // Sort by updatedAt ascending so newer store settings win
+  validStores.sort((a, b) => {
+    const tA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+    const tB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+    return tA - tB;
+  });
+
+  const combinedDeletedMemberIds = Array.from(
+    new Set(
+      validStores.flatMap((s) => [
+        ...(Array.isArray(s.deletedMemberIds) ? s.deletedMemberIds : []),
+        ...(s.deletedMemberId ? [s.deletedMemberId] : []),
+      ])
+    )
+  );
+
+  const combinedDeletedRedemptionIds = Array.from(
+    new Set(
+      validStores.flatMap((s) => [
+        ...(Array.isArray(s.deletedRedemptionIds) ? s.deletedRedemptionIds : []),
+        ...(s.deletedRedemptionId ? [s.deletedRedemptionId] : []),
+      ])
+    )
+  );
+
+  let mergedMembers: MemberAccount[] = [];
+  for (const s of validStores) {
+    if (Array.isArray(s.members)) {
+      mergedMembers = mergeMembersLists(
+        mergedMembers,
+        s.members,
+        null,
+        combinedDeletedMemberIds
+      );
+    }
+  }
+
+  const redemptionMap = new Map<string, MealRedemption>();
+  for (const s of validStores) {
+    const cleanReds = filterOutDeletedRedemptions(
+      Array.isArray(s.redemptions) ? s.redemptions : [],
+      combinedDeletedRedemptionIds,
+      combinedDeletedMemberIds
+    );
+    for (const r of cleanReds) {
+      if (!r || !r.id) continue;
+      const prev = redemptionMap.get(r.id);
+      redemptionMap.set(r.id, prev ? { ...prev, ...r } : r);
+    }
+  }
+
+  const refundMap = new Map<string, MealDeletionRefundRecord>();
+  for (const s of validStores) {
+    for (const rec of Array.isArray(s.refundRecords) ? s.refundRecords : []) {
+      if (rec && rec.id) refundMap.set(rec.id, rec);
+    }
+  }
+
+  const latest = validStores[validStores.length - 1];
+  return {
+    ...latest,
+    siteSettings: validStores.reduce(
+      (acc, s) => (s.siteSettings ? { ...acc, ...s.siteSettings } : acc),
+      latest.siteSettings
+    ),
+    members: mergedMembers,
+    deletedMemberIds: combinedDeletedMemberIds,
+    redemptions: Array.from(redemptionMap.values()),
+    deletedRedemptionIds: combinedDeletedRedemptionIds,
+    refundRecords: Array.from(refundMap.values()),
+    updatedAt: latest.updatedAt || new Date().toISOString(),
+  };
+}
+
+/**
  * Push partial or full Back Office / Store updates to the server and broadcast across all tabs & devices worldwide
  */
 export async function pushSyncToServer(payload: SyncStorePayload): Promise<SyncStorePayload | null> {
@@ -380,48 +505,99 @@ export async function pushSyncToServer(payload: SyncStorePayload): Promise<SyncS
     // ignore BroadcastChannel errors
   }
 
-  // 2. Persist & broadcast via backend server (/api/sync) to all mobile, tablet, and website devices
-  try {
-    const response = await fetch('/api/sync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        ...payload,
-        sourceClientId: SYNC_CLIENT_ID,
-      }),
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data?.store || null;
-  } catch {
-    return null;
-  }
+  const endpoints = getSyncEndpoints();
+  const bodyStr = JSON.stringify({
+    ...payload,
+    sourceClientId: SYNC_CLIENT_ID,
+  });
+
+  const postToEndpoint = async (url: string, attempt = 1): Promise<SyncStorePayload | null> => {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: bodyStr,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data?.store || null;
+    } catch {
+      if (attempt < 2 && url === '/api/sync') {
+        await new Promise((r) => setTimeout(r, 600));
+        return postToEndpoint(url, attempt + 1);
+      }
+      return null;
+    }
+  };
+
+  // 2. Persist & broadcast via all backend endpoints (both local and live/dev peer)
+  const results = await Promise.allSettled(endpoints.map((ep) => postToEndpoint(ep)));
+  const returnedStores = results
+    .map((r) => (r.status === 'fulfilled' ? r.value : null))
+    .filter((s): s is SyncStorePayload => Boolean(s));
+
+  return mergeSyncPayloads(returnedStores);
 }
 
 /**
- * Fetch the latest authoritative store from the server
+ * Fetch the latest authoritative store from the server (merging both local and peer live/dev instances)
  */
 export async function fetchSyncFromServer(): Promise<SyncStorePayload | null> {
-  try {
-    const response = await fetch(`/api/sync?t=${Date.now()}`, {
-      method: 'GET',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        Pragma: 'no-cache',
-      },
-    });
-    if (!response.ok) return null;
-    const store: SyncStorePayload = await response.json();
-    return store;
-  } catch {
-    return null;
+  const endpoints = getSyncEndpoints();
+  const ts = Date.now();
+
+  const fetchEndpoint = async (url: string): Promise<SyncStorePayload | null> => {
+    try {
+      const response = await fetch(`${url}?t=${ts}`, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      if (!response.ok) return null;
+      const store: SyncStorePayload = await response.json();
+      return store;
+    } catch {
+      return null;
+    }
+  };
+
+  const results = await Promise.allSettled(endpoints.map((ep) => fetchEndpoint(ep)));
+  const stores = results
+    .map((r) => (r.status === 'fulfilled' ? r.value : null))
+    .filter((s): s is SyncStorePayload => Boolean(s));
+
+  if (stores.length === 0) return null;
+  const merged = mergeSyncPayloads(stores);
+
+  // If peer server had newly registered members or redemptions not yet on local /api/sync, heal local /api/sync automatically
+  if (stores.length > 1 && merged && stores[0]) {
+    const localMemberCount = Array.isArray(stores[0].members) ? stores[0].members.length : 0;
+    const mergedMemberCount = Array.isArray(merged.members) ? merged.members.length : 0;
+    const localRedCount = Array.isArray(stores[0].redemptions) ? stores[0].redemptions.length : 0;
+    const mergedRedCount = Array.isArray(merged.redemptions) ? merged.redemptions.length : 0;
+
+    if (mergedMemberCount > localMemberCount || mergedRedCount > localRedCount) {
+      void fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          members: merged.members,
+          redemptions: merged.redemptions,
+          sourceClientId: SYNC_CLIENT_ID,
+        }),
+      }).catch(() => {});
+    }
   }
+
+  return merged;
 }
 
 /**
- * Subscribe to real-time updates via Server-Sent Events (SSE), BroadcastChannel, and visibility focus
+ * Subscribe to real-time updates via Server-Sent Events (SSE), BroadcastChannel, visibility focus, and live polling
  */
 export function subscribeToRealtimeSync(
   onReceiveStore: (store: SyncStorePayload, isInitial?: boolean) => void
@@ -491,7 +667,7 @@ export function subscribeToRealtimeSync(
   window.addEventListener('focus', handleVisibilityOrFocus);
   document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-  // Periodic background poll every 4 seconds so all worldwide mobile/tablet/website clients stay in real-time sync
+  // Periodic background poll every 2.5 seconds so all worldwide mobile/tablet/website clients stay in instant real-time sync
   const pollInterval = setInterval(() => {
     if (document.visibilityState === 'visible') {
       fetchSyncFromServer().then((store) => {
@@ -500,7 +676,7 @@ export function subscribeToRealtimeSync(
         }
       });
     }
-  }, 4000);
+  }, 2500);
 
   return () => {
     isDisposed = true;

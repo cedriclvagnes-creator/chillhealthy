@@ -35,9 +35,9 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   heroComboMode: 'grid',
   autoSyncMalaysiaBankHolidays: true,
   // Payment QR customization settings
-  paymentQrUrl: '',
-  paymentMerchantName: 'Chill Healthy Trading',
-  paymentBankName: 'Public Bank / DuitNow QR',
+  paymentQrUrl: '/duitnow-qr-chillhealthy.svg',
+  paymentMerchantName: 'CHILL HEALTHY TRADING',
+  paymentBankName: 'Hong Leong Bank (HLB Connect) / DuitNow QR',
   paymentAccountNo: '3219-8920-11',
   paymentDuitNowId: '0126189919',
   paymentInstructionsEn: 'Scan via any Malaysian bank app, TNG eWallet, ShopeePay, or GrabPay.',

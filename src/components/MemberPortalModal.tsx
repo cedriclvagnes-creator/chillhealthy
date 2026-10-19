@@ -2464,7 +2464,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
                       <div className="flex justify-between items-center text-stone-600">
                         <span>{language === 'en' ? 'Order Number:' : '配套订单编号：'}</span>
                         <span className="font-mono font-black text-stone-900 bg-stone-200/70 px-2 py-0.5 rounded">
-                          #{activePkg.signupOrderNo || 'CH-261007-6834'}
+                          #{activePkg.signupOrderNo || `CH-${currentMember.phone || currentMember.id}`}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-stone-600">

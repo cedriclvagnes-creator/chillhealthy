@@ -128,6 +128,11 @@ export default function App() {
         return {
           ...DEFAULT_SITE_SETTINGS,
           ...parsed,
+          paymentQrUrl: parsed.paymentQrUrl || DEFAULT_SITE_SETTINGS.paymentQrUrl,
+          paymentMerchantName:
+            !parsed.paymentMerchantName || parsed.paymentMerchantName === 'Chill Healthy Trading'
+              ? DEFAULT_SITE_SETTINGS.paymentMerchantName
+              : parsed.paymentMerchantName,
           autoSyncMalaysiaBankHolidays: isAutoSync,
           disabledDeliveryDates: initialDisabled,
           whatsappNumber: '60126189919',
@@ -548,6 +553,12 @@ export default function App() {
           const next: SiteSettings = {
             ...prev,
             ...incomingSettings,
+            paymentQrUrl: incomingSettings.paymentQrUrl || prev.paymentQrUrl || DEFAULT_SITE_SETTINGS.paymentQrUrl,
+            paymentMerchantName:
+              !incomingSettings.paymentMerchantName ||
+              incomingSettings.paymentMerchantName === 'Chill Healthy Trading'
+                ? DEFAULT_SITE_SETTINGS.paymentMerchantName
+                : incomingSettings.paymentMerchantName,
             ...(Array.isArray(derivedOutIds) ? { outOfStockDishes: derivedOutIds } : {}),
           };
           localStorage.setItem('chillhealthy_settings', JSON.stringify(next));
@@ -579,13 +590,13 @@ export default function App() {
         );
 
         setMembers((prev) => {
-          // Keep any brand-new account registered on this device in the last 10 seconds that is not deleted
+          // Keep any brand-new account registered on this device in the last 30 seconds that is not deleted
           const nowMs = Date.now();
           const recentLocalRegistrations = filterOutDeletedMembers(prev, serverDeletedIds).filter(
             (m) => {
               if (!m.registeredAt) return false;
               const regTime = new Date(m.registeredAt).getTime();
-              return !Number.isNaN(regTime) && nowMs - regTime < 10000;
+              return !Number.isNaN(regTime) && nowMs - regTime < 30000;
             }
           );
 
@@ -600,7 +611,7 @@ export default function App() {
             localStorage.setItem('chillhealthy_members', JSON.stringify(resolved));
           } catch {}
 
-          // If this device has a brand-new registration in the last 10s not yet on the server, push it
+          // If this device has a brand-new registration in the last 30s not yet on the server, push it
           const serverKeys = new Set(
             authoritativeServerMembers.map((m) => getMemberCanonicalKey(m)).filter(Boolean)
           );
@@ -631,6 +642,11 @@ export default function App() {
                 localStorage.setItem('chillhealthy_current_member', JSON.stringify(updatedCur));
               } catch {}
               return updatedCur;
+            }
+            // If currentMember was registered in the last 30s, keep it active
+            const curRegTime = curPrev.registeredAt ? new Date(curPrev.registeredAt).getTime() : 0;
+            if (curRegTime && nowMs - curRegTime < 30000) {
+              return curPrev;
             }
             try {
               localStorage.removeItem('chillhealthy_current_member');
@@ -988,10 +1004,16 @@ export default function App() {
     const rawInput = loginIdOrPhone.trim();
     if (!rawInput) return false;
 
+    let deletedIds: string[] = [];
+    try {
+      const savedDelRaw = localStorage.getItem('chillhealthy_deleted_members');
+      if (savedDelRaw) deletedIds = JSON.parse(savedDelRaw);
+    } catch {}
+
     const candidatePool =
       Array.isArray(customMembersPool) && customMembersPool.length > 0
-        ? mergeMembersLists(members, customMembersPool, currentMember)
-        : mergeMembersLists(members, [], currentMember);
+        ? mergeMembersLists(customMembersPool, members, currentMember, deletedIds)
+        : mergeMembersLists(members, [], currentMember, deletedIds);
 
     const found = candidatePool.find((m) => doesMemberMatchLoginInput(m, rawInput));
 
@@ -1018,35 +1040,6 @@ export default function App() {
     const cleanPhone = normalizeMalaysianPhone(newMemberData.phone || '') || (newMemberData.phone || '').replace(/\D/g, '');
     const nowIso = new Date().toISOString();
 
-    const existingMember = members.find((m) => doesMemberMatchLoginInput(m, cleanPhone));
-
-    const newAcct: MemberAccount = {
-      id: existingMember?.id || cleanPhone,
-      memberNumber: cleanPhone, // Member login number same as handphone number
-      name: newMemberData.name || existingMember?.name || 'New Member',
-      email: newMemberData.email || existingMember?.email || `${cleanPhone}@customer.chill-healthy.com`,
-      phone: cleanPhone,
-      password: newMemberData.password || existingMember?.password || '123456', // Default password 123456
-      address: newMemberData.address || existingMember?.address || '',
-      area: newMemberData.area || existingMember?.area || '',
-      postalCode: newMemberData.postalCode || existingMember?.postalCode || '',
-      address2: newMemberData.address2 || existingMember?.address2 || undefined,
-      area2: newMemberData.area2 || existingMember?.area2 || undefined,
-      postalCode2: newMemberData.postalCode2 || existingMember?.postalCode2 || undefined,
-      activeAddressSlot: 1,
-      dietaryPreferences: newMemberData.dietaryPreferences || existingMember?.dietaryPreferences,
-      referralCode: existingMember?.referralCode,
-      referredBy: existingMember?.referredBy,
-      referralsCount: existingMember?.referralsCount || 0,
-      referralBonusMealsEarned: existingMember?.referralBonusMealsEarned || 0,
-      registeredAt: existingMember?.registeredAt || nowIso,
-      updatedAt: nowIso,
-      // 0 meals granted to newly registered customer until customer confirms purchase of any meal plan
-      activePackage: existingMember?.activePackage || null,
-      creditsHistory: existingMember?.creditsHistory?.length ? existingMember.creditsHistory : [],
-      officialReceipts: existingMember?.officialReceipts,
-    };
-
     // Remove this phone from local deleted tombstones if customer is registering fresh
     try {
       const savedDelRaw = localStorage.getItem('chillhealthy_deleted_members');
@@ -1059,18 +1052,61 @@ export default function App() {
       }
     } catch {}
 
-    const nextMembers = mergeMembersLists(members, [newAcct], newAcct);
-    setMembers(nextMembers);
-    setCurrentMember(newAcct);
     setJustRegisteredMember(true);
     try {
-      localStorage.setItem('chillhealthy_members', JSON.stringify(nextMembers));
-      localStorage.setItem('chillhealthy_current_member', JSON.stringify(newAcct));
       sessionStorage.removeItem('chillhealthy_dismiss_urge_plan');
-    } catch {
-      // ignore
-    }
-    void pushSyncStore({ upsertMember: newAcct, members: nextMembers });
+    } catch {}
+
+    setMembers((prevMembers) => {
+      const existingMember = prevMembers.find((m) => doesMemberMatchLoginInput(m, cleanPhone));
+
+      const newAcct: MemberAccount = {
+        id: existingMember?.id || cleanPhone,
+        memberNumber: cleanPhone, // Member login number same as handphone number
+        name: newMemberData.name || existingMember?.name || 'New Member',
+        email: newMemberData.email || existingMember?.email || `${cleanPhone}@customer.chill-healthy.com`,
+        phone: cleanPhone,
+        password: newMemberData.password || existingMember?.password || '123456', // Default password 123456
+        address: newMemberData.address || existingMember?.address || '',
+        area: newMemberData.area || existingMember?.area || '',
+        postalCode: newMemberData.postalCode || existingMember?.postalCode || '',
+        address2: newMemberData.address2 || existingMember?.address2 || undefined,
+        area2: newMemberData.area2 || existingMember?.area2 || undefined,
+        postalCode2: newMemberData.postalCode2 || existingMember?.postalCode2 || undefined,
+        activeAddressSlot: 1,
+        dietaryPreferences: newMemberData.dietaryPreferences || existingMember?.dietaryPreferences,
+        referralCode: existingMember?.referralCode,
+        referredBy: existingMember?.referredBy,
+        referralsCount: existingMember?.referralsCount || 0,
+        referralBonusMealsEarned: existingMember?.referralBonusMealsEarned || 0,
+        registeredAt: existingMember?.registeredAt || nowIso,
+        updatedAt: nowIso,
+        // 0 meals granted to newly registered customer until customer confirms purchase of any meal plan
+        activePackage: existingMember?.activePackage || null,
+        creditsHistory: existingMember?.creditsHistory?.length ? existingMember.creditsHistory : [],
+        officialReceipts: existingMember?.officialReceipts,
+      };
+
+      const nextMembers = mergeMembersLists(prevMembers, [newAcct], newAcct);
+      setCurrentMember(newAcct);
+
+      try {
+        localStorage.setItem('chillhealthy_members', JSON.stringify(nextMembers));
+        localStorage.setItem('chillhealthy_current_member', JSON.stringify(newAcct));
+      } catch {}
+
+      void pushSyncStore({
+        upsertMember: newAcct,
+        members: nextMembers,
+        forceBroadcast: true,
+      }).then((serverStore) => {
+        if (serverStore) {
+          applyRemoteSyncPayload(serverStore);
+        }
+      });
+
+      return nextMembers;
+    });
   };
 
   const handleRegisterCustomerFromCheckout = (customer: {
@@ -2440,7 +2476,11 @@ export default function App() {
               try {
                 localStorage.setItem('chillhealthy_redemptions', JSON.stringify(updated));
               } catch {}
-              void pushSyncStore({ redemptions: updated });
+              void pushSyncStore({
+                upsertRedemption: orderRecord,
+                redemptions: updated,
+                forceBroadcast: true,
+              });
               return updated;
             });
           }}
