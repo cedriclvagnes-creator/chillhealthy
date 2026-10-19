@@ -60,6 +60,9 @@ import {
   doesMemberMatchLoginInput,
   mergeMembersLists,
   getMemberCanonicalKey,
+  filterOutDeletedMembers,
+  filterOutDeletedRedemptions,
+  isLegacyDeletedSeedAccount,
 } from './utils/syncClient';
 
 function reconcileMenuWithOutOfStockList(
@@ -195,17 +198,21 @@ export default function App() {
     }
   });
 
-  // Member Accounts
+  // Member Accounts (automatically purges deleted legacy demo accounts: Marcus, Agnes Lim, uuu)
   const [members, setMembers] = useState<MemberAccount[]>(() => {
     try {
+      const savedDeletedRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDeleted: string[] = savedDeletedRaw ? JSON.parse(savedDeletedRaw) : [];
       const saved = localStorage.getItem('chillhealthy_members');
       if (saved) {
         const parsed: MemberAccount[] = JSON.parse(saved);
-        return parsed.map((m) => ({
+        const cleaned = filterOutDeletedMembers(parsed, savedDeleted).map((m) => ({
           ...m,
           memberNumber: m.memberNumber || m.phone,
           password: m.password && m.password !== 'password123' ? m.password : '123456',
         }));
+        localStorage.setItem('chillhealthy_members', JSON.stringify(cleaned));
+        return cleaned;
       }
       return INITIAL_MEMBERS;
     } catch {
@@ -216,9 +223,15 @@ export default function App() {
   // Current Logged-in Member (defaults to null - customers must register to log in)
   const [currentMember, setCurrentMember] = useState<MemberAccount | null>(() => {
     try {
+      const savedDeletedRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDeleted: string[] = savedDeletedRaw ? JSON.parse(savedDeletedRaw) : [];
       const saved = localStorage.getItem('chillhealthy_current_member');
-      if (saved) {
+      if (saved && saved !== 'null') {
         const parsed: MemberAccount = JSON.parse(saved);
+        if (!parsed || isLegacyDeletedSeedAccount(parsed) || filterOutDeletedMembers([parsed], savedDeleted).length === 0) {
+          localStorage.removeItem('chillhealthy_current_member');
+          return null;
+        }
         return {
           ...parsed,
           memberNumber: parsed.memberNumber || parsed.phone,
@@ -231,11 +244,21 @@ export default function App() {
     }
   });
 
-  // Daily Meal Redemptions
+  // Daily Meal Redemptions (automatically purges deleted legacy demo orders: red-101, red-102, red-103, CH-261007-6834)
   const [redemptions, setRedemptions] = useState<MealRedemption[]>(() => {
     try {
+      const savedDelMemRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDelMem: string[] = savedDelMemRaw ? JSON.parse(savedDelMemRaw) : [];
+      const savedDelRedRaw = localStorage.getItem('chillhealthy_deleted_redemptions');
+      const savedDelRed: string[] = savedDelRedRaw ? JSON.parse(savedDelRedRaw) : [];
       const saved = localStorage.getItem('chillhealthy_redemptions');
-      return saved ? JSON.parse(saved) : INITIAL_REDEMPTIONS;
+      if (saved) {
+        const parsed: MealRedemption[] = JSON.parse(saved);
+        const cleaned = filterOutDeletedRedemptions(parsed, savedDelRed, savedDelMem);
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleaned));
+        return cleaned;
+      }
+      return INITIAL_REDEMPTIONS;
     } catch {
       return INITIAL_REDEMPTIONS;
     }
@@ -407,48 +430,61 @@ export default function App() {
         }
       }
 
+      const savedDeletedRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDeleted: string[] = savedDeletedRaw ? JSON.parse(savedDeletedRaw) : [];
+
       const savedMembers = localStorage.getItem('chillhealthy_members');
       let latestMembers: MemberAccount[] | null = null;
       if (savedMembers) {
         const parsedMembers: MemberAccount[] = JSON.parse(savedMembers);
         if (Array.isArray(parsedMembers)) {
-          latestMembers = parsedMembers;
-          setMembers(parsedMembers);
+          latestMembers = filterOutDeletedMembers(parsedMembers, savedDeleted);
+          setMembers(latestMembers);
         }
       }
 
       const savedCurrentMember = localStorage.getItem('chillhealthy_current_member');
       if (savedCurrentMember && savedCurrentMember !== 'null') {
         const parsedCur: MemberAccount = JSON.parse(savedCurrentMember);
-        if (parsedCur && parsedCur.id) {
-          const cleanCurPhone = (parsedCur.phone || '').replace(/\D/g, '');
+        if (
+          parsedCur &&
+          parsedCur.id &&
+          !isLegacyDeletedSeedAccount(parsedCur) &&
+          filterOutDeletedMembers([parsedCur], savedDeleted).length > 0
+        ) {
           const syncedCur =
-            latestMembers?.find(
-              (m) =>
-                m.id === parsedCur.id ||
-                (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
-            ) || parsedCur;
+            latestMembers?.find((m) => doesMemberMatchLoginInput(m, parsedCur.phone || parsedCur.id)) || parsedCur;
           setCurrentMember(syncedCur);
+        } else {
+          localStorage.removeItem('chillhealthy_current_member');
+          setCurrentMember(null);
         }
       } else if (latestMembers) {
         setCurrentMember((prev) => {
           if (!prev) return null;
-          const cleanCurPhone = (prev.phone || '').replace(/\D/g, '');
+          if (isLegacyDeletedSeedAccount(prev) || filterOutDeletedMembers([prev], savedDeleted).length === 0) {
+            return null;
+          }
           return (
-            latestMembers!.find(
-              (m) =>
-                m.id === prev.id ||
-                (cleanCurPhone && (m.phone || '').replace(/\D/g, '') === cleanCurPhone)
-            ) || prev
+            latestMembers!.find((m) => doesMemberMatchLoginInput(m, prev.phone || prev.id)) || null
           );
         });
       }
+
+      const savedDeletedRedRaw = localStorage.getItem('chillhealthy_deleted_redemptions');
+      const savedDeletedRed: string[] = savedDeletedRedRaw ? JSON.parse(savedDeletedRedRaw) : [];
 
       const savedRedemptions = localStorage.getItem('chillhealthy_redemptions');
       if (savedRedemptions) {
         const parsedRedemptions: MealRedemption[] = JSON.parse(savedRedemptions);
         if (Array.isArray(parsedRedemptions)) {
-          setRedemptions(parsedRedemptions);
+          const cleanedRedemptions = filterOutDeletedRedemptions(
+            parsedRedemptions,
+            savedDeletedRed,
+            savedDeleted
+          );
+          localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleanedRedemptions));
+          setRedemptions(cleanedRedemptions);
         }
       }
 
@@ -524,51 +560,111 @@ export default function App() {
         localStorage.setItem('chillhealthy_packages_v3', JSON.stringify(payload.packages));
       }
 
+      const serverDeletedIds: string[] = Array.isArray(payload.deletedMemberIds)
+        ? payload.deletedMemberIds
+        : payload.deletedMemberId
+        ? [payload.deletedMemberId]
+        : [];
+
+      if (serverDeletedIds.length > 0) {
+        try {
+          localStorage.setItem('chillhealthy_deleted_members', JSON.stringify(serverDeletedIds));
+        } catch {}
+      }
+
       if (Array.isArray(payload.members)) {
-        const incomingMembers = payload.members;
+        const authoritativeServerMembers = filterOutDeletedMembers(
+          payload.members,
+          serverDeletedIds
+        );
+
         setMembers((prev) => {
-          const merged = mergeMembersLists(
-            prev,
-            incomingMembers,
-            null,
-            payload.deletedMemberId
+          // Keep any brand-new account registered on this device in the last 10 seconds that is not deleted
+          const nowMs = Date.now();
+          const recentLocalRegistrations = filterOutDeletedMembers(prev, serverDeletedIds).filter(
+            (m) => {
+              if (!m.registeredAt) return false;
+              const regTime = new Date(m.registeredAt).getTime();
+              return !Number.isNaN(regTime) && nowMs - regTime < 10000;
+            }
           );
+
+          const resolved = mergeMembersLists(
+            authoritativeServerMembers,
+            recentLocalRegistrations,
+            null,
+            serverDeletedIds
+          );
+
           try {
-            localStorage.setItem('chillhealthy_members', JSON.stringify(merged));
+            localStorage.setItem('chillhealthy_members', JSON.stringify(resolved));
           } catch {}
 
-          // If this device has locally registered members that the server did not yet have, push the merged list back to the server so all other devices can log in
-          const incomingKeys = new Set(incomingMembers.map((m) => getMemberCanonicalKey(m)).filter(Boolean));
-          const hasLocalOnlyMembers = merged.some((m) => {
+          // If this device has a brand-new registration in the last 10s not yet on the server, push it
+          const serverKeys = new Set(
+            authoritativeServerMembers.map((m) => getMemberCanonicalKey(m)).filter(Boolean)
+          );
+          const unsyncedNewMember = recentLocalRegistrations.find((m) => {
             const k = getMemberCanonicalKey(m);
-            return k && !incomingKeys.has(k);
+            return k && !serverKeys.has(k);
           });
-          if (hasLocalOnlyMembers) {
-            void pushSyncStore({ members: merged });
+          if (unsyncedNewMember) {
+            void pushSyncStore({ upsertMember: unsyncedNewMember, members: resolved });
           }
 
           setCurrentMember((curPrev) => {
             if (!curPrev) return null;
-            if (payload.deletedMemberId && curPrev.id === payload.deletedMemberId) {
+            if (
+              isLegacyDeletedSeedAccount(curPrev) ||
+              filterOutDeletedMembers([curPrev], serverDeletedIds).length === 0
+            ) {
+              try {
+                localStorage.removeItem('chillhealthy_current_member');
+              } catch {}
               return null;
             }
-            const updatedCur = merged.find((m) => doesMemberMatchLoginInput(m, curPrev.phone || curPrev.id));
+            const updatedCur = resolved.find((m) =>
+              doesMemberMatchLoginInput(m, curPrev.phone || curPrev.id)
+            );
             if (updatedCur) {
               try {
                 localStorage.setItem('chillhealthy_current_member', JSON.stringify(updatedCur));
               } catch {}
               return updatedCur;
             }
-            return curPrev;
+            try {
+              localStorage.removeItem('chillhealthy_current_member');
+            } catch {}
+            return null;
           });
 
-          return merged;
+          return resolved;
         });
       }
 
+      const serverDeletedRedemptionIds: string[] = Array.isArray(payload.deletedRedemptionIds)
+        ? payload.deletedRedemptionIds
+        : payload.deletedRedemptionId
+        ? [payload.deletedRedemptionId]
+        : [];
+
+      if (serverDeletedRedemptionIds.length > 0) {
+        try {
+          localStorage.setItem(
+            'chillhealthy_deleted_redemptions',
+            JSON.stringify(serverDeletedRedemptionIds)
+          );
+        } catch {}
+      }
+
       if (Array.isArray(payload.redemptions)) {
-        setRedemptions(payload.redemptions);
-        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(payload.redemptions));
+        const cleanRedemptions = filterOutDeletedRedemptions(
+          payload.redemptions,
+          serverDeletedRedemptionIds,
+          serverDeletedIds
+        );
+        setRedemptions(cleanRedemptions);
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleanRedemptions));
       }
 
       if (Array.isArray(payload.refundRecords)) {
@@ -580,22 +676,24 @@ export default function App() {
     }
   }, []);
 
-  // Subscribe to real-time cross-device & cross-tab updates (SSE + BroadcastChannel + Visibility)
-  // and push any locally stored members/orders to the server on startup so other devices can immediately log in
+  // Subscribe to real-time cross-device & cross-tab updates (SSE + HTTP GET + BroadcastChannel + Visibility)
   useEffect(() => {
-    const initialMembersToSync = mergeMembersLists(members, [], currentMember);
-    if (initialMembersToSync.length > 0) {
-      void pushSyncStore({
-        members: initialMembersToSync,
-        redemptions,
-      });
-    }
     const unsubscribe = subscribeToRealTimeSync((payload) => {
       applyRemoteSyncPayload(payload);
     });
     return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyRemoteSyncPayload]);
+
+  // Whenever Member Portal or Back Office opens, immediately pull the latest online synchronization
+  useEffect(() => {
+    if (isBackOfficeOpen || isMemberPortalOpen) {
+      void fetchSyncStore().then((fetched) => {
+        if (fetched) {
+          applyRemoteSyncPayload(fetched);
+        }
+      });
+    }
+  }, [isBackOfficeOpen, isMemberPortalOpen, applyRemoteSyncPayload]);
 
   // Synchronize localStorage data, push/pull server state, and broadcast storage events across all open application tabs & devices
   const handleSynchronizeData = React.useCallback(() => {
@@ -606,13 +704,24 @@ export default function App() {
         outOfStockDishes: outOfStockIds,
       };
 
+      const savedDelMemRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDelMem: string[] = savedDelMemRaw ? JSON.parse(savedDelMemRaw) : [];
+      const savedDelRedRaw = localStorage.getItem('chillhealthy_deleted_redemptions');
+      const savedDelRed: string[] = savedDelRedRaw ? JSON.parse(savedDelRedRaw) : [];
+
+      const cleanedMembers = filterOutDeletedMembers(members, savedDelMem);
+      const cleanedRedemptions = filterOutDeletedRedemptions(redemptions, savedDelRed, savedDelMem);
+
+      localStorage.setItem('chillhealthy_members', JSON.stringify(cleanedMembers));
+      localStorage.setItem('chillhealthy_redemptions', JSON.stringify(cleanedRedemptions));
+
       const storageKeys: Array<{ key: string; fallback: unknown }> = [
         { key: 'chillhealthy_settings', fallback: syncedSettings },
         { key: 'chillhealthy_packages_v3', fallback: packages },
         { key: 'chillhealthy_menu_v2', fallback: menuItems },
-        { key: 'chillhealthy_members', fallback: members },
+        { key: 'chillhealthy_members', fallback: cleanedMembers },
         { key: 'chillhealthy_current_member', fallback: currentMember },
-        { key: 'chillhealthy_redemptions', fallback: redemptions },
+        { key: 'chillhealthy_redemptions', fallback: cleanedRedemptions },
         { key: 'chillhealthy_refund_records', fallback: refundRecords },
         { key: 'chillhealthy_cart', fallback: cart },
       ];
@@ -628,7 +737,7 @@ export default function App() {
       // Perform hard refresh of React state from localStorage
       reloadAllFromLocalStorage();
 
-      // Read latest localStorage values and push to cross-device sync server so mobile, tablet, and website stay in sync
+      // Read latest localStorage values and synchronize with the online server store across all devices worldwide
       const latestSettingsRaw = localStorage.getItem('chillhealthy_settings');
       const latestPackagesRaw = localStorage.getItem('chillhealthy_packages_v3');
       const latestMenuRaw = localStorage.getItem('chillhealthy_menu_v2');
@@ -636,13 +745,21 @@ export default function App() {
       const latestRedemptionsRaw = localStorage.getItem('chillhealthy_redemptions');
       const latestRefundsRaw = localStorage.getItem('chillhealthy_refund_records');
 
+      const parsedLocalMembers: MemberAccount[] = latestMembersRaw
+        ? filterOutDeletedMembers(JSON.parse(latestMembersRaw), savedDelMem)
+        : cleanedMembers;
+      const parsedLocalRedemptions: MealRedemption[] = latestRedemptionsRaw
+        ? filterOutDeletedRedemptions(JSON.parse(latestRedemptionsRaw), savedDelRed, savedDelMem)
+        : cleanedRedemptions;
+
       void pushSyncStore({
         siteSettings: latestSettingsRaw ? JSON.parse(latestSettingsRaw) : syncedSettings,
         packages: latestPackagesRaw ? JSON.parse(latestPackagesRaw) : packages,
         menuItems: latestMenuRaw ? JSON.parse(latestMenuRaw) : menuItems,
-        members: latestMembersRaw ? JSON.parse(latestMembersRaw) : members,
-        redemptions: latestRedemptionsRaw ? JSON.parse(latestRedemptionsRaw) : redemptions,
+        members: parsedLocalMembers,
+        redemptions: parsedLocalRedemptions,
         refundRecords: latestRefundsRaw ? JSON.parse(latestRefundsRaw) : refundRecords,
+        forceBroadcast: true,
       }).then((serverStore) => {
         if (serverStore) {
           applyRemoteSyncPayload(serverStore);
@@ -898,7 +1015,8 @@ export default function App() {
   };
 
   const handleMemberRegister = (newMemberData: Partial<MemberAccount>) => {
-    const cleanPhone = normalizeMalaysianPhone(newMemberData.phone || '') || '0126189919';
+    const cleanPhone = normalizeMalaysianPhone(newMemberData.phone || '') || (newMemberData.phone || '').replace(/\D/g, '');
+    const nowIso = new Date().toISOString();
 
     const existingMember = members.find((m) => doesMemberMatchLoginInput(m, cleanPhone));
 
@@ -921,11 +1039,25 @@ export default function App() {
       referredBy: existingMember?.referredBy,
       referralsCount: existingMember?.referralsCount || 0,
       referralBonusMealsEarned: existingMember?.referralBonusMealsEarned || 0,
+      registeredAt: existingMember?.registeredAt || nowIso,
+      updatedAt: nowIso,
       // 0 meals granted to newly registered customer until customer confirms purchase of any meal plan
       activePackage: existingMember?.activePackage || null,
       creditsHistory: existingMember?.creditsHistory?.length ? existingMember.creditsHistory : [],
       officialReceipts: existingMember?.officialReceipts,
     };
+
+    // Remove this phone from local deleted tombstones if customer is registering fresh
+    try {
+      const savedDelRaw = localStorage.getItem('chillhealthy_deleted_members');
+      if (savedDelRaw) {
+        const parsedDel: string[] = JSON.parse(savedDelRaw);
+        const filteredDel = parsedDel.filter(
+          (id) => normalizeMalaysianPhone(id) !== cleanPhone && id !== cleanPhone
+        );
+        localStorage.setItem('chillhealthy_deleted_members', JSON.stringify(filteredDel));
+      }
+    } catch {}
 
     const nextMembers = mergeMembersLists(members, [newAcct], newAcct);
     setMembers(nextMembers);
@@ -938,7 +1070,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    void pushSyncStore({ members: nextMembers });
+    void pushSyncStore({ upsertMember: newAcct, members: nextMembers });
   };
 
   const handleRegisterCustomerFromCheckout = (customer: {
@@ -1285,6 +1417,7 @@ export default function App() {
         });
       }
 
+      const nowIso = new Date().toISOString();
       updatedOrCreatedMember = {
         ...existingMemberMatch,
         memberNumber: existingMemberMatch.memberNumber || normCustomerPhone,
@@ -1298,6 +1431,8 @@ export default function App() {
           area2: customer.area2 || existingMemberMatch.area,
           postalCode2: customer.postalCode2 || existingMemberMatch.postalCode,
         } : {}),
+        registeredAt: existingMemberMatch.registeredAt || nowIso,
+        updatedAt: nowIso,
         referredBy:
           existingMemberMatch.referredBy ||
           (matchedReferrer ? getMemberReferralCode(matchedReferrer) : customer.referralCode || undefined),
@@ -1332,6 +1467,7 @@ export default function App() {
         ],
       };
     } else {
+      const nowIso = new Date().toISOString();
       updatedOrCreatedMember = {
         id: normCustomerPhone || `MEM-${Date.now().toString().slice(-4)}`,
         memberNumber: normCustomerPhone,
@@ -1345,6 +1481,8 @@ export default function App() {
         address2: customer.address2,
         area2: customer.area2,
         postalCode2: customer.postalCode2,
+        registeredAt: nowIso,
+        updatedAt: nowIso,
         referralCode: getMemberReferralCode({ name: customer.name, phone: normCustomerPhone }),
         referredBy: matchedReferrer ? getMemberReferralCode(matchedReferrer) : (customer.referralCode || undefined),
         referralsCount: 0,
@@ -1377,6 +1515,18 @@ export default function App() {
         ],
       };
     }
+
+    // Remove this phone from local deleted tombstones if customer is subscribing fresh
+    try {
+      const savedDelRaw = localStorage.getItem('chillhealthy_deleted_members');
+      if (savedDelRaw) {
+        const parsedDel: string[] = JSON.parse(savedDelRaw);
+        const filteredDel = parsedDel.filter(
+          (id) => normalizeMalaysianPhone(id) !== normCustomerPhone && id !== normCustomerPhone
+        );
+        localStorage.setItem('chillhealthy_deleted_members', JSON.stringify(filteredDel));
+      }
+    } catch {}
 
     setCurrentMember(updatedOrCreatedMember);
     setMembers((prev) => {
@@ -1429,7 +1579,7 @@ export default function App() {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
         localStorage.setItem('chillhealthy_current_member', JSON.stringify(updatedOrCreatedMember));
       } catch {}
-      void pushSyncStore({ members: next });
+      void pushSyncStore({ upsertMember: updatedOrCreatedMember, members: next });
       return next;
     });
   };
@@ -1576,14 +1726,21 @@ export default function App() {
   };
 
   const handleUpdateMemberAccount = (updatedMember: MemberAccount) => {
-    const cleanUpdatedPhone = (updatedMember.phone || '').replace(/\D/g, '');
-    let resolvedMember = updatedMember;
+    const cleanUpdatedPhone = normalizeMalaysianPhone(updatedMember.phone || '') || (updatedMember.phone || '').replace(/\D/g, '');
+    const nowIso = new Date().toISOString();
+    let resolvedMember: MemberAccount = {
+      ...updatedMember,
+      phone: cleanUpdatedPhone || updatedMember.phone,
+      memberNumber: updatedMember.memberNumber || cleanUpdatedPhone || updatedMember.phone,
+      registeredAt: updatedMember.registeredAt || nowIso,
+      updatedAt: nowIso,
+    };
 
     setMembers((prev) => {
       const next = prev.map((m) => {
-        const cleanMPhone = (m.phone || '').replace(/\D/g, '');
+        const cleanMPhone = normalizeMalaysianPhone(m.phone || '') || (m.phone || '').replace(/\D/g, '');
         if (m.id === updatedMember.id || (cleanUpdatedPhone && cleanMPhone && cleanMPhone === cleanUpdatedPhone)) {
-          resolvedMember = { ...m, ...updatedMember };
+          resolvedMember = { ...m, ...resolvedMember };
           return resolvedMember;
         }
         return m;
@@ -1591,16 +1748,19 @@ export default function App() {
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
-      void pushSyncStore({ members: next });
+      void pushSyncStore({ upsertMember: resolvedMember, members: next });
       return next;
     });
 
     if (
       currentMember &&
       (currentMember.id === updatedMember.id ||
-        (cleanUpdatedPhone && (currentMember.phone || '').replace(/\D/g, '') === cleanUpdatedPhone))
+        (cleanUpdatedPhone && normalizeMalaysianPhone(currentMember.phone || '') === cleanUpdatedPhone))
     ) {
       setCurrentMember(resolvedMember);
+      try {
+        localStorage.setItem('chillhealthy_current_member', JSON.stringify(resolvedMember));
+      } catch {}
     }
 
     // When admin confirms a package, immediately synchronize and confirm all matching package subscription orders in redemptions
@@ -1608,7 +1768,7 @@ export default function App() {
       const signupNo = updatedMember.activePackage.signupOrderNo;
       setRedemptions((prev) => {
         const next = prev.map((r) => {
-          const rPhone = (r.memberPhone || '').replace(/\D/g, '');
+          const rPhone = normalizeMalaysianPhone(r.memberPhone || '') || (r.memberPhone || '').replace(/\D/g, '');
           const isMatch =
             (signupNo && (r.orderNumber === signupNo || r.id === signupNo)) ||
             (r.orderType === 'Package Subscription' &&
@@ -1632,27 +1792,80 @@ export default function App() {
   };
 
   const handleAddMemberAccount = (newMember: MemberAccount) => {
+    const nowIso = new Date().toISOString();
+    const normPhone = normalizeMalaysianPhone(newMember.phone || '') || newMember.phone;
+    const stampedMember: MemberAccount = {
+      ...newMember,
+      id: newMember.id || normPhone,
+      memberNumber: normPhone,
+      phone: normPhone,
+      registeredAt: newMember.registeredAt || nowIso,
+      updatedAt: nowIso,
+    };
+
     setMembers((prev) => {
-      const next = [newMember, ...prev];
+      const next = mergeMembersLists(prev, [stampedMember]);
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
-      void pushSyncStore({ members: next });
+      void pushSyncStore({ upsertMember: stampedMember, members: next });
       return next;
     });
   };
 
   const handleDeleteMemberAccount = (memberId: string) => {
+    const targetMember = members.find(
+      (m) => m.id === memberId || normalizeMalaysianPhone(m.phone) === normalizeMalaysianPhone(memberId)
+    );
+    const normPhone = targetMember ? normalizeMalaysianPhone(targetMember.phone) : normalizeMalaysianPhone(memberId);
+
+    try {
+      const savedDelRaw = localStorage.getItem('chillhealthy_deleted_members');
+      const savedDel: string[] = savedDelRaw ? JSON.parse(savedDelRaw) : [];
+      const updatedDel = Array.from(
+        new Set([...savedDel, memberId, ...(normPhone ? [normPhone] : []), ...(targetMember?.id ? [targetMember.id] : [])])
+      );
+      localStorage.setItem('chillhealthy_deleted_members', JSON.stringify(updatedDel));
+    } catch {}
+
     setMembers((prev) => {
-      const next = prev.filter((m) => m.id !== memberId);
+      const next = prev.filter(
+        (m) =>
+          m.id !== memberId &&
+          (!normPhone || normalizeMalaysianPhone(m.phone) !== normPhone)
+      );
       try {
         localStorage.setItem('chillhealthy_members', JSON.stringify(next));
       } catch {}
-      void pushSyncStore({ members: next, deletedMemberId: memberId });
+      void pushSyncStore({
+        members: next,
+        deletedMemberId: normPhone || memberId,
+        replaceMembers: true,
+      });
       return next;
     });
-    if (currentMember?.id === memberId) {
+
+    setRedemptions((prev) => {
+      const next = prev.filter(
+        (r) =>
+          r.memberId !== memberId &&
+          (!normPhone || normalizeMalaysianPhone(r.memberPhone || '') !== normPhone)
+      );
+      try {
+        localStorage.setItem('chillhealthy_redemptions', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    if (
+      currentMember &&
+      (currentMember.id === memberId ||
+        (normPhone && normalizeMalaysianPhone(currentMember.phone) === normPhone))
+    ) {
       setCurrentMember(null);
+      try {
+        localStorage.removeItem('chillhealthy_current_member');
+      } catch {}
     }
   };
 

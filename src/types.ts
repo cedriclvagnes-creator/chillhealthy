@@ -214,6 +214,8 @@ export interface MemberAccount {
   referredBy?: string; // Code of the member who referred this account
   referralsCount?: number; // Total number of successful meal plan referrals
   referralBonusMealsEarned?: number; // Total free meal credits earned through referrals
+  registeredAt?: string; // ISO timestamp when account was registered/created online
+  updatedAt?: string; // ISO timestamp when account was last updated online
   activePackage: {
     planId: string;
     planName: string;

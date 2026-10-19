@@ -76,6 +76,8 @@ import {
   fetchSyncStore,
   pushSyncStore,
   mergeMembersLists,
+  filterOutDeletedMembers,
+  filterOutDeletedRedemptions,
 } from '../utils/syncClient';
 
 interface MemberPortalModalProps {
@@ -522,60 +524,79 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
 
     const normInputPhone = normalizeMalaysianPhone(cleanInput);
 
-    // 1. Check local members list first
-    let resolvedMembers: MemberAccount[] = [...members];
-    let accountExists = resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput));
+    // 1. Always fetch the latest authoritative online store (/api/sync) so registrations,
+    // package confirmations, password updates, and deletions from any device worldwide are reflected in real time
+    let resolvedMembers: MemberAccount[] = filterOutDeletedMembers([...members]);
+    const serverStore = await fetchSyncStore();
 
-    // 2. If not found locally (e.g. account was registered on another phone, tablet, or computer),
-    // immediately query the central server store (/api/sync) for the latest synchronized accounts & orders
-    if (!accountExists) {
-      const serverStore = await fetchSyncStore();
-      if (serverStore) {
-        if (Array.isArray(serverStore.members) && serverStore.members.length > 0) {
-          resolvedMembers = mergeMembersLists(resolvedMembers, serverStore.members);
-        }
+    if (serverStore) {
+      const serverDeletedMemIds = serverStore.deletedMemberIds || [];
+      const serverDeletedRedIds = serverStore.deletedRedemptionIds || [];
 
-        // Also check if customer placed an order in redemptions on any device
-        const combinedRedemptions = [
+      if (Array.isArray(serverStore.members)) {
+        resolvedMembers = mergeMembersLists(
+          serverStore.members,
+          resolvedMembers,
+          null,
+          serverDeletedMemIds
+        );
+      } else {
+        resolvedMembers = filterOutDeletedMembers(resolvedMembers, serverDeletedMemIds);
+      }
+
+      // Also check if customer placed an active order in redemptions on any device
+      const combinedRedemptions = filterOutDeletedRedemptions(
+        [
           ...allRedemptions,
           ...(Array.isArray(serverStore.redemptions) ? serverStore.redemptions : []),
-        ];
-        const matchingOrder = combinedRedemptions.find((r) => {
-          if (!r || !r.memberPhone) return false;
-          const rNorm = normalizeMalaysianPhone(r.memberPhone);
-          return (
-            (normInputPhone.length >= 9 && rNorm === normInputPhone) ||
-            r.memberPhone.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')
-          );
-        });
+        ],
+        serverDeletedRedIds,
+        serverDeletedMemIds
+      );
 
-        if (
-          matchingOrder &&
-          !resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput))
-        ) {
-          const recoveredPhone =
-            normalizeMalaysianPhone(matchingOrder.memberPhone) || matchingOrder.memberPhone;
-          const recoveredAccount: MemberAccount = {
-            id: recoveredPhone,
-            memberNumber: recoveredPhone,
-            name: matchingOrder.memberName || 'Registered Member',
-            email: `${recoveredPhone}@customer.chill-healthy.com`,
-            phone: recoveredPhone,
-            password: '123456',
-            address: matchingOrder.deliveryAddress || '',
-            area: matchingOrder.area || '',
-            postalCode: matchingOrder.postalCode || '',
-            activeAddressSlot: 1,
-            activePackage: null,
-            creditsHistory: [],
-          };
-          resolvedMembers = mergeMembersLists(resolvedMembers, [recoveredAccount]);
-          void pushSyncStore({ members: resolvedMembers });
-        }
+      const matchingOrder = combinedRedemptions.find((r) => {
+        if (!r || !r.memberPhone) return false;
+        const rNorm = normalizeMalaysianPhone(r.memberPhone);
+        return (
+          (normInputPhone.length >= 9 && rNorm === normInputPhone) ||
+          r.memberPhone.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')
+        );
+      });
 
-        accountExists = resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput));
+      if (
+        matchingOrder &&
+        !resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput))
+      ) {
+        const nowIso = new Date().toISOString();
+        const recoveredPhone =
+          normalizeMalaysianPhone(matchingOrder.memberPhone) || matchingOrder.memberPhone;
+        const recoveredAccount: MemberAccount = {
+          id: recoveredPhone,
+          memberNumber: recoveredPhone,
+          name: matchingOrder.memberName || 'Registered Member',
+          email: `${recoveredPhone}@customer.chill-healthy.com`,
+          phone: recoveredPhone,
+          password: '123456',
+          address: matchingOrder.deliveryAddress || '',
+          area: matchingOrder.area || '',
+          postalCode: matchingOrder.postalCode || '',
+          activeAddressSlot: 1,
+          registeredAt: matchingOrder.createdAt || nowIso,
+          updatedAt: nowIso,
+          activePackage: null,
+          creditsHistory: [],
+        };
+        resolvedMembers = mergeMembersLists(
+          resolvedMembers,
+          [recoveredAccount],
+          null,
+          serverDeletedMemIds
+        );
+        void pushSyncStore({ upsertMember: recoveredAccount, members: resolvedMembers });
       }
     }
+
+    const accountExists = resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput));
 
     if (!accountExists) {
       setAccountNotFound(true);

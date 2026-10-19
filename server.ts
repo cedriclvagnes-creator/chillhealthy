@@ -13,6 +13,10 @@ import { normalizeMalaysianPhone } from './src/utils/malaysiaPhone';
 import {
   getMemberCanonicalKey,
   mergeMembersLists,
+  filterOutDeletedMembers,
+  filterOutDeletedRedemptions,
+  isLegacyDeletedSeedAccount,
+  isLegacyDeletedRedemption,
 } from './src/utils/syncClient';
 import { MemberAccount, MealRedemption } from './src/types';
 
@@ -25,7 +29,9 @@ interface ServerStore {
   packages: typeof MEAL_PLANS;
   menuItems: typeof MEAL_ITEMS;
   members: MemberAccount[];
+  deletedMemberIds: string[];
   redemptions: MealRedemption[];
+  deletedRedemptionIds: string[];
   refundRecords: any[];
   adminCredentials?: { username: string; password: string };
   updatedAt: string;
@@ -33,27 +39,36 @@ interface ServerStore {
 }
 
 /**
- * Ensures any customer phone present in redemptions (e.g. Package Subscription or Meal Plan orders)
- * has a corresponding registered MemberAccount in members so they can log in from any device.
+ * Ensures any customer phone present in active redemptions (e.g. Package Subscription or Meal Plan orders)
+ * has a corresponding registered MemberAccount in members so they can log in from any device worldwide,
+ * unless that customer was explicitly deleted by Admin.
  */
 function reconcileMembersWithOrders(
   members: MemberAccount[],
   redemptions: MealRedemption[],
-  deletedMemberId?: string
+  deletedMemberIds: string[]
 ): MemberAccount[] {
-  const deletedKey = deletedMemberId
-    ? getMemberCanonicalKey({ id: deletedMemberId, phone: deletedMemberId })
-    : '';
-  const merged = [...members];
-  const existingKeys = new Set(merged.map((m) => getMemberCanonicalKey(m)).filter(Boolean));
+  const cleanMembers = filterOutDeletedMembers(members, deletedMemberIds);
+  const deletedSet = new Set(
+    (deletedMemberIds || []).flatMap((id) => {
+      const norm = normalizeMalaysianPhone(id);
+      return norm ? [id.toLowerCase(), norm] : [id.toLowerCase()];
+    })
+  );
+
+  const existingKeys = new Set(cleanMembers.map((m) => getMemberCanonicalKey(m)).filter(Boolean));
 
   for (const r of redemptions || []) {
     if (!r || !r.memberPhone) continue;
+    if (isLegacyDeletedRedemption(r)) continue;
     const normPhone = normalizeMalaysianPhone(r.memberPhone);
     if (!normPhone || normPhone.length < 9) continue;
-    if (deletedKey && (normPhone === deletedKey || r.memberId === deletedMemberId)) continue;
+    if (deletedSet.has(normPhone) || (r.memberId && deletedSet.has(r.memberId.toLowerCase()))) {
+      continue;
+    }
 
     if (!existingKeys.has(normPhone)) {
+      const nowIso = new Date().toISOString();
       const autoMember: MemberAccount = {
         id: normPhone,
         memberNumber: normPhone,
@@ -65,35 +80,45 @@ function reconcileMembersWithOrders(
         area: r.area || '',
         postalCode: r.postalCode || '',
         activeAddressSlot: 1,
+        registeredAt: r.createdAt || nowIso,
+        updatedAt: nowIso,
         activePackage: null,
         creditsHistory: [],
       };
-      merged.push(autoMember);
-      existingKeys.add(normPhone);
+      if (!isLegacyDeletedSeedAccount(autoMember)) {
+        cleanMembers.push(autoMember);
+        existingKeys.add(normPhone);
+      }
     }
   }
 
-  return merged;
+  return cleanMembers;
 }
 
 function mergeRedemptionsList(
   existing: MealRedemption[],
   incoming: MealRedemption[],
-  deletedRedemptionId?: string
+  deletedRedemptionIds: string[],
+  deletedMemberIds: string[] = []
 ): MealRedemption[] {
+  const cleanExisting = filterOutDeletedRedemptions(
+    existing || [],
+    deletedRedemptionIds,
+    deletedMemberIds
+  );
+  const cleanIncoming = filterOutDeletedRedemptions(
+    incoming || [],
+    deletedRedemptionIds,
+    deletedMemberIds
+  );
   const map = new Map<string, MealRedemption>();
-  for (const r of existing || []) {
+
+  for (const r of cleanExisting) {
     if (!r || !r.id) continue;
-    if (deletedRedemptionId && (r.id === deletedRedemptionId || r.orderNumber === deletedRedemptionId)) {
-      continue;
-    }
     map.set(r.id, r);
   }
-  for (const r of incoming || []) {
+  for (const r of cleanIncoming) {
     if (!r || !r.id) continue;
-    if (deletedRedemptionId && (r.id === deletedRedemptionId || r.orderNumber === deletedRedemptionId)) {
-      continue;
-    }
     const prev = map.get(r.id);
     map.set(r.id, prev ? { ...prev, ...r } : r);
   }
@@ -115,10 +140,12 @@ function getDefaultStore(): ServerStore {
     packages: MEAL_PLANS,
     menuItems: MEAL_ITEMS,
     members: INITIAL_MEMBERS,
+    deletedMemberIds: ['mem-uuu-8587'],
     redemptions: INITIAL_REDEMPTIONS,
+    deletedRedemptionIds: ['CH-261007-6834', 'red-101', 'red-102', 'red-103'],
     refundRecords: [],
     updatedAt: new Date().toISOString(),
-    hasCustomUpdates: false,
+    hasCustomUpdates: true,
   };
 }
 
@@ -137,14 +164,24 @@ function loadStoreFromDisk(): ServerStore {
         mergedMenu = [...parsed.menuItems, ...missing];
       }
 
-      const loadedMembers =
-        Array.isArray(parsed.members) && parsed.members.length > 0
-          ? mergeMembersLists(defaults.members, parsed.members)
-          : defaults.members;
+      const deletedMemberIds: string[] = Array.isArray(parsed.deletedMemberIds)
+        ? parsed.deletedMemberIds
+        : defaults.deletedMemberIds;
+
+      const deletedRedemptionIds: string[] = Array.from(
+        new Set([
+          ...defaults.deletedRedemptionIds,
+          ...(Array.isArray(parsed.deletedRedemptionIds) ? parsed.deletedRedemptionIds : []),
+        ])
+      );
+
+      const loadedMembers = Array.isArray(parsed.members)
+        ? filterOutDeletedMembers(parsed.members, deletedMemberIds)
+        : [];
 
       const loadedRedemptions = Array.isArray(parsed.redemptions)
-        ? mergeRedemptionsList(defaults.redemptions, parsed.redemptions)
-        : defaults.redemptions;
+        ? mergeRedemptionsList([], parsed.redemptions, deletedRedemptionIds, deletedMemberIds)
+        : [];
 
       return {
         siteSettings: { ...defaults.siteSettings, ...(parsed.siteSettings || {}) },
@@ -153,12 +190,14 @@ function loadStoreFromDisk(): ServerStore {
             ? parsed.packages
             : defaults.packages,
         menuItems: mergedMenu,
-        members: reconcileMembersWithOrders(loadedMembers, loadedRedemptions),
+        members: reconcileMembersWithOrders(loadedMembers, loadedRedemptions, deletedMemberIds),
+        deletedMemberIds,
         redemptions: loadedRedemptions,
+        deletedRedemptionIds,
         refundRecords: Array.isArray(parsed.refundRecords) ? parsed.refundRecords : [],
         adminCredentials: parsed.adminCredentials || undefined,
         updatedAt: parsed.updatedAt || new Date().toISOString(),
-        hasCustomUpdates: Boolean(parsed.hasCustomUpdates),
+        hasCustomUpdates: true,
       };
     }
   } catch (err) {
@@ -179,8 +218,9 @@ function saveStoreToDisk(store: ServerStore) {
 }
 
 let store: ServerStore = loadStoreFromDisk();
+saveStoreToDisk(store);
 
-// Connected SSE clients for instant real-time push across mobile, tablet, and website
+// Connected SSE clients for instant real-time push across mobile, tablet, and website worldwide
 const sseClients = new Set<express.Response>();
 
 function broadcastSyncEvent(sourceClientId?: string) {
@@ -242,7 +282,7 @@ async function startServer() {
     });
   });
 
-  // POST /api/sync - Update Back Office / Store state & broadcast to all devices
+  // POST /api/sync - Update Back Office / Store state & broadcast to all devices worldwide
   app.post('/api/sync', (req, res) => {
     const body = req.body || {};
     const {
@@ -250,7 +290,10 @@ async function startServer() {
       packages,
       menuItems,
       members,
+      upsertMember,
+      replaceMembers,
       redemptions,
+      upsertRedemption,
       refundRecords,
       adminCredentials,
       deletedMemberId,
@@ -275,29 +318,127 @@ async function startServer() {
       changed = true;
     }
 
-    if (Array.isArray(redemptions)) {
-      if (deletedRedemptionId) {
-        store.redemptions = store.redemptions.filter(
-          (r) => r.id !== deletedRedemptionId && r.orderNumber !== deletedRedemptionId
-        );
+    // Handle explicit deletion of a member
+    if (deletedMemberId) {
+      const targetMember = store.members.find(
+        (m) =>
+          m.id === deletedMemberId ||
+          normalizeMalaysianPhone(m.phone) === normalizeMalaysianPhone(deletedMemberId)
+      );
+      const keysToDelete = new Set<string>([deletedMemberId]);
+      const normDel = normalizeMalaysianPhone(deletedMemberId);
+      if (normDel) keysToDelete.add(normDel);
+      if (targetMember) {
+        if (targetMember.id) keysToDelete.add(targetMember.id);
+        if (targetMember.phone) {
+          keysToDelete.add(targetMember.phone);
+          const nPhone = normalizeMalaysianPhone(targetMember.phone);
+          if (nPhone) keysToDelete.add(nPhone);
+        }
+        if (targetMember.memberNumber) {
+          keysToDelete.add(targetMember.memberNumber);
+        }
       }
-      store.redemptions = mergeRedemptionsList(store.redemptions, redemptions, deletedRedemptionId);
+
+      store.deletedMemberIds = Array.from(
+        new Set([...(store.deletedMemberIds || []), ...Array.from(keysToDelete)])
+      );
+      store.members = filterOutDeletedMembers(store.members, store.deletedMemberIds);
+      // Also remove unconfirmed package subscription orders belonging to the deleted member so they don't reappear in Pending Queue
+      store.redemptions = store.redemptions.filter((r) => {
+        const rPhone = normalizeMalaysianPhone(r.memberPhone || '');
+        if (keysToDelete.has(r.memberId) || (rPhone && keysToDelete.has(rPhone))) {
+          return false;
+        }
+        return true;
+      });
+      changed = true;
+    }
+
+    // Handle explicit registration / upsert of a member from any device worldwide
+    if (upsertMember && typeof upsertMember === 'object' && !isLegacyDeletedSeedAccount(upsertMember)) {
+      const normPhone = normalizeMalaysianPhone(upsertMember.phone || upsertMember.memberNumber || '');
+      const stampedMember: MemberAccount = {
+        ...upsertMember,
+        id: upsertMember.id || normPhone,
+        memberNumber: normPhone || upsertMember.memberNumber || upsertMember.phone,
+        phone: normPhone || upsertMember.phone,
+        registeredAt: upsertMember.registeredAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Remove this newly registered/updated member's keys from deletedMemberIds tombstone list
+      const removeKeys = new Set<string>(
+        [
+          stampedMember.id?.toLowerCase(),
+          stampedMember.phone?.toLowerCase(),
+          stampedMember.memberNumber?.toLowerCase(),
+          normPhone,
+        ].filter(Boolean) as string[]
+      );
+      store.deletedMemberIds = (store.deletedMemberIds || []).filter(
+        (id) => !removeKeys.has(id.toLowerCase()) && !removeKeys.has(normalizeMalaysianPhone(id))
+      );
+
+      store.members = mergeMembersLists(
+        store.members,
+        [stampedMember],
+        null,
+        store.deletedMemberIds
+      );
       changed = true;
     }
 
     if (Array.isArray(members)) {
-      if (deletedMemberId) {
-        const delKey = getMemberCanonicalKey({ id: deletedMemberId, phone: deletedMemberId });
-        store.members = store.members.filter(
-          (m) => m.id !== deletedMemberId && getMemberCanonicalKey(m) !== delKey
+      if (replaceMembers) {
+        store.members = filterOutDeletedMembers(members, store.deletedMemberIds);
+      } else {
+        store.members = mergeMembersLists(
+          store.members,
+          members,
+          null,
+          store.deletedMemberIds
         );
       }
-      store.members = mergeMembersLists(store.members, members, null, deletedMemberId);
       changed = true;
     }
 
-    // Always ensure any customer phone in redemptions has a valid member record for cross-device login
-    store.members = reconcileMembersWithOrders(store.members, store.redemptions, deletedMemberId);
+    if (deletedRedemptionId) {
+      store.deletedRedemptionIds = Array.from(
+        new Set([...(store.deletedRedemptionIds || []), deletedRedemptionId])
+      );
+      store.redemptions = store.redemptions.filter(
+        (r) => r.id !== deletedRedemptionId && r.orderNumber !== deletedRedemptionId
+      );
+      changed = true;
+    }
+
+    if (upsertRedemption && typeof upsertRedemption === 'object') {
+      store.redemptions = mergeRedemptionsList(
+        store.redemptions,
+        [upsertRedemption],
+        store.deletedRedemptionIds,
+        store.deletedMemberIds
+      );
+      changed = true;
+    }
+
+    if (Array.isArray(redemptions)) {
+      store.redemptions = mergeRedemptionsList(
+        store.redemptions,
+        redemptions,
+        store.deletedRedemptionIds,
+        store.deletedMemberIds
+      );
+      changed = true;
+    }
+
+    // Ensure any customer phone in active redemptions has a valid member record for cross-device login
+    store.members = reconcileMembersWithOrders(
+      store.members,
+      store.redemptions,
+      store.deletedMemberIds
+    );
 
     if (Array.isArray(refundRecords)) {
       const refundMap = new Map<string, any>();

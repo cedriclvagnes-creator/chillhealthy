@@ -90,6 +90,11 @@ import {
   checkPlanAutoReviveEligibility,
   getTodayStr,
 } from '../utils/packageExpiry';
+import { normalizeMalaysianPhone } from '../utils/malaysiaPhone';
+import {
+  filterOutDeletedMembers,
+  filterOutDeletedRedemptions,
+} from '../utils/syncClient';
 
 interface BackOfficeModalProps {
   isOpen: boolean;
@@ -5603,7 +5608,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                   TAB 5: CUSTOMER MEAL PACKAGE ORDERS & MEMBER INFO
                   ========================================================= */}
               {activeTab === 'members' && (() => {
-                const filteredMembers = members.filter((m) => {
+                const activeMembersList = filterOutDeletedMembers(members);
+                const activeRedemptionsList = filterOutDeletedRedemptions(redemptions);
+
+                const filteredMembers = activeMembersList.filter((m) => {
                   const q = memberSearch.trim().toLowerCase();
                   const matchSearch =
                     !q ||
@@ -5633,10 +5641,10 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                 });
 
                 const uniqueAreas = Array.from(
-                  new Set(members.map((m) => m.area).filter(Boolean))
+                  new Set(activeMembersList.map((m) => m.area).filter(Boolean))
                 ).sort() as string[];
 
-                const totalMealsInCirculation = members.reduce(
+                const totalMealsInCirculation = activeMembersList.reduce(
                   (sum, m) => sum + (m.activePackage?.remainingMeals || 0),
                   0
                 );
@@ -5659,11 +5667,15 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     return;
                   }
 
+                  const normPhone = normalizeMalaysianPhone(newMemPhone.trim()) || newMemPhone.trim();
+                  const nowIso = new Date().toISOString();
+
                   const newAccount: MemberAccount = {
-                    id: `mem-${Date.now()}`,
+                    id: normPhone,
+                    memberNumber: normPhone,
                     name: newMemName.trim(),
-                    phone: newMemPhone.trim(),
-                    email: `${newMemPhone.trim().replace(/\D/g, '')}@chillhealthy.customer`,
+                    phone: normPhone,
+                    email: `${normPhone.replace(/\D/g, '')}@chillhealthy.customer`,
                     password: newMemPassword.trim() || '123456',
                     address: newMemAddress.trim() || '',
                     area: newMemArea.trim() || '',
@@ -5672,6 +5684,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                     area2: newMemArea2.trim() || undefined,
                     postalCode2: newMemPostal2.trim() || undefined,
                     dietaryPreferences: newMemDietary.trim() || undefined,
+                    registeredAt: nowIso,
+                    updatedAt: nowIso,
                     activePackage: {
                       planId: 'custom-plan',
                       planName: newMemPlanName,
@@ -5789,7 +5803,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         </div>
                         <div>
                           <span className="text-xs text-stone-500 block">Total Registered Customers</span>
-                          <span className="font-heading font-black text-lg text-stone-900">{members.length} Members</span>
+                          <span className="font-heading font-black text-lg text-stone-900">{activeMembersList.length} Members</span>
                         </div>
                       </div>
 
@@ -5800,7 +5814,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         <div>
                           <span className="text-xs text-stone-500 block">Active Package Plans</span>
                           <span className="font-heading font-black text-lg text-stone-900">
-                            {members.filter((m) => (m.activePackage?.remainingMeals || 0) > 0).length} Active
+                            {activeMembersList.filter((m) => (m.activePackage?.remainingMeals || 0) > 0).length} Active
                           </span>
                         </div>
                       </div>
@@ -5820,11 +5834,11 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         PACKAGE SUBSCRIPTIONS & SIGN-UP ORDERS (AWAITING ADMIN CONFIRMATION)
                         ========================================================= */}
                     {(() => {
-                      const pendingPackageOrders = redemptions.filter((r) => {
+                      const pendingPackageOrders = activeRedemptionsList.filter((r) => {
                         if (r.orderType !== 'Package Subscription') return false;
                         if (r.adminConfirmed === true) return false;
                         const cleanRPhone = (r.memberPhone || '').replace(/\D/g, '');
-                        const matched = members.find(
+                        const matched = activeMembersList.find(
                           (m) =>
                             (cleanRPhone && (m.phone || '').replace(/\D/g, '') === cleanRPhone) ||
                             m.id === r.memberId
@@ -5833,7 +5847,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                         return true;
                       });
 
-                      const unconfirmedMembersList = members.filter(
+                      const unconfirmedMembersList = activeMembersList.filter(
                         (m) => m.activePackage && m.activePackage.adminConfirmed === false
                       );
 
@@ -5848,7 +5862,7 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                           })
                           .map((m) => ({
                             id: `sub-${m.phone}`,
-                            orderNumber: m.activePackage?.signupOrderNo || 'CH-261007-6834',
+                            orderNumber: m.activePackage?.signupOrderNo || `SUB-${m.phone}`,
                             orderType: 'Package Subscription' as const,
                             memberId: m.id,
                             memberName: m.name,
@@ -6106,6 +6120,23 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                       <MessageCircle className="w-4 h-4" />
                                       <span>WhatsApp</span>
                                     </a>
+
+                                    {onDeleteMemberAccount && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onDeleteMemberAccount(pkgOrder.memberId || pkgOrder.memberPhone);
+                                          if (onDeleteRedemptionOrder && pkgOrder.id) {
+                                            onDeleteRedemptionOrder(pkgOrder.id, 'Deleted pending package order');
+                                          }
+                                          triggerToast(`✓ Deleted pending order & account for ${pkgOrder.memberName}`);
+                                        }}
+                                        className="p-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors cursor-pointer"
+                                        title="Delete Pending Subscription & Account"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -6467,10 +6498,8 @@ export const BackOfficeModal: React.FC<BackOfficeModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (window.confirm(`Delete member record for ${mem.name}? This will remove their meal plan access.`)) {
-                                        onDeleteMemberAccount(mem.id);
-                                        triggerToast(`✓ Deleted member ${mem.name}`);
-                                      }
+                                      onDeleteMemberAccount(mem.id);
+                                      triggerToast(`✓ Deleted member ${mem.name} (Synchronized across all devices)`);
                                     }}
                                     className="p-2 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
                                     title="Delete Member"

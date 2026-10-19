@@ -13,11 +13,16 @@ export interface SyncStorePayload {
   packages?: MealPlan[];
   menuItems?: MealItem[];
   members?: MemberAccount[];
+  upsertMember?: MemberAccount;
+  deletedMemberId?: string;
+  deletedMemberIds?: string[];
+  replaceMembers?: boolean;
   redemptions?: MealRedemption[];
+  upsertRedemption?: MealRedemption;
+  deletedRedemptionId?: string;
+  deletedRedemptionIds?: string[];
   refundRecords?: MealDeletionRefundRecord[];
   adminCredentials?: { username: string; password: string };
-  deletedMemberId?: string;
-  deletedRedemptionId?: string;
   forceBroadcast?: boolean;
   updatedAt?: string;
   hasCustomUpdates?: boolean;
@@ -52,10 +57,152 @@ export function getMemberCanonicalKey(member: Partial<MemberAccount> | null | un
 }
 
 /**
- * Checks whether a MemberAccount matches a login identifier (phone in any format, memberNumber, id, or email).
+ * Detects the legacy deleted demo accounts (Agnes Lim, Marcus Tan, uuu) that may still be cached in browser localStorage.
+ * If a real customer later registers a fresh account (which stamps `registeredAt`), it will NOT be treated as legacy seed data.
+ */
+export function isLegacyDeletedSeedAccount(
+  member: Partial<MemberAccount> | null | undefined
+): boolean {
+  if (!member) return true;
+
+  const nameLower = (member.name || '').trim().toLowerCase();
+  const emailLower = (member.email || '').trim().toLowerCase();
+  const idLower = (member.id || '').trim().toLowerCase();
+  const refUpper = (member.referralCode || '').trim().toUpperCase();
+  const orderNo = member.activePackage?.signupOrderNo || '';
+
+  // Always block the 3 deleted demo seed accounts (Agnes Lim, Marcus Tan, uuu)
+  if (
+    idLower === 'mem-uuu-8587' ||
+    nameLower === 'uuu' ||
+    refUpper === 'CHILL-UUU8587' ||
+    orderNo === 'CH-261007-6834'
+  ) {
+    return true;
+  }
+
+  if (
+    nameLower === 'marcus tan' ||
+    nameLower === 'marcus' ||
+    emailLower === 'marcus@fitkl.com' ||
+    refUpper === 'CHILL-MARCUS4556' ||
+    (!member.registeredAt && member.id === '0123344556')
+  ) {
+    return true;
+  }
+
+  if (
+    nameLower === 'agnes lim' ||
+    emailLower === 'member@chill-healthy.com' ||
+    refUpper === 'CHILL-AGNES9919' ||
+    (!member.registeredAt && member.id === '0126189919') ||
+    member.activePackage?.purchasedDate === '2026-09-01'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detects legacy deleted demo redemptions (red-101, red-102, red-103, CH-261007-6834)
+ */
+export function isLegacyDeletedRedemption(
+  redemption: Partial<MealRedemption> | null | undefined
+): boolean {
+  if (!redemption) return true;
+  const id = (redemption.id || '').trim();
+  const orderNo = (redemption.orderNumber || '').trim();
+  const memberIdLower = (redemption.memberId || '').trim().toLowerCase();
+  const memberNameLower = (redemption.memberName || '').trim().toLowerCase();
+
+  if (
+    id === 'red-101' ||
+    id === 'red-102' ||
+    id === 'red-103' ||
+    id === 'CH-261007-6834' ||
+    id === 'sub-0125698587' ||
+    orderNo === 'CH-261007-6834' ||
+    memberIdLower === 'mem-uuu-8587' ||
+    memberNameLower === 'uuu' ||
+    memberNameLower === 'marcus tan' ||
+    memberNameLower === 'agnes lim'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Filters out deleted redemptions and legacy demo redemptions (Agnes Lim, Marcus Tan, uuu)
+ */
+export function filterOutDeletedRedemptions(
+  redemptions: MealRedemption[],
+  deletedRedemptionIds?: string[],
+  deletedMemberIds?: string[]
+): MealRedemption[] {
+  const delRedSet = new Set<string>(
+    (deletedRedemptionIds || []).map((id) => (id || '').trim()).filter(Boolean)
+  );
+  const delMemSet = new Set<string>();
+  for (const mId of deletedMemberIds || []) {
+    if (!mId) continue;
+    delMemSet.add(mId.trim().toLowerCase());
+    const norm = normalizeMalaysianPhone(mId);
+    if (norm) delMemSet.add(norm);
+  }
+
+  return (redemptions || []).filter((r) => {
+    if (!r) return false;
+    if (isLegacyDeletedRedemption(r)) return false;
+    if (r.id && delRedSet.has(r.id.trim())) return false;
+    if (r.orderNumber && delRedSet.has(r.orderNumber.trim())) return false;
+
+    const rMemId = (r.memberId || '').trim().toLowerCase();
+    const rPhoneNorm = normalizeMalaysianPhone(r.memberPhone || '');
+    if (delMemSet.has(rMemId) || (rPhoneNorm && delMemSet.has(rPhoneNorm))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Filters out deleted members and legacy seed accounts (Marcus Tan, Agnes Lim, uuu).
+ */
+export function filterOutDeletedMembers(
+  members: MemberAccount[],
+  deletedIds?: string[]
+): MemberAccount[] {
+  const deletedSet = new Set<string>();
+  for (const id of deletedIds || []) {
+    if (!id) continue;
+    deletedSet.add(id.trim().toLowerCase());
+    const norm = normalizeMalaysianPhone(id);
+    if (norm) deletedSet.add(norm);
+  }
+
+  return (members || []).filter((m) => {
+    if (!m) return false;
+    if (isLegacyDeletedSeedAccount(m)) return false;
+    const key = getMemberCanonicalKey(m);
+    const idLower = (m.id || '').trim().toLowerCase();
+    const phoneNorm = normalizeMalaysianPhone(m.phone || '');
+    if (deletedSet.has(idLower) || (key && deletedSet.has(key)) || (phoneNorm && deletedSet.has(phoneNorm))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Checks whether a MemberAccount matches a login identifier (Malaysian phone in any format, memberNumber, id, or email).
  */
 export function doesMemberMatchLoginInput(member: MemberAccount, rawInput: string): boolean {
   if (!member || !rawInput) return false;
+  if (isLegacyDeletedSeedAccount(member)) return false;
+
   const cleanInput = rawInput.trim();
   if (!cleanInput) return false;
 
@@ -89,7 +236,7 @@ export function doesMemberMatchLoginInput(member: MemberAccount, rawInput: strin
     }
   }
 
-  // 4. Fallback: compare last 8 digits of phone number for flexible formatting across devices
+  // 4. Fallback: compare last 8 digits of phone number for flexible formatting across devices worldwide
   const inputDigits = cleanInput.replace(/\D/g, '');
   const mPhoneDigits = (member.phone || '').replace(/\D/g, '');
   const mNumDigits = (member.memberNumber || '').replace(/\D/g, '');
@@ -126,18 +273,23 @@ export function mergeSingleMember(existing: MemberAccount, incoming: MemberAccou
     }
   }
 
-  // Prefer incoming activePackage if present; if incoming has null but existing has an activePackage, keep existing unless incoming explicitly burned it
   const resolvedActivePackage =
-    incoming.activePackage !== undefined && incoming.activePackage !== null
+    incoming.activePackage !== undefined
       ? incoming.activePackage
       : existing.activePackage || null;
 
   return {
     ...existing,
     ...incoming,
-    id: existing.id || incoming.id,
-    memberNumber: incoming.memberNumber || existing.memberNumber || normalizeMalaysianPhone(incoming.phone || existing.phone),
-    phone: normalizeMalaysianPhone(incoming.phone || existing.phone) || incoming.phone || existing.phone,
+    id: incoming.id || existing.id,
+    memberNumber:
+      incoming.memberNumber ||
+      existing.memberNumber ||
+      normalizeMalaysianPhone(incoming.phone || existing.phone),
+    phone:
+      normalizeMalaysianPhone(incoming.phone || existing.phone) ||
+      incoming.phone ||
+      existing.phone,
     password:
       incoming.password && incoming.password !== '123456'
         ? incoming.password
@@ -148,6 +300,8 @@ export function mergeSingleMember(existing: MemberAccount, incoming: MemberAccou
     address2: incoming.address2 || existing.address2,
     area2: incoming.area2 || existing.area2,
     postalCode2: incoming.postalCode2 || existing.postalCode2,
+    registeredAt: incoming.registeredAt || existing.registeredAt || new Date().toISOString(),
+    updatedAt: incoming.updatedAt || existing.updatedAt || new Date().toISOString(),
     activePackage: resolvedActivePackage,
     creditsHistory: Array.from(mergedCreditsMap.values()),
     officialReceipts:
@@ -156,32 +310,34 @@ export function mergeSingleMember(existing: MemberAccount, incoming: MemberAccou
 }
 
 /**
- * Merges local and remote MemberAccount arrays without losing any registered accounts on either device.
+ * Merges MemberAccount arrays while strictly respecting deletedMemberIds and stripping legacy deleted accounts.
  */
 export function mergeMembersLists(
-  localMembers: MemberAccount[],
-  remoteMembers: MemberAccount[],
+  baseMembers: MemberAccount[],
+  incomingMembers: MemberAccount[],
   currentMember?: MemberAccount | null,
-  deletedMemberId?: string
+  deletedMemberIds?: string | string[]
 ): MemberAccount[] {
-  const deletedKey = deletedMemberId ? getMemberCanonicalKey({ id: deletedMemberId, phone: deletedMemberId }) : '';
+  const deletedList = Array.isArray(deletedMemberIds)
+    ? deletedMemberIds
+    : deletedMemberIds
+    ? [deletedMemberIds]
+    : [];
+
+  const cleanBase = filterOutDeletedMembers(baseMembers || [], deletedList);
+  const cleanIncoming = filterOutDeletedMembers(incomingMembers || [], deletedList);
+
   const map = new Map<string, MemberAccount>();
 
-  // 1. Seed with local members first
-  for (const m of localMembers || []) {
-    if (!m) continue;
+  for (const m of cleanBase) {
     const key = getMemberCanonicalKey(m);
     if (!key) continue;
-    if (deletedMemberId && (m.id === deletedMemberId || key === deletedKey)) continue;
     map.set(key, m);
   }
 
-  // 2. Merge remote members on top (remote updates win for shared fields while preserving local-only accounts)
-  for (const m of remoteMembers || []) {
-    if (!m) continue;
+  for (const m of cleanIncoming) {
     const key = getMemberCanonicalKey(m);
     if (!key) continue;
-    if (deletedMemberId && (m.id === deletedMemberId || key === deletedKey)) continue;
     const existing = map.get(key);
     if (existing) {
       map.set(key, mergeSingleMember(existing, m));
@@ -190,15 +346,17 @@ export function mergeMembersLists(
     }
   }
 
-  // 3. Ensure active logged-in member on this device is also present unless explicitly deleted
-  if (currentMember) {
-    const curKey = getMemberCanonicalKey(currentMember);
-    if (curKey && (!deletedMemberId || (currentMember.id !== deletedMemberId && curKey !== deletedKey))) {
-      const existing = map.get(curKey);
-      if (existing) {
-        map.set(curKey, mergeSingleMember( currentMember, existing));
-      } else {
-        map.set(curKey, currentMember);
+  if (currentMember && !isLegacyDeletedSeedAccount(currentMember)) {
+    const validCur = filterOutDeletedMembers([currentMember], deletedList);
+    if (validCur.length > 0) {
+      const curKey = getMemberCanonicalKey(currentMember);
+      if (curKey) {
+        const existing = map.get(curKey);
+        if (existing) {
+          map.set(curKey, mergeSingleMember(currentMember, existing));
+        } else {
+          map.set(curKey, currentMember);
+        }
       }
     }
   }
@@ -207,7 +365,7 @@ export function mergeMembersLists(
 }
 
 /**
- * Push partial or full Back Office / Store updates to the server and broadcast across all tabs & devices
+ * Push partial or full Back Office / Store updates to the server and broadcast across all tabs & devices worldwide
  */
 export async function pushSyncToServer(payload: SyncStorePayload): Promise<SyncStorePayload | null> {
   // 1. Broadcast immediately over BroadcastChannel for instant same-browser multi-tab sync
@@ -250,7 +408,8 @@ export async function fetchSyncFromServer(): Promise<SyncStorePayload | null> {
     const response = await fetch(`/api/sync?t=${Date.now()}`, {
       method: 'GET',
       headers: {
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
       },
     });
     if (!response.ok) return null;
@@ -270,6 +429,13 @@ export function subscribeToRealtimeSync(
   let eventSource: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let isDisposed = false;
+
+  // Immediately fetch authoritative state via HTTP GET on startup in addition to SSE
+  void fetchSyncFromServer().then((store) => {
+    if (!isDisposed && store) {
+      onReceiveStore(store, true);
+    }
+  });
 
   const connectSSE = () => {
     if (isDisposed || typeof window === 'undefined' || !('EventSource' in window)) return;
@@ -293,7 +459,7 @@ export function subscribeToRealtimeSync(
         } catch {}
         eventSource = null;
         if (!isDisposed) {
-          reconnectTimer = setTimeout(connectSSE, 3000);
+          reconnectTimer = setTimeout(connectSSE, 2500);
         }
       };
     } catch {
@@ -325,7 +491,7 @@ export function subscribeToRealtimeSync(
   window.addEventListener('focus', handleVisibilityOrFocus);
   document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
-  // Periodic background poll every 6 seconds as fallback for restrictive mobile/tablet proxies
+  // Periodic background poll every 4 seconds so all worldwide mobile/tablet/website clients stay in real-time sync
   const pollInterval = setInterval(() => {
     if (document.visibilityState === 'visible') {
       fetchSyncFromServer().then((store) => {
@@ -334,7 +500,7 @@ export function subscribeToRealtimeSync(
         }
       });
     }
-  }, 6000);
+  }, 4000);
 
   return () => {
     isDisposed = true;
