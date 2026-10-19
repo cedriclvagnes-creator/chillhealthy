@@ -9,6 +9,12 @@ import {
   INITIAL_REDEMPTIONS,
 } from './src/data/initialStore';
 import { synchronizeMalaysiaWeekdayBankHolidays } from './src/utils/malaysiaHolidays';
+import { normalizeMalaysianPhone } from './src/utils/malaysiaPhone';
+import {
+  getMemberCanonicalKey,
+  mergeMembersLists,
+} from './src/utils/syncClient';
+import { MemberAccount, MealRedemption } from './src/types';
 
 const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -18,12 +24,80 @@ interface ServerStore {
   siteSettings: typeof DEFAULT_SITE_SETTINGS;
   packages: typeof MEAL_PLANS;
   menuItems: typeof MEAL_ITEMS;
-  members: typeof INITIAL_MEMBERS;
-  redemptions: typeof INITIAL_REDEMPTIONS;
+  members: MemberAccount[];
+  redemptions: MealRedemption[];
   refundRecords: any[];
   adminCredentials?: { username: string; password: string };
   updatedAt: string;
   hasCustomUpdates: boolean;
+}
+
+/**
+ * Ensures any customer phone present in redemptions (e.g. Package Subscription or Meal Plan orders)
+ * has a corresponding registered MemberAccount in members so they can log in from any device.
+ */
+function reconcileMembersWithOrders(
+  members: MemberAccount[],
+  redemptions: MealRedemption[],
+  deletedMemberId?: string
+): MemberAccount[] {
+  const deletedKey = deletedMemberId
+    ? getMemberCanonicalKey({ id: deletedMemberId, phone: deletedMemberId })
+    : '';
+  const merged = [...members];
+  const existingKeys = new Set(merged.map((m) => getMemberCanonicalKey(m)).filter(Boolean));
+
+  for (const r of redemptions || []) {
+    if (!r || !r.memberPhone) continue;
+    const normPhone = normalizeMalaysianPhone(r.memberPhone);
+    if (!normPhone || normPhone.length < 9) continue;
+    if (deletedKey && (normPhone === deletedKey || r.memberId === deletedMemberId)) continue;
+
+    if (!existingKeys.has(normPhone)) {
+      const autoMember: MemberAccount = {
+        id: normPhone,
+        memberNumber: normPhone,
+        name: r.memberName || 'Registered Member',
+        email: `${normPhone}@customer.chill-healthy.com`,
+        phone: normPhone,
+        password: '123456',
+        address: r.deliveryAddress || '',
+        area: r.area || '',
+        postalCode: r.postalCode || '',
+        activeAddressSlot: 1,
+        activePackage: null,
+        creditsHistory: [],
+      };
+      merged.push(autoMember);
+      existingKeys.add(normPhone);
+    }
+  }
+
+  return merged;
+}
+
+function mergeRedemptionsList(
+  existing: MealRedemption[],
+  incoming: MealRedemption[],
+  deletedRedemptionId?: string
+): MealRedemption[] {
+  const map = new Map<string, MealRedemption>();
+  for (const r of existing || []) {
+    if (!r || !r.id) continue;
+    if (deletedRedemptionId && (r.id === deletedRedemptionId || r.orderNumber === deletedRedemptionId)) {
+      continue;
+    }
+    map.set(r.id, r);
+  }
+  for (const r of incoming || []) {
+    if (!r || !r.id) continue;
+    if (deletedRedemptionId && (r.id === deletedRedemptionId || r.orderNumber === deletedRedemptionId)) {
+      continue;
+    }
+    const prev = map.get(r.id);
+    map.set(r.id, prev ? { ...prev, ...r } : r);
+  }
+  return Array.from(map.values());
 }
 
 function getDefaultStore(): ServerStore {
@@ -63,6 +137,15 @@ function loadStoreFromDisk(): ServerStore {
         mergedMenu = [...parsed.menuItems, ...missing];
       }
 
+      const loadedMembers =
+        Array.isArray(parsed.members) && parsed.members.length > 0
+          ? mergeMembersLists(defaults.members, parsed.members)
+          : defaults.members;
+
+      const loadedRedemptions = Array.isArray(parsed.redemptions)
+        ? mergeRedemptionsList(defaults.redemptions, parsed.redemptions)
+        : defaults.redemptions;
+
       return {
         siteSettings: { ...defaults.siteSettings, ...(parsed.siteSettings || {}) },
         packages:
@@ -70,13 +153,8 @@ function loadStoreFromDisk(): ServerStore {
             ? parsed.packages
             : defaults.packages,
         menuItems: mergedMenu,
-        members:
-          Array.isArray(parsed.members) && parsed.members.length > 0
-            ? parsed.members
-            : defaults.members,
-        redemptions: Array.isArray(parsed.redemptions)
-          ? parsed.redemptions
-          : defaults.redemptions,
+        members: reconcileMembersWithOrders(loadedMembers, loadedRedemptions),
+        redemptions: loadedRedemptions,
         refundRecords: Array.isArray(parsed.refundRecords) ? parsed.refundRecords : [],
         adminCredentials: parsed.adminCredentials || undefined,
         updatedAt: parsed.updatedAt || new Date().toISOString(),
@@ -175,6 +253,8 @@ async function startServer() {
       redemptions,
       refundRecords,
       adminCredentials,
+      deletedMemberId,
+      deletedRedemptionId,
       sourceClientId,
     } = body;
 
@@ -195,18 +275,36 @@ async function startServer() {
       changed = true;
     }
 
-    if (Array.isArray(members)) {
-      store.members = members;
+    if (Array.isArray(redemptions)) {
+      if (deletedRedemptionId) {
+        store.redemptions = store.redemptions.filter(
+          (r) => r.id !== deletedRedemptionId && r.orderNumber !== deletedRedemptionId
+        );
+      }
+      store.redemptions = mergeRedemptionsList(store.redemptions, redemptions, deletedRedemptionId);
       changed = true;
     }
 
-    if (Array.isArray(redemptions)) {
-      store.redemptions = redemptions;
+    if (Array.isArray(members)) {
+      if (deletedMemberId) {
+        const delKey = getMemberCanonicalKey({ id: deletedMemberId, phone: deletedMemberId });
+        store.members = store.members.filter(
+          (m) => m.id !== deletedMemberId && getMemberCanonicalKey(m) !== delKey
+        );
+      }
+      store.members = mergeMembersLists(store.members, members, null, deletedMemberId);
       changed = true;
     }
+
+    // Always ensure any customer phone in redemptions has a valid member record for cross-device login
+    store.members = reconcileMembersWithOrders(store.members, store.redemptions, deletedMemberId);
 
     if (Array.isArray(refundRecords)) {
-      store.refundRecords = refundRecords;
+      const refundMap = new Map<string, any>();
+      for (const rec of [...store.refundRecords, ...refundRecords]) {
+        if (rec && rec.id) refundMap.set(rec.id, rec);
+      }
+      store.refundRecords = Array.from(refundMap.values());
       changed = true;
     }
 

@@ -71,13 +71,19 @@ import {
   getPackageDailyQuota,
   getMaxRedeemableMealsPerDay,
 } from '../utils/packageExpiry';
+import {
+  doesMemberMatchLoginInput,
+  fetchSyncStore,
+  pushSyncStore,
+  mergeMembersLists,
+} from '../utils/syncClient';
 
 interface MemberPortalModalProps {
   isOpen: boolean;
   onClose: () => void;
   language: Language;
   currentMember: MemberAccount | null;
-  onLogin: (loginId: string, pass: string) => boolean;
+  onLogin: (loginId: string, pass: string, customMembersPool?: MemberAccount[]) => boolean;
   onLogout: () => void;
   onRegister: (newMember: Partial<MemberAccount>) => void;
   onRedeemMeal: (redemption: Omit<MealRedemption, 'id' | 'createdAt' | 'status'>) => boolean;
@@ -506,30 +512,70 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       ? currentMember.postalCode2
       : currentMember?.postalCode || '';
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     setAccountNotFound(false);
 
     const cleanInput = loginEmail.trim();
-    const phoneDigits = cleanInput.replace(/\D/g, '');
+    if (!cleanInput) return;
 
-    // Check if account exists
-    const accountExists = members.some((m) => {
-      const mPhoneDigits = (m.phone || '').replace(/\D/g, '');
-      const mMemberNumDigits = (m.memberNumber || '').replace(/\D/g, '');
-      const mEmail = (m.email || '').toLowerCase().trim();
+    const normInputPhone = normalizeMalaysianPhone(cleanInput);
 
-      const matchesPhone =
-        phoneDigits.length >= 8 &&
-        (mPhoneDigits === phoneDigits ||
-          mMemberNumDigits === phoneDigits ||
-          phoneDigits.includes(mPhoneDigits) ||
-          mMemberNumDigits.includes(phoneDigits));
-      const matchesEmail = cleanInput.toLowerCase() === mEmail;
+    // 1. Check local members list first
+    let resolvedMembers: MemberAccount[] = [...members];
+    let accountExists = resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput));
 
-      return matchesPhone || matchesEmail;
-    });
+    // 2. If not found locally (e.g. account was registered on another phone, tablet, or computer),
+    // immediately query the central server store (/api/sync) for the latest synchronized accounts & orders
+    if (!accountExists) {
+      const serverStore = await fetchSyncStore();
+      if (serverStore) {
+        if (Array.isArray(serverStore.members) && serverStore.members.length > 0) {
+          resolvedMembers = mergeMembersLists(resolvedMembers, serverStore.members);
+        }
+
+        // Also check if customer placed an order in redemptions on any device
+        const combinedRedemptions = [
+          ...allRedemptions,
+          ...(Array.isArray(serverStore.redemptions) ? serverStore.redemptions : []),
+        ];
+        const matchingOrder = combinedRedemptions.find((r) => {
+          if (!r || !r.memberPhone) return false;
+          const rNorm = normalizeMalaysianPhone(r.memberPhone);
+          return (
+            (normInputPhone.length >= 9 && rNorm === normInputPhone) ||
+            r.memberPhone.replace(/\D/g, '') === cleanInput.replace(/\D/g, '')
+          );
+        });
+
+        if (
+          matchingOrder &&
+          !resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput))
+        ) {
+          const recoveredPhone =
+            normalizeMalaysianPhone(matchingOrder.memberPhone) || matchingOrder.memberPhone;
+          const recoveredAccount: MemberAccount = {
+            id: recoveredPhone,
+            memberNumber: recoveredPhone,
+            name: matchingOrder.memberName || 'Registered Member',
+            email: `${recoveredPhone}@customer.chill-healthy.com`,
+            phone: recoveredPhone,
+            password: '123456',
+            address: matchingOrder.deliveryAddress || '',
+            area: matchingOrder.area || '',
+            postalCode: matchingOrder.postalCode || '',
+            activeAddressSlot: 1,
+            activePackage: null,
+            creditsHistory: [],
+          };
+          resolvedMembers = mergeMembersLists(resolvedMembers, [recoveredAccount]);
+          void pushSyncStore({ members: resolvedMembers });
+        }
+
+        accountExists = resolvedMembers.some((m) => doesMemberMatchLoginInput(m, cleanInput));
+      }
+    }
 
     if (!accountExists) {
       setAccountNotFound(true);
@@ -541,7 +587,7 @@ export const MemberPortalModal: React.FC<MemberPortalModalProps> = ({
       return;
     }
 
-    const success = onLogin(loginEmail, loginPass);
+    const success = onLogin(loginEmail, loginPass, resolvedMembers);
     if (!success) {
       setLoginError(
         language === 'en'
